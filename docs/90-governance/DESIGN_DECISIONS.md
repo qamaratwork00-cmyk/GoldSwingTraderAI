@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.1-design
+**Version:** 0.2-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -93,6 +93,35 @@ This ledger records accepted/provisional architectural decisions so future imple
 
 **Decision:** The repository will contain a final implementation prompt that references frozen authoritative docs and forbids silent requirement invention.  
 **Status:** FROZEN
+
+## DEC-018 — Swing lifecycle separates early evidence from authority
+
+**Decision:** Structural pivots progress through `CANDIDATE → CONFIRMED`, with some confirmed swings later promoted to `PROTECTED` or `EXTERNAL/MAJOR` roles. Candidate swings may support soft evidence but cannot independently confirm BOS/MSS or become sole structural authority.  
+**Status:** PROVISIONAL  
+**Reason:** Reduce noise and look-ahead while retaining earlier opportunity/timing awareness.
+
+## DEC-019 — Pivot time and confirmation time are distinct
+
+**Decision:** Every confirmed swing records both the time of the price extreme and the later time when confirmation became available. Replay/live logic may not use the swing before its confirmation time.  
+**Status:** PROVISIONAL  
+**Reason:** Prevent hidden future-bar leakage from pivot algorithms.
+
+## DEC-020 — Structural breaks use graduated states
+
+**Decision:** Wick/probe, qualified completed-candle break, confirmed BOS, MSS candidate, confirmed MSS and failed break are distinct evidence states rather than one binary `break=true` flag.  
+**Status:** PROVISIONAL  
+**Reason:** Allow earlier strong opportunities without falsely claiming mature structure confirmation.
+
+## DEC-021 — MSS means transition before new trend
+
+**Decision:** A confirmed counter-structure MSS challenges the prior thesis and moves that timeframe toward transition; it does not by itself establish a fully confirmed opposite trend.  
+**Status:** PROVISIONAL  
+**Reason:** Prevent one local counter-break from flipping the entire directional model.
+
+## DEC-022 — Timeframes retain independent structure state
+
+**Decision:** H4, H1, M15 and M5 structure states are maintained independently. Lower-timeframe structural change may influence scores/timing but cannot silently overwrite higher-timeframe structure.  
+**Status:** PROVISIONAL
 
 ## Change rule
 
