@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Final Build Prompt
 
 **Status:** DRAFT — DO NOT IMPLEMENT FROM THIS YET  
-**Version:** 0.2-design
+**Version:** 0.3-design  
 **Location:** Repository root by design. This is an implementation handoff artifact, not a topic authority.
 
 This file becomes the final implementation contract only after the core design documents are frozen and unresolved items are either decided or explicitly deferred.
@@ -41,6 +41,25 @@ Implementation must preserve:
 - structural trade management for large moves;
 - governed research/discovery without arbitrary self-writing code.
 
+## Documentation must stay synchronized with implementation
+
+Documentation is part of each implementation step, not a cleanup task for the end.
+
+After **every coherent implementation step or phase**, before moving to the next one:
+
+1. update the authoritative topic document if behaviour, state, ownership, inputs, outputs or failure semantics changed;
+2. update `docs/90-governance/DESIGN_DECISIONS.md` for any new or superseded design decision;
+3. update `docs/90-governance/OPEN_QUESTIONS.md` when a question is resolved, deferred or newly discovered;
+4. update `docs/60-engineering/MODULE_STRUCTURE.md` when files/modules/dependency ownership change;
+5. update `docs/60-engineering/CODER_GUIDE.md` when feature-to-code/config/runtime/persistence/dashboard/test ownership changes;
+6. update operator-facing docs when visible behaviour, dashboard state, controls, setup or recovery procedures change;
+7. update `docs/README.md` if a document is added, moved, renamed, retired or changes status;
+8. update this root `FINAL_BUILD_PROMPT.md` only when a frozen implementation requirement or implementation sequence materially changes.
+
+Do **not** mark a document `IMPLEMENTED` unless the described behaviour actually exists in the current code. Do **not** mark it `VERIFIED` unless the required executable validation has actually passed against the exact implementation being documented.
+
+A phase is not complete while its code and authoritative documentation disagree. Do not continue to the next phase with knowingly stale docs.
+
 ## Prohibited shortcuts
 
 Do not:
@@ -53,7 +72,8 @@ Do not:
 - redefine original R after trailing;
 - blind-retry ambiguous broker submissions;
 - generate/eval/exec arbitrary Python as autonomous strategy invention;
-- silently decide any item still listed as unresolved in `docs/90-governance/OPEN_QUESTIONS.md`.
+- silently decide any item still listed as unresolved in `docs/90-governance/OPEN_QUESTIONS.md`;
+- postpone required documentation updates until the end of development.
 
 ## Intended implementation sequence
 
@@ -75,7 +95,7 @@ The final sequence will be refined, but implementation is expected to proceed ap
 14. Dashboard/operator UX.
 15. DEMO readiness and release validation.
 
-Each phase must include executable tests for its frozen behavioural invariants before the phase is treated as complete.
+Each phase must include executable tests for its frozen behavioural invariants before the phase is treated as complete, and the corresponding documentation must be synchronized before the next phase begins.
 
 ## Validation principle
 
