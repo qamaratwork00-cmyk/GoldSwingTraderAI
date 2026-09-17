@@ -41,7 +41,7 @@ Foundation documents stay deliberately high-level. Detailed entry, exit, risk or
 | Document | Status | Purpose |
 |---|---|---|
 | [Market Data and History](10-market-intelligence/MARKET_DATA_AND_HISTORY.md) | PROVISIONAL | Rolling candle history, timeframe data and persistence rules |
-| `CANDLE_STRUCTURE.md` | Upcoming | Candle anatomy, sequences, swings, BOS/MSS, rejection, displacement, compression/expansion |
+| [Candle Structure and Price Behaviour](10-market-intelligence/CANDLE_STRUCTURE.md) | PROVISIONAL | Candle anatomy/sequences, swing lifecycle, BOS/MSS, displacement, rejection, compression/expansion and exhaustion |
 | `TECHNICAL_STRUCTURE_AND_LEVELS.md` | Upcoming | HTF structure, support/resistance, location and structural zones |
 | `LIQUIDITY_AND_SMC.md` | Upcoming | Liquidity pools/sweeps, FVG, qualified OB, premium/discount |
 | `INDICATORS_AND_VOLATILITY.md` | Upcoming | EMA/RSI/ATR and quantitative supporting evidence |
