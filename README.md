@@ -8,6 +8,14 @@ GoldSwingTraderAI is being designed as a fresh, independent Gold trading system.
 
 The architecture follows an institutional trading-floor model: multiple specialist desks analyse the same verified market snapshot in parallel, independent BUY and SELL theses compete, a debate/red-team layer challenges the leading case, a decision-fusion layer combines evidence, and independent risk/safety authorities retain veto power before execution.
 
+## Start here
+
+- [`docs/README.md`](docs/README.md) — documentation map, status and authority index.
+- [`docs/00-foundation/SYSTEM_CONTRACT.md`](docs/00-foundation/SYSTEM_CONTRACT.md) — highest-level behavioural contract.
+- [`docs/00-foundation/ARCHITECTURE.md`](docs/00-foundation/ARCHITECTURE.md) — high-level system architecture.
+- [`docs/00-foundation/TRADING_FLOOR_ARCHITECTURE.md`](docs/00-foundation/TRADING_FLOOR_ARCHITECTURE.md) — institutional-floor specialist-desk model.
+- [`FINAL_BUILD_PROMPT.md`](FINAL_BUILD_PROMPT.md) — root-level implementation handoff; currently DRAFT and not an implementation authorization.
+
 ## Core design direction
 
 - XAUUSD/XAUUSDm focused.
@@ -34,5 +42,7 @@ Document statuses use:
 - `FROZEN` — design contract approved for implementation.
 - `IMPLEMENTED` — corresponding behaviour exists in code.
 - `VERIFIED` — implementation has passed the required executable validation.
+
+Detailed documentation placement and ownership rules live in [`docs/90-governance/DOCUMENTATION_STANDARD.md`](docs/90-governance/DOCUMENTATION_STANDARD.md).
 
 The repository intentionally starts with design documents before trading code so implementation does not inherit accidental architecture or undocumented assumptions.

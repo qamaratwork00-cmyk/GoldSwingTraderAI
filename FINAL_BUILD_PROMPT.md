@@ -1,9 +1,10 @@
 # GoldSwingTraderAI — Final Build Prompt
 
 **Status:** DRAFT — DO NOT IMPLEMENT FROM THIS YET  
-**Version:** 0.1-design
+**Version:** 0.2-design
+**Location:** Repository root by design. This is an implementation handoff artifact, not a topic authority.
 
-This document will become the final implementation contract only after the core design documents are frozen and unresolved items are either decided or explicitly deferred.
+This file becomes the final implementation contract only after the core design documents are frozen and unresolved items are either decided or explicitly deferred.
 
 ## Role
 
@@ -19,9 +20,9 @@ Read and obey, in order:
 2. The authoritative topic document for the feature being implemented
 3. `docs/90-governance/DESIGN_DECISIONS.md`
 4. `docs/90-governance/OPEN_QUESTIONS.md`
-5. Supporting operator/engineering documentation
+5. Supporting engineering/operator documentation
 
-If documents conflict, stop and resolve the contradiction in documentation rather than silently choosing one interpretation.
+If documents conflict, stop and resolve the contradiction in documentation rather than silently choosing one interpretation. This prompt summarizes frozen requirements; it does not override their authoritative source documents.
 
 ## Project principles
 
@@ -52,7 +53,7 @@ Do not:
 - redefine original R after trailing;
 - blind-retry ambiguous broker submissions;
 - generate/eval/exec arbitrary Python as autonomous strategy invention;
-- silently decide any item still listed as unresolved in `OPEN_QUESTIONS.md`.
+- silently decide any item still listed as unresolved in `docs/90-governance/OPEN_QUESTIONS.md`.
 
 ## Intended implementation sequence
 
