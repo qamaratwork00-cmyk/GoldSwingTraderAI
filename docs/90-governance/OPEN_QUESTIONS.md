@@ -1,16 +1,21 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.1-design
+**Version:** 0.2-design
 
 These items are intentionally unresolved. Implementation must not silently choose an answer before the relevant design is frozen.
 
 ## Market intelligence
 
 - Exact runtime candle-window sizes per timeframe.
-- Exact swing/BOS/MSS definitions and pivot confirmation rules.
-- Exact candle-structure scoring features and normalization.
-- Which intrabar facts, if any, may be used without becoming decision authority.
+- Exact volatility-normalized swing prominence/excursion thresholds.
+- Exact candidate-to-confirmed swing reversal/persistence requirements.
+- Exact swing-significance weights/classes.
+- Exact completed-close penetration required for `QUALIFIED_BREAK`.
+- Exact family-specific acceptance/follow-through requirements before a break upgrades to `CONFIRMED_BOS`.
+- Exact BOS/MSS quality-score calibration.
+- Exact compression/expansion/exhaustion numeric bands.
+- Which intrabar facts, if any, may be used without becoming structural decision authority.
 - Exact holiday/liquidity caution adjustments.
 
 ## Strategy floor
