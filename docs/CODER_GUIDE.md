@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
-**Version:** 2.2-implementation-map  
+**Version:** 2.3-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -12,7 +12,7 @@ Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `6
 
 ## Current checkpoint — 2026-09-18
 
-Deterministic core implementation exists through current **Phase-10 research tooling including portable historical inputs, read-only MT5 acquisition and immutable evidence packages**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+Deterministic core implementation exists through current **Phase-10 research tooling including portable historical inputs, read-only MT5 acquisition, immutable evidence packages and verified historical PRE_CLOSE/session-policy replay integration**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
 
 ## Implemented phase map
 
@@ -50,6 +50,7 @@ research/replay.py
 research/ablation.py
 research/outcomes.py
 research/management_replay.py
+research/session_history.py
 research/stress.py
 research/validation.py
 research/evidence.py
@@ -72,7 +73,8 @@ existing MT5Reader or verified offline dataset
 → portable dataset bundle
 → dataset_sha256
 → chronological production replay
-→ ablation / outcomes / manager / stress / walk-forward
+→ optional verified historical session schedule
+→ ablation / outcomes / manager / PRE_CLOSE / stress / walk-forward
 → ResearchEvidenceManifest
 → immutable EvidencePackage
 → metrics / learning / discovery / promotion evidence
@@ -101,6 +103,24 @@ It binds `dataset_sha256`, optional verified dataset-bundle manifest hash, evide
 
 Do not add dataset path or mutable filename as authority. A dataset is paired by content hash.
 
+### `research/session_history.py`
+Owns explicit historical broker-session facts for replay. It does **not** guess session times.
+
+Required inputs:
+
+```text
+source_label
+source_version
+coverage_start_utc
+coverage_end_utc
+chronological non-overlapping tradeable intervals
+closure kind: DAILY or WEEKEND
+```
+
+`HistoricalSessionSchedule.market_permission_at()` delegates to production `risk.permissions.evaluate_market_permission()`, so frozen DAILY `T-20/T-10` and WEEKEND `T-60/T-30` rules stay single-source. Within verified coverage but outside an interval the market is CLOSED; outside verified coverage the module raises `HistoricalSessionCoverageError`.
+
+`research/management_replay.py` accepts an optional `session_schedule`. When supplied, each completed M5 event obtains production session permission and passes mandatory flatten into the real Trade Manager. A schedule saying CLOSED while replay contains a normal completed event is treated as an explicit research-data/schedule mismatch, not silently ignored.
+
 ### Discovery / promotion
 Eligible evidence must create a candidate or explicit suppression reason. Candidate recipes remain declarative, final holdout is one-shot, self-promotion/broker authority is prohibited.
 
@@ -118,12 +138,13 @@ tests/test_research_evidence.py
 tests/test_research_datasets.py
 tests/test_research_acquisition.py
 tests/test_research_packages.py
+tests/test_research_session_history.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Latest verified evidence-package checkpoint: **183 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Latest verified historical-session checkpoint: **189 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Feature ownership index
 
@@ -137,7 +158,7 @@ Latest verified evidence-package checkpoint: **183 tests PASS**, Ruff PASS and f
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/` |
-| Research validation/data/evidence | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `stress.py`, `validation.py`, `evidence.py`, `datasets.py`, `acquisition.py`, `packages.py`, `metrics.py` |
+| Research validation/data/evidence/session | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `session_history.py`, `stress.py`, `validation.py`, `evidence.py`, `datasets.py`, `acquisition.py`, `packages.py`, `metrics.py` |
 | Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `episode_journal.py`, `discovery.py`, `invention.py` |
 | Promotion | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `promotion.py` |
 
@@ -152,6 +173,8 @@ Latest verified evidence-package checkpoint: **183 tests PASS**, Ruff PASS and f
 - any positive day-start equity below `$300` is SMALL;
 - partial historical samples are not silently accepted;
 - missing historical spread is explicit, never hidden zero/live fallback;
+- historical broker session times are explicit/versioned; never inferred from convenience defaults;
+- session-aware replay reuses production session permission rather than duplicating thresholds;
 - mutable filenames/paths never replace content identity;
 - dataset/evidence packages are write-new and integrity checked;
 - evidence packaging does not grant trading or promotion authority;
@@ -160,8 +183,8 @@ Latest verified evidence-package checkpoint: **183 tests PASS**, Ruff PASS and f
 ## Current integration gaps / next work
 
 1. controlled Windows/MT5 real-history acquisition and source/version evidence;
-2. broad real-XAU walk-forward/independent-validation evidence using immutable evidence packages;
-3. historical PRE_CLOSE/session-policy research integration;
+2. trustworthy versioned real broker-session history covering research periods;
+3. broad real-XAU walk-forward/independent-validation evidence using immutable evidence packages;
 4. dashboard runtime DTO including research/discovery health;
 5. Phase 11 runtime-state backup/checkpoint + fresh-machine recovery + shared cross-laptop controller proof;
 6. Phase 12 final persistent runtime orchestrator + controlled Windows/MT5 DEMO certification;
