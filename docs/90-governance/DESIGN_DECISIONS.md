@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.0-design
+**Version:** 1.1-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -168,7 +168,7 @@ This ledger records accepted/provisional architectural decisions so future imple
 
 ## DEC-032 — One-shot irreversible submission with reconciliation
 
-**Decision:** One Execution Intent permits at most one irreversible submit until reconciliation proves otherwise. Ambiguous acknowledgement enters reconciliation; blind retry is prohibited.  
+**Decision:** One Execution Intent permits at most one irreversible submit until reconciliation proves the prior attempt did not create broker exposure and a fresh explicit intent is authorized. Ambiguous acknowledgement enters reconciliation; blind retry is prohibited.  
 **Status:** PROVISIONAL
 
 ## DEC-033 — System health is separate from normal trading decisions
@@ -219,8 +219,7 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-042 — Account-size Gold risk profiles use hybrid sizing
 
 **Decision:** Initial V1 profile boundaries are `SMALL $100–$299`, `MEDIUM $300–$999`, and `NORMAL $1,000+`. SMALL normally treats broker minimum `0.01` as the practical base unit and validates its real all-in risk; MEDIUM uses stepped dynamic lots; NORMAL uses fully dynamic percentage sizing. A theoretical raw lot below broker minimum is not by itself a trade blocker.  
-**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Gold minimum-lot granularity can otherwise make small accounts artificially unable to trade.
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-043 — Execution friction is part of effective monetary risk exactly once
 
@@ -260,8 +259,19 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-050 — Bot-managed Gold positions flatten before scheduled market closure
 
 **Decision:** V1 does not intentionally carry a bot-managed Gold position through the scheduled daily XAU market break or weekend closure. `PRE_CLOSE` blocks new entries and requires any existing bot-managed position to be flattened through the governed execution path while the broker remains tradeable. Runner logic cannot override this session-safety exit. If flatten execution becomes ambiguous/unavailable, exposure remains recorded and must be reconciled rather than silently marked closed.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+
+## DEC-051 — Initial scheduled-news blackout policy is short and tiered
+
+**Decision:** V1 uses three news tiers. TIER 1 critical Gold/USD events block new entries from `15 minutes before` through `15 minutes after`; known linked critical-event clusters remain blocked through 15 minutes after the final scheduled critical item. TIER 2 high-impact USD events block new entries from `5 minutes before` through `5 minutes after`. TIER 3 contextual events do not create an automatic hard blackout. Scheduled news does not automatically close an already-open managed position.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Reopen price is uncertain and a gap can jump beyond the intended stop, creating risk that normal intraday SL geometry cannot control.
+**Reason:** Protect execution around genuine event shocks without blacking out large portions of the trading day.
+
+## DEC-052 — Post-news warmup is evidence-driven, not a long fixed delay
+
+**Decision:** After the minimum event blackout expires, new entries remain paused only while quotes/spread/data/volatility remain dislocated. If conditions are normal, permission may return promptly. Severe event dislocation requires at least one clean completed M5 candle plus normalized execution conditions before new entries resume. Missing required event-calendar truth across accepted sources produces `NEWS_SAFETY_UNKNOWN`, never a silent `NEWS_CLEAR`.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Avoid both immediate post-shock chasing and unnecessary timer-only over-restriction.
 
 ## Change rule
 
