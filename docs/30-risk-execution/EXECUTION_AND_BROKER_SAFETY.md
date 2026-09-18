@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Execution and Broker Safety
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-design  
 **Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, ownership and reconciliation.  
 **Depends on:** `RISK_CONTRACT.md`, `SESSION_AND_RISK_STATE_MACHINE.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -17,6 +17,7 @@ This document owns the narrow irreversible broker-write boundary.
 Approved Trade Plan
 → Risk PASS
 → Execution Readiness
+→ Central Execution Permission Gate
 → Persist intent
 → Broker pre-check
 → ONE governed order_send
@@ -25,6 +26,41 @@ Approved Trade Plan
 ```
 
 No market score can bypass this path.
+
+## Centralized broker-write permission gate
+
+All final permission to create, modify or close a bot-managed broker position must pass through **one centralized execution-permission boundary**.
+
+The individual facts and policies remain owned by their proper subsystems. For example, Risk owns monetary affordability, Session/Risk State owns loss-lock state, News Safety owns event permission, and Execution owns account/quote/order integrity. However, the final decision about whether an irreversible broker write may proceed must be collected in one place rather than scattered across strategies, dashboard code or random MT5 call sites.
+
+Conceptually:
+
+```text
+Account / environment policy  ─┐
+Market + quote integrity       ├─→ EXECUTION PERMISSION GATE
+News/session permission        ┤          │
+Risk permission                ┤          ├─ ALLOW
+Position/capacity state        ┤          ├─ BLOCK
+Order/reconciliation state     ┤          └─ UNKNOWN → BLOCK
+Controller ownership           ┘
+```
+
+The gate should expose at least:
+
+- final `ALLOW` / `BLOCK` / `UNKNOWN`;
+- primary blocker;
+- secondary blockers;
+- which authorities passed, blocked or were not reached;
+- whether the underlying trade would otherwise have been executable;
+- environment mode such as DEMO-safe or future explicitly approved REAL execution.
+
+### Centralization invariant
+
+There must not be multiple independent pieces of code that can each directly decide to call `order_send`, modify a stop or close a position. All such broker writes must route through the governed execution boundary.
+
+Likewise, DEMO/REAL policy must not be implemented as scattered checks such as `if demo:` in several strategy files. It is an explicit environment permission supplied to the centralized gate.
+
+This centralization is intended to make the safety model easy to audit, test, explain on the dashboard and demonstrate to another developer without searching the whole codebase.
 
 ## Account identity pinning
 
@@ -43,6 +79,8 @@ Runtime account change produces `ACCOUNT_IDENTITY_MISMATCH` and blocks new write
 ## DEMO-first policy
 
 Initial implementation/release is intended for verified DEMO execution. A real account connection must not silently gain production broker-write authority unless a later explicit frozen release policy allows it.
+
+This is a development/release safeguard, **not a permanent architectural prohibition on future real-account execution**. A future approved REAL mode should use the same centralized permission gate and the same ordinary safety checks rather than a second execution path.
 
 ## Symbol resolution and broker specs
 
@@ -191,6 +229,8 @@ SL/TP modification and close requests are also irreversible broker writes. They 
 - no blind retry after ambiguous result;
 - reconciliation before another write when outcome is uncertain.
 
+These requests must pass through the same centralized broker-write permission boundary rather than using separate shortcut call paths.
+
 ## Filling mode
 
 Supported filling mode must be discovered/validated before submission. The system must not try a sequence of alternative irreversible requests after failure in a way that could duplicate exposure.
@@ -255,11 +295,15 @@ The desk should expose:
 - execution lifecycle state;
 - ownership/capacity state;
 - primary/secondary blocker reason codes;
+- full centralized permission trace;
 - reconciliation status;
 - controller/observer role.
 
 ## Tests required
 
+- centralized gate is the only route to irreversible broker writes;
+- no strategy/risk/dashboard module can call broker writes directly;
+- DEMO/REAL environment policy is resolved in one execution-permission path;
 - account switch/mismatch blocks writes;
 - DEMO/real policy;
 - symbol-spec validation/change;
@@ -281,7 +325,8 @@ Execution must not:
 - redesign structural SL/targets;
 - blind-retry ambiguous writes;
 - assume unknown broker exposure is zero;
-- let multiple laptops independently write the same managed account/symbol.
+- let multiple laptops independently write the same managed account/symbol;
+- allow alternate broker-write call paths to bypass the centralized permission gate.
 
 ## Open questions
 
