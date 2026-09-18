@@ -14,7 +14,7 @@ INTENT_SCHEMA_VERSION = 1
 
 
 class ExecutionIntentRepository:
-    """Persist the current execution intent for one managed account/symbol scope."""
+    """Persist current lifecycle plus immutable per-intent identity history."""
 
     def __init__(self, store: StateStore, scope: str) -> None:
         cleaned = scope.strip()
@@ -24,12 +24,22 @@ class ExecutionIntentRepository:
         self.scope = cleaned
 
     def save(self, intent: ExecutionIntent, *, event_type: str | None = None) -> None:
+        payload = _intent_to_payload(intent)
         self.store.save_record(
             "execution_intent",
             self.scope,
-            _intent_to_payload(intent),
+            payload,
             schema_version=INTENT_SCHEMA_VERSION,
             event_type=event_type or f"INTENT_{intent.state.value}",
+        )
+        # Each ID also has a durable history record. Updating the same record is
+        # lifecycle progression, while attempting to CREATE that ID again can be
+        # rejected even after another terminal intent later becomes current.
+        self.store.save_record(
+            "execution_intent_history",
+            self._history_key(intent.intent_id),
+            payload,
+            schema_version=INTENT_SCHEMA_VERSION,
         )
 
     def load(self) -> ExecutionIntent | None:
@@ -40,6 +50,17 @@ class ExecutionIntentRepository:
         )
         return None if record is None else _intent_from_payload(record.payload)
 
+    def intent_id_seen(self, intent_id: EntityId) -> bool:
+        current = self.load()
+        if current is not None and current.intent_id == intent_id:
+            return True
+        record = self.store.load_record(
+            "execution_intent_history",
+            self._history_key(intent_id),
+            expected_schema_version=INTENT_SCHEMA_VERSION,
+        )
+        return record is not None
+
     def lifecycle_permission(self) -> tuple[HardDecision, str]:
         """Return whether a fresh independent intent may be created."""
 
@@ -49,6 +70,9 @@ class ExecutionIntentRepository:
         if current.state in {IntentState.SUBMITTING, IntentState.ACCEPTED_UNKNOWN}:
             return HardDecision.UNKNOWN, "ORDER_ACK_UNKNOWN"
         return HardDecision.BLOCK, "ORDER_LIFECYCLE_PENDING"
+
+    def _history_key(self, intent_id: EntityId) -> str:
+        return f"{self.scope}:{intent_id}"
 
 
 def _intent_to_payload(intent: ExecutionIntent) -> dict[str, Any]:
