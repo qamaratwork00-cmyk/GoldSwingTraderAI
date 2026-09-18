@@ -1,13 +1,15 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 0.3-design  
+**Version:** 0.4-design  
 **Authority:** File/module ownership map and dependency direction.  
-**Depends on:** `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
+**Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
 ## Purpose
 
 This is the file-oriented companion to `../CODER_GUIDE.md`. Exact filenames may evolve during implementation; ownership boundaries are the important contract.
+
+All implementation must also satisfy the frozen source-quality/complexity rules in `CODING_STANDARD.md`.
 
 ## Design goals
 
@@ -19,7 +21,15 @@ This is the file-oriented companion to `../CODER_GUIDE.md`. Exact filenames may 
 - one cross-machine execution-controller owner with lease/fencing;
 - persistence/restart separated from trading semantics;
 - research/learning isolated from production broker authority;
-- modules testable without unnecessary micro-file fragmentation.
+- modules testable without unnecessary micro-file fragmentation;
+- no giant all-in-one `bot.py`;
+- no speculative Service/Manager/Factory layers where a direct module/function is clearer;
+- deterministic calculations should prefer pure functions;
+- stateful classes should exist only for genuine resource/lifecycle/state ownership;
+- verified market/broker facts and derived intelligence should be calculated once per appropriate scope and reused;
+- live runtime dependencies remain minimal; heavier research dependencies stay isolated.
+
+Typical modules will often fall around 100–300 lines, while complex authorities may reasonably reach 300–500. These are review signals, not hard limits; split only when responsibilities actually diverge.
 
 ## Planned top-level package shape
 
@@ -43,6 +53,21 @@ goldswingtraderai/
 
 Do not create empty directories merely to imitate this map before responsibilities exist.
 
+## Runtime data-flow efficiency
+
+The preferred flow is:
+
+```text
+MT5/raw broker facts
+→ normalized verified snapshot
+→ shared derived intelligence
+→ strategies/decisions/risk consumers
+```
+
+Do not independently query/recalculate the same facts in multiple desks when one authoritative result can be shared safely.
+
+Execution remains an intentional exception where the execution contract requires a fresh pre-submit quote/spec/account/controller verification; optimization must never weaken freshness/safety.
+
 ## `app/`
 
 Runtime coordinator owns orchestration only:
@@ -61,6 +86,8 @@ startup
 ```
 
 It must not reimplement candle logic, scoring, risk formulas or broker safety.
+
+The coordinator should remain thin; avoid turning it into a second hidden business-logic owner.
 
 ## `domain/`
 
@@ -81,6 +108,8 @@ Stable contracts should include concepts such as:
 
 Domain objects should avoid direct MT5/network/database dependencies.
 
+Use dataclasses/enums/typed IDs where they protect meaning; do not create wrappers that add no semantic value.
+
 ## `market_data/`
 
 Owns:
@@ -95,6 +124,8 @@ Owns:
 
 Raw reads are normalized before intelligence consumes them.
 
+Keep MT5-specific return structures near this boundary rather than leaking them into strategy/decision code.
+
 ## `intelligence/`
 
 Suggested bounded owners:
@@ -107,6 +138,8 @@ Suggested bounded owners:
 - Session Context Engine.
 
 These publish evidence. They do not size lots or call broker writes.
+
+Where possible, deterministic calculations should be small typed pure functions operating on the shared verified snapshot/derived inputs.
 
 ## `strategies/`
 
@@ -122,6 +155,8 @@ Owns the six initial desks:
 Each consumes audited primitives and returns family-specific BUY/SELL opportunity evidence.
 
 No strategy module may call MT5 writes, risk-reset functions or production-promotion functions.
+
+Strategy modules should express family logic directly; do not add framework-style inheritance/factory machinery unless multiple real implementations prove it useful.
 
 ## `decisions/`
 
@@ -156,6 +191,8 @@ Owns:
 Future multi-position aggregate-risk design is not a V1 dependency.
 
 Risk returns authority but never calls `order_send`.
+
+Risk/safety calculations should remain explicit and audit-friendly rather than compressed into opaque generic frameworks.
 
 ## `execution/`
 
@@ -233,6 +270,8 @@ Initial V1 renewal target is 10 seconds and TTL 30 seconds. Every irreversible w
 
 A local-only lock is insufficient for cross-laptop safety. Standby takeover after expiry must acquire a new epoch and reconcile broker/local state before PRIMARY READY.
 
+Execution safety code should remain intentionally direct and step-by-step. Avoid metaprogramming or generic pipelines that make irreversible-write permission hard to audit.
+
 ## `management/`
 
 Owns post-entry decision floor:
@@ -264,6 +303,8 @@ Owns:
 
 Storage technology is an implementation choice; semantics above are not.
 
+Prefer the smallest persistence stack that safely satisfies atomicity, schema/versioning, recovery and portability. Do not introduce an ORM/database service unless it materially simplifies the actual requirement.
+
 ## `research/`
 
 Suggested owners:
@@ -279,6 +320,8 @@ Suggested owners:
 
 Research cannot access irreversible broker adapter directly. Shadow has zero broker-write authority. DEMO Canary still uses normal Risk + centralized Execution Permission Gate.
 
+Research may use heavier numerical/data-science dependencies where justified, but those should not become required imports for normal live runtime startup.
+
 ## `operator/`
 
 Owns presentation only:
@@ -289,6 +332,8 @@ Owns presentation only:
 - startup/shutdown/operator workflows.
 
 UI never decides whether a trade is allowed.
+
+Dashboard refresh must not trigger duplicate market analysis/order activity simply because the screen redraws.
 
 ## `diagnostics/`
 
@@ -301,6 +346,8 @@ Owns cross-subsystem aggregation of:
 - backup/controller health.
 
 Subsystems remain authority for the faults they originate.
+
+Diagnostics/logging should be concise and structured rather than dumping large objects every cycle.
 
 ## Critical dependency direction
 
@@ -345,4 +392,10 @@ At minimum prove:
 - position ownership/capacity is respected;
 - controller lease/fencing prevents simultaneous writers/stale epoch writes;
 - restart/migration preserves domain identity and critical lifecycle;
-- reason codes remain consistent across execution, diagnostics and dashboard.
+- reason codes remain consistent across execution, diagnostics and dashboard;
+- shared snapshot/derived-fact reuse does not weaken fresh-execution checks;
+- live runtime can start without optional heavy research dependencies.
+
+## Module quality review
+
+Before a phase closes, apply the `CODING_STANDARD.md` quality gate to affected modules. Review specifically for duplicate MT5 reads/calculations, unnecessary abstraction, dead code, mixed responsibilities, scattered magic constants, silent exception handling, needless runtime dependencies and comments that fail to explain important safety/chronology decisions.
