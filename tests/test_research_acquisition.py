@@ -37,7 +37,7 @@ def _series(timeframe: Timeframe, count: int, *, spread_points: int = 20) -> Can
                 low=base - 0.4,
                 close=base + 0.1,
                 tick_volume=100 + index,
-                spread_points=spread_points + index,
+                spread_points=0 if spread_points == 0 else spread_points + index,
                 real_volume=0,
             )
         )
