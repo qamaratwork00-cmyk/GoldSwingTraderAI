@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
-**Version:** 1.9-implementation-map  
+**Version:** 2.0-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -12,7 +12,7 @@ Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `6
 
 ## Current checkpoint — 2026-09-18
 
-Deterministic core implementation exists through the current **Phase-10 research foundation including chronological replay, Trade Manager outcomes, execution stress, fixed-policy walk-forward validation, and content-addressed evidence manifests**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+Deterministic core implementation exists through the current **Phase-10 research foundation including chronological replay, Trade Manager outcomes, execution stress, fixed-policy walk-forward validation, content-addressed evidence manifests and portable integrity-checked replay dataset bundles**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
 
 ### Phase 1 — Foundation — implemented / deterministic CI
 
@@ -143,6 +143,7 @@ research/management_replay.py
 research/stress.py
 research/validation.py
 research/evidence.py
+research/datasets.py
 research/metrics.py
 research/learning.py
 research/episode_journal.py
@@ -163,6 +164,7 @@ chronological completed-candle replay
 → declared execution-friction stress
 → fixed-policy walk-forward validation
 → content-addressed dataset/evidence identity
+→ portable integrity-checked replay dataset bundle
 → metrics / learning / durable episodes
 → discovery / invention
 → governed promotion lifecycle
@@ -176,28 +178,33 @@ chronological completed-candle replay
 
 `research/stress.py` holds the analytical run fixed and compares declared execution friction against BASE. Default probes remain 1.50x spread, 0.10R adverse entry, one-M5 modify delay, every-second modify rejection and combined stress. They are calibration baselines only.
 
-`research/validation.py` owns `FIXED_POLICY_WALK_FORWARD`:
+`research/validation.py` owns `FIXED_POLICY_WALK_FORWARD`: development context reconstructs state but is not scored; validation slices do not overlap; the dataset is clipped at each validation boundary; no optimizer exists; final one-shot holdout authority is separate.
+
+`research/evidence.py` owns canonical content-addressed dataset and evidence identity. It hashes source/version, replay assumptions, symbol/economic account context and candle fields, produces experiment-input/full-record hashes and rejects financial-secret-shaped manifest fields.
+
+`research/datasets.py` owns portable offline replay bundles:
 
 ```text
-DEVELOPMENT CONTEXT
-→ later non-overlapping VALIDATION SLICE
+dataset_manifest.json
+H4.csv
+H1.csv
+M15.csv
+M5.csv
+[optional supported timeframe CSVs such as M1.csv]
 ```
 
-Development history reconstructs state but is not scored; validation data is clipped at the validation boundary; no optimizer/tuning exists; the final one-shot holdout is not consumed.
+Rules:
 
-`research/evidence.py` owns reproducibility identity/manifest logic:
+- export is write-new/immutable; existing destinations are not overwritten;
+- all present dataset series are exported;
+- login/server are deliberately absent from exported research context;
+- manifest and every CSV are SHA-256 verified on import;
+- canonical timeframe filenames are required and symlinked manifest/CSV inputs are rejected;
+- required H4/H1/M15/M5 must exist while optional supported M1 survives round-trip;
+- imported endpoint identity is neutral offline `RESEARCH_DATASET` context;
+- reconstructed dataset/symbol/account hashes must match the manifest before data is exposed.
 
-- `identify_replay_dataset()` creates canonical SHA-256 identity from source label/version, replay realism/spread, symbol geometry, economic account context and every candle field;
-- every timeframe gets bar count, first/last time and content hash;
-- timeframe tuple order is normalized;
-- broker endpoint `login/server` are excluded from the economic replay hash;
-- `build_research_evidence_manifest()` records code revision, policy version, dataset identity, normalized config/results, limitations and hashes;
-- `input_fingerprint_sha256` identifies experiment inputs independently of result values/generation time;
-- `manifest_sha256` identifies the complete evidence record;
-- canonical JSON is stable across mapping insertion order;
-- financial-secret-shaped manifest fields raise `FINANCIAL_SECRET_DETECTED`.
-
-The evidence module has no trading or promotion authority. It is intended to let future real-XAU replay/walk-forward evidence be audited and reproduced instead of relying on mutable filenames/screenshots.
+The bundle has no broker authority and is intended for reproducible public-safe research inputs, not account backup.
 
 Other Phase-10 guarantees:
 
@@ -225,12 +232,13 @@ tests/test_research_outcomes.py
 tests/test_research_stress.py
 tests/test_research_validation.py
 tests/test_research_evidence.py
+tests/test_research_datasets.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Latest verified evidence-manifest checkpoint: **168 tests PASS**, Ruff PASS and financial-secret scan PASS. Deterministic CI is software evidence, not profitability proof or controlled DEMO certification.
+Latest verified portable-dataset checkpoint: **173 tests PASS**, Ruff PASS and financial-secret scan PASS. Deterministic CI is software evidence, not profitability proof or controlled DEMO certification.
 
 ## Feature ownership index
 
@@ -246,7 +254,7 @@ Latest verified evidence-manifest checkpoint: **168 tests PASS**, Ruff PASS and 
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/dashboard.py` |
-| Replay/validation/stress/evidence | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `stress.py`, `validation.py`, `evidence.py`, `metrics.py` |
+| Replay/validation/stress/evidence/datasets | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `stress.py`, `validation.py`, `evidence.py`, `datasets.py`, `metrics.py` |
 | StrategyMemory | `40-research-learning/LEARNING_AND_AI_BOUNDARIES.md` | `research/learning.py` |
 | Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `episode_journal.py`, `discovery.py`, `invention.py` |
 | Promotion | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `research/promotion.py` |
@@ -264,6 +272,8 @@ Latest verified evidence-manifest checkpoint: **168 tests PASS**, Ruff PASS and 
 - later-window data cannot resolve earlier validation outcomes;
 - validation cannot consume the final governed holdout;
 - serious evidence uses dataset/content identity rather than mutable filename alone;
+- portable research bundles must verify manifest/file/content identity before use;
+- research dataset exports never include broker login/server as live authority;
 - evidence manifests reject authority-bearing secret-shaped fields;
 - dashboard/research/discovery have zero raw broker authority;
 - financial-authority credentials never enter tracked/public project state.
@@ -272,12 +282,12 @@ Latest verified evidence-manifest checkpoint: **168 tests PASS**, Ruff PASS and 
 
 Do **not** redesign implemented core unnecessarily. Main remaining work:
 
-1. add real historical XAU dataset ingestion/export around the new content-addressed identity contract;
-2. package persisted evidence manifests/results for repeatable walk-forward studies;
+1. connect authoritative real historical XAU acquisition/import sources to the portable dataset contract;
+2. package evidence manifests/results beside immutable dataset identities for repeatable real-data studies;
 3. run broad regime-diverse real-data walk-forward/independent validation and calibrate stress;
 4. add historical PRE_CLOSE/session-policy integration where trustworthy schedule data exists;
 5. integrate research/discovery state into dashboard runtime DTO;
-6. Phase 11 portable backup/checkpoint + fresh-machine recovery + shared cross-laptop controller proof;
+6. Phase 11 portable runtime-state backup/checkpoint + fresh-machine recovery + shared cross-laptop controller proof;
 7. Phase 12 final persistent runtime orchestrator and controlled Windows/MT5 DEMO certification;
 8. final docs/release audit based on actual evidence.
 
@@ -295,7 +305,7 @@ MarketSnapshot
 → ManagedTrade / Trade Manager
 → Dashboard
 → Replay / Ablation / Outcomes / Management / Stress / Walk-Forward
-→ Dataset/Evidence Identity
+→ Dataset/Evidence Identity / Portable Dataset Bundle
 → Metrics / Episode Journal
 → Discovery / Invention / Promotion
 ```
