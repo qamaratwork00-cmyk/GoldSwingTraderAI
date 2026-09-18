@@ -10,7 +10,6 @@ def _clear(monkeypatch: pytest.MonkeyPatch) -> None:
         "GSTAI_ENV",
         "GSTAI_PREFERRED_SYMBOL",
         "GSTAI_SYMBOL_ALIASES",
-        "GSTAI_REQUIRE_DEMO",
         "GSTAI_MANUAL_RESET_ENABLED",
         "GSTAI_STATE_DIR",
         "GSTAI_LOG_LEVEL",
@@ -20,22 +19,22 @@ def _clear(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-def test_defaults_are_demo_guarded(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_defaults_are_small_and_safe(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear(monkeypatch)
     settings = Settings.from_env(env_file=None)
 
-    assert settings.require_demo_account is True
     assert settings.preferred_symbol == "XAUUSDm"
     assert settings.symbol_aliases == ("XAUUSDm", "XAUUSD")
     assert settings.manual_reset_enabled is False
 
 
-def test_v1_demo_requirement_cannot_be_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_demo_guard_is_not_a_runtime_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear(monkeypatch)
     monkeypatch.setenv("GSTAI_REQUIRE_DEMO", "false")
 
-    with pytest.raises(ConfigError, match="cannot be disabled"):
-        Settings.from_env(env_file=None)
+    settings = Settings.from_env(env_file=None)
+
+    assert not hasattr(settings, "require_demo_account")
 
 
 def test_preferred_symbol_must_be_in_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
