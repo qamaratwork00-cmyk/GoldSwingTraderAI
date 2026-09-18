@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 2.9-design
+**Version:** 3.0-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -16,7 +16,7 @@ At behavioural-contract level there are currently **no known `FIX BEFORE BUILD` 
 
 ## Current implementation status
 
-Deterministic core exists through Phase 10 plus Phase-11 checkpoint foundation:
+Deterministic core exists through Phase 10 plus current Phase-11 local backup foundation:
 
 ```text
 1  Foundation/config/domain/CI
@@ -29,115 +29,121 @@ Deterministic core exists through Phase 10 plus Phase-11 checkpoint foundation:
 8  Trade Manager + execution bridge
 9  Dashboard renderer
 10 Replay / ablation / outcomes / manager replay
-   + verified historical PRE_CLOSE/session replay
+   + historical PRE_CLOSE/session replay
    + stress / fixed-policy walk-forward
-   + dataset/evidence identity + portable datasets
-   + read-only MT5 historical acquisition
-   + immutable evidence packages
+   + portable datasets / exact-count MT5 history acquisition
+   + evidence identity/packages
    + learning/discovery/invention/promotion
-11 Portable runtime StateStore checkpoint/export/restore foundation
+11 StateStore snapshot + portable runtime checkpoint
+   + fresh-local-DB restore
+   + automatic local checkpoint cadence
+   + verified backup catalog + count-based retention
 ```
 
-Live DEMO release and real-data validation are not complete. Final runtime orchestration, production shared cross-laptop coordination, automatic backup publication, real fresh-machine/broker drill, controlled Windows/MT5 evidence and DEMO certification remain pending.
+Live DEMO release and real-data validation are not complete. Final runtime orchestration, authenticated remote publication, production shared cross-laptop coordination, real fresh-machine/broker drill, controlled Windows/MT5 evidence and DEMO certification remain pending.
 
 ## Frozen trading principles still in force
 
 - completed candles own structural confirmation;
 - Trendline/Fibonacci/POC are optional bonus-only confluence, not hard filters;
 - six production strategy families remain parallel;
-- credible target room `<1.20R` rejects current plan; 1.20–<1.50R conditional, 1.50–<2R good, 2R+ strong;
-- no fixed-pip TP; Primary checkpoint / Expansion default target / evidence-earned Runner;
+- target-room RR policy, structural targets and evidence-earned runner remain frozen;
 - SMALL is any positive day-start equity below `$300`; no `$100` floor;
 - Gold capacity `0/1` independently risk-bearing position;
 - daily/session/news/execution hard safety remains separate from soft scoring;
 - verified connected DEMO is required for V1 broker-write permission.
 
-## Research / learning / evidence — implemented foundation
+## Research / learning / evidence
 
-Chronological replay, production manager outcomes, historical PRE_CLOSE software integration, execution stress, fixed-policy walk-forward, content-addressed datasets/evidence, portable research bundles, exact-count read-only MT5 acquisition, immutable evidence packages, learning/discovery/invention and governed promotion are implemented deterministically.
+Deterministic foundation is implemented. External evidence still pending: controlled real XAU history, trustworthy historical broker-session coverage, broad validation, empirical friction calibration, final holdout, Shadow and DEMO forward evidence.
 
-Still external/pending: controlled real XAU history, trustworthy historical broker-session coverage, broad validation, empirical friction calibration, final holdout, Shadow and DEMO forward evidence.
+## Persistence / backup — Phase 11
 
-## Persistence / backup — Phase 11 foundation implemented
+### Portable checkpoint / StateStore snapshot — CLOSED
 
-### Portable checkpoint format gap — CLOSED
+`persistence/checkpoint.py` and `StateStore` provide canonical current-record + append-only-event export/import, event integrity verification, financial-secret blocking and fresh-DB-only restore with broker reconciliation explicitly required.
 
-`persistence/checkpoint.py` now owns:
+### Automatic local cadence / retention / catalog — CLOSED at software-foundation level
 
-```text
-checkpoint_manifest.json
-records.jsonl
-events.jsonl
-```
+`persistence/backup.py` now owns local verified rolling backups.
 
-The checkpoint captures the authoritative `StateStore` current records plus append-only event history and binds:
+Initial configurable baseline:
 
 ```text
-checkpoint schema version
-+ StateStore database schema version
-+ source label/version
-+ UTC creation time
-+ records file SHA/count
-+ events file SHA/count
-→ checkpoint_sha256
+interval_minutes = 15
+keep_latest      = 96
 ```
 
-### StateStore snapshot gap — CLOSED
+These values are engineering defaults, not trading/risk policy.
 
-`StateStore` now:
+Implemented guarantees:
 
-- validates current record **and event** integrity;
-- exports deterministic `StoreSnapshot` state;
-- restores a verified snapshot only into an empty store;
-- preserves record/event checksums, timestamps and event IDs;
-- can checkpoint WAL before fresh-database handoff.
+- verify current catalog and every referenced checkpoint before creating another;
+- skip when not due;
+- stage and fully verify new checkpoint before cataloging it;
+- timestamp + SHA-derived safe checkpoint naming;
+- canonical `backup_catalog.json` with `catalog_sha256`;
+- chronological entries containing checkpoint SHA and record/event counts;
+- `latest_verified_checkpoint()` verifies before returning;
+- count-based newest-N retention;
+- write new catalog before pruning old directories;
+- failed new backup preserves previous known-good catalog/checkpoint;
+- checkpoint name path traversal rejected;
+- tampered catalog or referenced checkpoint fails closed.
 
-### Public-safe secret boundary — CLOSED for checkpoint software
+### Remote publication boundary — still pending
 
-`security/financial_secrets.py` centralizes financial-authority secret detection. Runtime checkpoint export/import applies structured payload scanning in addition to text scanning. Credential-shaped password/token/private/recovery-key fields hard-block with `FINANCIAL_SECRET_DETECTED`.
+`backup.py` intentionally contains no GitHub/cloud authentication and no PAT/token handling.
 
-This does not hide ordinary strategy/research/learning state or non-authority account identifiers under the chosen minimum-hide policy.
+Still required:
 
-### Fresh local DB restore — CLOSED at deterministic software level
+- authenticated publication mechanism for **already verified public-safe artifacts**;
+- publication credentials supplied externally and never serialized into checkpoint/repo state;
+- remote destination/layout/catalog convention;
+- failure semantics that preserve local known-good backup even when remote publication fails;
+- proof that publication never uploads financial-authority secrets.
 
-Restore requires a non-existing destination database, restores through a temporary StateStore, verifies integrity, checkpoints WAL and atomically installs the result. The restore result explicitly requires broker reconciliation.
+This may be implemented as external CLI/CI/provider adapter; it must not move credentials into runtime backup state.
 
-A checkpoint is recovery context only. It cannot grant execution authority or blindly replay stale OPEN/Intent state.
+### Fresh-machine / broker truth — controlled evidence pending
 
-## Phase 11 still pending
-
-### IMPLEMENTATION CHOICE
-
-- automatic checkpoint cadence;
-- backup retention count/age policy;
-- public-safe checkpoint naming/catalog/index convention;
-- automatic GitHub publication workflow for allowed checkpoints;
-- last-known-good preservation policy on publication failure;
-- integrated startup hook that selects/restores a checkpoint when explicitly requested.
-
-### CONTROLLED EVIDENCE PENDING
-
-- fresh-machine restore on another machine;
-- current MT5 DEMO account/symbol verification after restore;
-- restored unresolved Intent/open-trade reconciliation against current positions/orders/deals;
+- restore on another machine;
+- MT5 DEMO account/symbol verification after restore;
+- unresolved Intent/open-trade reconciliation against current positions/orders/deals;
 - old-backup + newer broker-truth conflict drill;
-- shared cross-laptop controller/fencing backend and failover proof.
+- no stale order replay;
+- fresh controller authority before any broker write.
 
-### DEFER UNTIL SCHEMA V2 EXISTS
+### Cross-laptop controller — pending
 
-- real migration/rollback transforms between schema versions. Current code correctly rejects unsupported versions; speculative v1→v2 migration code is not required before v2 exists.
+- production shared atomic coordination backend;
+- monotonic fencing across machines;
+- lease expiry/takeover/reconciliation proof;
+- split-brain denial under network/process failure.
+
+### Integrated startup — pending
+
+- explicit restore/startup path;
+- automatic integrity/reconciliation sequence;
+- operator-visible backup/restore/controller health;
+- no READY state until broker/current-controller hard authorities verify.
+
+### Schema migration — defer until v2 exists
+
+Current code rejects unsupported schemas. Real migration/rollback transforms should be implemented when a second schema actually exists, not guessed in advance.
 
 ## Frozen backup/security principles
 
 - live SQLite DB is runtime state, not a Git merge artifact;
-- portable checkpoints are canonical content, not raw DB copies;
-- checkpoint export is write-new; failed export cannot overwrite a known-good checkpoint;
+- portable checkpoints/catalogs are canonical verified content;
+- failed export/new backup cannot overwrite the previous known-good checkpoint;
 - restore never overwrites/merges an existing local DB;
-- source and restored integrity must verify;
-- financial-authority secrets never enter public/tracked checkpoints;
-- exposure/order/position truth comes from broker after restore;
-- restored laptop must obtain fresh controller authority before any broker write;
-- two restored laptops cannot independently trade the same account.
+- financial-authority secrets never enter public/tracked backup state;
+- account identifiers without authority are not hidden merely because they identify scope;
+- broker truth owns current exposure after restore;
+- restored laptop needs fresh controller authority before any broker write;
+- two restored laptops cannot independently trade the same account;
+- remote publication credentials stay external to backup artifacts.
 
 ## Still calibrate in research
 
@@ -147,7 +153,7 @@ A checkpoint is recovery context only. It cannot grant execution authority or bl
 - walk-forward window sizes/stepping;
 - stress severity and broker-friction distributions;
 - promotion/Shadow/Canary thresholds;
-- StrategyMemory and discovery similarity/recipe thresholds;
+- StrategyMemory/discovery similarity/recipe thresholds;
 - Monte Carlo/block/regime-aware methodology.
 
 ## Operator / runtime / release pending
@@ -161,10 +167,10 @@ A checkpoint is recovery context only. It cannot grant execution authority or bl
 
 ## Current deterministic evidence
 
-Portable runtime checkpoint foundation is covered by typed/generic state round-trip, event-history preservation, tamper detection, secret blocking, no-overwrite export/restore and event corruption tests.
+Phase-11 backup tests cover portable state round-trip, event-history integrity, secret blocking, checkpoint tamper, no-overwrite restore, due/skip cadence, retention, catalog tamper, referenced-checkpoint tamper, latest verified selection and previous-known-good preservation after failed secret backup.
 
-Current checkpoint: **195 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current checkpoint: **202 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Governance conclusion
 
-No major behavioural redesign item is known. Current work is primarily **remaining Phase-11 backup automation/failover integration**, followed by real external evidence, runtime orchestration and controlled DEMO certification.
+No major behavioural redesign item is known. Current work is primarily **remaining Phase-11 authenticated publication + real fresh-machine/broker reconciliation + shared-controller failover**, followed by runtime orchestration and controlled DEMO certification.
