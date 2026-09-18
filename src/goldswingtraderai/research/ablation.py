@@ -1,9 +1,10 @@
 """Confluence ablation over the production chronological replay path.
 
 Decision-level reports measure opportunity/entry coverage without inventing P/L.
-Bracket-outcome reports may additionally attach the explicit initial Trade Plan
-stop/target bar model from ``research.outcomes``. That second layer reports only
-resolved bar-level outcomes and keeps ambiguous/unresolved cases visible.
+Bracket reports attach explicit initial Trade Plan stop/target path evidence.
+Management reports additionally replay the production Trade Manager at completed
+M5 boundaries. Every layer states its own realism/uncertainty and keeps ambiguous
+or unresolved outcomes out of resolved Net R.
 """
 
 from __future__ import annotations
@@ -17,6 +18,12 @@ from goldswingtraderai.decisions.timing import TimingAction
 from goldswingtraderai.decisions.trade_plan import TradePlanConfig
 from goldswingtraderai.domain.enums import Direction, Timeframe
 from goldswingtraderai.intelligence.snapshot import IntelligenceConfig
+from goldswingtraderai.management.manager import TradeManagerConfig
+from goldswingtraderai.research.management_replay import (
+    ManagementReplayMetrics,
+    run_trade_manager_replay,
+    summarize_management_replay,
+)
 from goldswingtraderai.research.outcomes import (
     EnterPlanOutcomeMetrics,
     label_enter_plan_outcomes,
@@ -96,6 +103,32 @@ class ConfluenceBracketAblationReport:
     rows: tuple[ConfluenceBracketAblationRow, ...]
 
     def row(self, variant: ConfluenceAblationVariant) -> ConfluenceBracketAblationRow:
+        for item in self.rows:
+            if item.variant is variant:
+                return item
+        raise KeyError(variant)
+
+
+@dataclass(frozen=True, slots=True)
+class ConfluenceManagementAblationRow:
+    variant: ConfluenceAblationVariant
+    decision_metrics: DecisionReplayMetrics
+    management_metrics: ManagementReplayMetrics
+    managed_trade_delta_vs_base: int
+    resolved_coverage_delta_vs_base: float
+    resolved_net_r_delta_vs_base: float
+    average_capture_efficiency_delta_vs_base: float
+    average_profit_giveback_r_delta_vs_base: float
+
+
+@dataclass(frozen=True, slots=True)
+class ConfluenceManagementAblationReport:
+    rows: tuple[ConfluenceManagementAblationRow, ...]
+
+    def row(
+        self,
+        variant: ConfluenceAblationVariant,
+    ) -> ConfluenceManagementAblationRow:
         for item in self.rows:
             if item.variant is variant:
                 return item
@@ -220,6 +253,82 @@ def run_confluence_bracket_ablation(
                 ),
                 average_mfe_r_delta_vs_base=(
                     outcomes[variant].average_mfe_r - base.average_mfe_r
+                ),
+            )
+            for variant in _VARIANTS
+        )
+    )
+
+
+def run_confluence_management_ablation(
+    dataset: ReplayDataset,
+    *,
+    start_utc: datetime | None = None,
+    end_utc: datetime | None = None,
+    horizon_m5_bars: int = 96,
+    minimum_bars: dict[Timeframe, int] | None = None,
+    intelligence_config: IntelligenceConfig | None = None,
+    decision_config: DecisionConfig | None = None,
+    trade_plan_config: TradePlanConfig | None = None,
+    manager_config: TradeManagerConfig | None = None,
+) -> ConfluenceManagementAblationReport:
+    """Compare idealized production Trade Manager outcomes across variants.
+
+    The decision/plan/manager semantics are production code, but the replay assumes
+    requested stop/TP modifications become effective at completed-bar boundaries.
+    It therefore remains research evidence, not broker-realized P/L or tick parity.
+    Ambiguous/open outcomes stay outside resolved Net R.
+    """
+
+    runs = _run_variants(
+        dataset,
+        start_utc=start_utc,
+        end_utc=end_utc,
+        minimum_bars=minimum_bars,
+        intelligence_config=intelligence_config,
+        decision_config=decision_config,
+    )
+    decision_metrics = {
+        variant: summarize_decision_replay(run) for variant, run in runs.items()
+    }
+    management = {
+        variant: summarize_management_replay(
+            run_trade_manager_replay(
+                dataset,
+                run,
+                horizon_m5_bars=horizon_m5_bars,
+                minimum_bars=minimum_bars,
+                intelligence_config=intelligence_config,
+                trade_plan_config=trade_plan_config,
+                manager_config=manager_config,
+            )
+        )
+        for variant, run in runs.items()
+    }
+    base = management[ConfluenceAblationVariant.BASE]
+
+    return ConfluenceManagementAblationReport(
+        rows=tuple(
+            ConfluenceManagementAblationRow(
+                variant=variant,
+                decision_metrics=decision_metrics[variant],
+                management_metrics=management[variant],
+                managed_trade_delta_vs_base=(
+                    management[variant].managed_trades - base.managed_trades
+                ),
+                resolved_coverage_delta_vs_base=(
+                    management[variant].resolved_coverage - base.resolved_coverage
+                ),
+                resolved_net_r_delta_vs_base=(
+                    management[variant].resolved_net_r - base.resolved_net_r
+                ),
+                average_capture_efficiency_delta_vs_base=(
+                    management[variant].average_capture_efficiency
+                    - base.average_capture_efficiency
+                ),
+                average_profit_giveback_r_delta_vs_base=(
+                    management[variant].average_profit_giveback_r
+                    - base.average_profit_giveback_r
                 ),
             )
             for variant in _VARIANTS
