@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Execution and Broker Safety
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-design  
+**Version:** 0.3-design  
 **Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, ownership and reconciliation.  
 **Depends on:** `RISK_CONTRACT.md`, `SESSION_AND_RISK_STATE_MACHINE.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -213,11 +213,47 @@ UNKNOWN_OWNER
 
 Magic number alone is not sufficient ownership proof. Managed lineage should use persisted execution/trade identities plus broker facts.
 
-Manual/foreign positions must never be modified as if bot-owned. V1 may conservatively block new Gold entries when unexpected exposure exists; final policy remains open.
+Manual/foreign/unknown positions must never be modified as if bot-owned.
 
-## Position capacity
+## V1 Gold position-capacity policy
 
-If V1 freezes one independently risk-bearing Gold position at a time, new independent entries are blocked with `POSITION_CAPACITY_FULL` while analysis/research continues.
+V1 allows **one independently risk-bearing Gold position at a time** on the managed account/symbol.
+
+```text
+No Gold exposure / capacity 0/1 → new bot entry may qualify
+One verified BOT_MANAGED Gold position / capacity 1/1 → block second independent entry
+Unexpected MANUAL / FOREIGN_EA / UNKNOWN_OWNER Gold exposure → block new bot entry
+```
+
+Reason codes may include:
+
+```text
+POSITION_CAPACITY_FULL
+EXTERNAL_GOLD_EXPOSURE
+UNKNOWN_POSITION_OWNERSHIP
+```
+
+Analysis, research and opportunity tracking continue while capacity is occupied.
+
+### Opposite opportunity while a bot trade is open
+
+An opposite BUY/SELL opportunity is **not** permission to open an automatic hedge or second independent Gold position.
+
+The opposite evidence is routed first to the Trade Manager as reversal/exit/protection evidence. A new opposite trade may only be considered after the existing risk-bearing Gold position is closed and broker/local state is reconciled, followed by a fresh governed opportunity and Execution Intent.
+
+### External/manual Gold exposure
+
+If a manual or foreign EA Gold position is present, GoldSwingTraderAI:
+
+- does not alter/close/trail that position;
+- shows the ownership/exposure state;
+- blocks new bot Gold entries while the exposure remains;
+- continues analysis/research;
+- requires broker reconciliation after the external exposure disappears before returning to entry-ready state.
+
+This conservative V1 rule prevents accidental stacking/hedging against exposure the bot does not own.
+
+Future multi-position, add-on or coexistence policies require a later explicit design decision; they are not implicit.
 
 ## Modification and close safety
 
@@ -313,7 +349,10 @@ The desk should expose:
 - ambiguous acknowledgement reconciliation;
 - crash after send without duplicate;
 - modify/close ambiguity reconciliation;
-- manual/foreign ownership protection;
+- second independent Gold entry blocked at capacity 1/1;
+- opposite opportunity cannot create automatic hedge;
+- manual/foreign position is never modified and blocks new bot Gold entry;
+- unknown ownership fails closed for new Gold entries;
 - multi-instance controller/failover tests.
 
 ## Explicit non-goals
@@ -325,6 +364,8 @@ Execution must not:
 - redesign structural SL/targets;
 - blind-retry ambiguous writes;
 - assume unknown broker exposure is zero;
+- open a second independent Gold risk position/automatic hedge in V1;
+- modify manual/foreign Gold positions as bot-owned;
 - let multiple laptops independently write the same managed account/symbol;
 - allow alternate broker-write call paths to bypass the centralized permission gate.
 
@@ -332,6 +373,4 @@ Execution must not:
 
 - exact DEMO-to-real future release policy;
 - exact price-drift/spread limits;
-- final V1 unexpected-manual-position policy;
-- final one-position policy confirmation;
 - exact execution-lease implementation and timeout/failover mechanics.
