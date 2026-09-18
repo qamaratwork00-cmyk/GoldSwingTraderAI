@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 1.6-design
+**Version:** 1.7-design
 
 This file separates remaining items into four classes so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -20,7 +20,9 @@ At behavioural-contract level there are currently **no `FIX BEFORE BUILD` items*
 
 The design close-out pass has synchronized the System Contract, Architecture, Trade Plan/Manager direction, Risk/Session/Execution contracts, docs-root User/Setup/Coder guides, Testing/Release docs, Design Decisions ledger and Final Build Prompt candidate.
 
-Remaining items below are research calibration, ordinary implementation choices, operator details or later-version work; they must not silently change frozen behavioural invariants.
+The V1 engineering style is also frozen in `../60-engineering/CODING_STANDARD.md`: Python 3.11+, lightweight production runtime, minimal dependencies, direct/auditable architecture, shared snapshot/derived calculations and professional non-noisy commenting/error handling.
+
+Remaining items below are research calibration, ordinary implementation choices, operator details or later-version work; they must not silently change frozen behavioural or engineering invariants.
 
 ## Market intelligence
 
@@ -241,6 +243,8 @@ Initial implementation may choose storage stack, schema layout, checkpoint forma
 
 Live mutable database files need not be Git-merged directly if a safer portable checkpoint/export represents the same required recovery state.
 
+The chosen persistence stack must also satisfy the frozen Coding Standard: use the smallest safe solution and do not add ORM/service-layer complexity without a demonstrated need.
+
 ## Research / learning / autonomous improvement
 
 ### FROZEN PRINCIPLE
@@ -278,13 +282,22 @@ Research is automatic where practical but cannot self-promote production, bypass
 
 ## Engineering / release
 
+### FROZEN ENGINEERING PRINCIPLE
+
+- Python baseline is **3.11+**;
+- production runtime follows `../60-engineering/CODING_STANDARD.md`;
+- runtime dependencies are minimal/standard-library-first;
+- official `MetaTrader5` is the terminal-integration boundary;
+- heavier research/data-science dependencies remain isolated from normal runtime unless a later governed decision proves otherwise.
+
 ### IMPLEMENTATION CHOICE
 
-- exact supported Python/dependency versions;
-- final filenames/classes;
-- persistence libraries;
+- exact compatible dependency pins/upper bounds within the frozen baseline;
+- final filenames/classes while preserving documented ownership;
+- persistence libraries consistent with the lightweight standard;
 - CI/static/security/coverage thresholds;
-- packaging/version/tag layout.
+- packaging/version/tag layout;
+- optional research-only analytical libraries.
 
 ### REQUIRED BEFORE VERIFIED RELEASE
 
@@ -296,12 +309,13 @@ Research is automatic where practical but cannot self-promote production, bypass
 - restart/reconciliation proof;
 - fresh-machine recovery proof;
 - financial-secret scan;
+- frozen Coding Standard quality review;
 - final release audit with actual evidence.
 
 ## Governance conclusion
 
 The behavioural design close-out and cross-document consistency pass are complete enough for implementation to begin. No major subsystem or `FIX BEFORE BUILD` item is currently known.
 
-Research-calibration values and ordinary library/file choices remain explicit work for implementation/replay and should not stall Phase 1.
+Research-calibration values and ordinary library/file choices remain explicit work for implementation/replay and should not stall Phase 1. Python/runtime complexity principles are no longer open design questions; they are frozen by `CODING_STANDARD.md` and DEC-063.
 
 Documents remain honestly `DRAFT/PROVISIONAL` where implementation or executable verification does not yet exist. They must not be relabeled `IMPLEMENTED` or `VERIFIED` until the required code/tests/evidence actually exist.
