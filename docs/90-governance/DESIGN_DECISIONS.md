@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.2-design
+**Version:** 0.4-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -97,31 +97,125 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-018 — Swing lifecycle separates early evidence from authority
 
 **Decision:** Structural pivots progress through `CANDIDATE → CONFIRMED`, with some confirmed swings later promoted to `PROTECTED` or `EXTERNAL/MAJOR` roles. Candidate swings may support soft evidence but cannot independently confirm BOS/MSS or become sole structural authority.  
-**Status:** PROVISIONAL  
-**Reason:** Reduce noise and look-ahead while retaining earlier opportunity/timing awareness.
+**Status:** PROVISIONAL
 
 ## DEC-019 — Pivot time and confirmation time are distinct
 
 **Decision:** Every confirmed swing records both the time of the price extreme and the later time when confirmation became available. Replay/live logic may not use the swing before its confirmation time.  
-**Status:** PROVISIONAL  
-**Reason:** Prevent hidden future-bar leakage from pivot algorithms.
+**Status:** PROVISIONAL
 
 ## DEC-020 — Structural breaks use graduated states
 
 **Decision:** Wick/probe, qualified completed-candle break, confirmed BOS, MSS candidate, confirmed MSS and failed break are distinct evidence states rather than one binary `break=true` flag.  
-**Status:** PROVISIONAL  
-**Reason:** Allow earlier strong opportunities without falsely claiming mature structure confirmation.
+**Status:** PROVISIONAL
 
 ## DEC-021 — MSS means transition before new trend
 
 **Decision:** A confirmed counter-structure MSS challenges the prior thesis and moves that timeframe toward transition; it does not by itself establish a fully confirmed opposite trend.  
-**Status:** PROVISIONAL  
-**Reason:** Prevent one local counter-break from flipping the entire directional model.
+**Status:** PROVISIONAL
 
 ## DEC-022 — Timeframes retain independent structure state
 
 **Decision:** H4, H1, M15 and M5 structure states are maintained independently. Lower-timeframe structural change may influence scores/timing but cannot silently overwrite higher-timeframe structure.  
 **Status:** PROVISIONAL
+
+## DEC-023 — Technical structure owns adaptive zones and location
+
+**Decision:** Support/resistance is modeled as adaptive zones with quality/lifecycle. A separate Location/Target-Room view evaluates where current price stands; location is important evidence but not a universal hard gate.  
+**Status:** PROVISIONAL
+
+## DEC-024 — Liquidity/SMC is contextual evidence, not mandatory confluence
+
+**Decision:** Liquidity pools, sweeps, FVG, qualified OB and premium/discount are context-aware evidence. A sweep requires meaningful liquidity plus post-interaction failure/reclaim; FVG/OB are not mandatory for every trade.  
+**Status:** PROVISIONAL
+
+## DEC-025 — Indicators describe and normalize; price structure leads
+
+**Decision:** EMA20/EMA50, RSI and ATR are initial quantitative tools. They support momentum/volatility/extension analysis but do not independently create or veto trades.  
+**Status:** PROVISIONAL
+
+## DEC-026 — Fundamental opinion and event safety are separate
+
+**Decision:** Macro/fundamental context is soft evidence. Scheduled-event safety may become hard permission through the risk/session state machine. Missing optional macro opinion does not equal missing required event safety.  
+**Status:** PROVISIONAL
+
+## DEC-027 — Structural Trade Plan before risk sizing
+
+**Decision:** Entry reference, structural invalidation, volatility-aware stop buffer and market objectives are defined before monetary sizing. Risk must reject an unaffordable plan rather than distort its structural stop.  
+**Status:** PROVISIONAL
+
+## DEC-028 — Original R is immutable
+
+**Decision:** Original approved risk distance/R remains immutable for analytics and lifecycle attribution even after SL/TP management changes.  
+**Status:** PROVISIONAL
+
+## DEC-029 — UTC calendar risk day
+
+**Decision:** The provisional daily-risk accounting boundary is `00:00 UTC`, independent of XAU reopen/holiday labels.  
+**Status:** PROVISIONAL  
+**Reason:** Deterministic accounting and replayability.
+
+## DEC-030 — Centralized final broker-write permission gate
+
+**Decision:** All irreversible MT5 create/modify/close actions must pass one centralized Execution Permission Gate/Broker Write Guard that consumes authoritative risk/news/account/data/order/controller results and returns ALLOW/BLOCK/UNKNOWN with reasons.  
+**Status:** PROVISIONAL  
+**Reason:** Make broker authority easy to audit, test, demonstrate and extend without scattered bypasses.
+
+## DEC-031 — DEMO-first is a release safeguard, not a permanent LIVE prohibition
+
+**Decision:** Initial implementation/release authorizes broker writes only on the approved DEMO environment. Future REAL execution requires an explicit frozen release/config policy but uses the same strategy, risk, centralized permission gate, one-shot broker path and reconciliation rather than a separate trading engine.  
+**Status:** PROVISIONAL
+
+## DEC-032 — One-shot irreversible submission with reconciliation
+
+**Decision:** One Execution Intent permits at most one irreversible submit until reconciliation proves otherwise. Ambiguous acknowledgement enters reconciliation; blind retry is prohibited.  
+**Status:** PROVISIONAL
+
+## DEC-033 — System health is separate from normal trading decisions
+
+**Decision:** `Why no trade?`/decision attribution belongs to decision/risk/execution authorities. Cross-subsystem System Health reports faults, severity, impact and recovery. Normal WAIT/NEWS_BLACKOUT/LOSS_LOCKED are not automatically system errors.  
+**Status:** PROVISIONAL
+
+## DEC-034 — Persistent strategy/learning state is portable
+
+**Decision:** Strategy Registry, strategy genealogy, Champion/Challenger state, entry/exit learning, research/promotion history and critical lifecycle context must survive restart and laptop migration.  
+**Status:** PROVISIONAL
+
+## DEC-035 — Public repository may back up project intelligence; financial-authority secrets do not belong there
+
+**Decision:** While the repository is public, code, docs, strategy definitions, learned parameters, autonomous candidates, research/promotion history and appropriate state backups may be versioned there for disaster recovery. Credentials/keys/tokens that can enable unauthorized financial action or direct paid-service cost must never be committed.  
+**Status:** PROVISIONAL
+
+## DEC-036 — Single active execution controller
+
+**Decision:** For one managed account/symbol, only one runtime instance may hold broker-write authority. Other machines may observe/research/shadow. Failover must reconcile broker and local state before takeover.  
+**Status:** PROVISIONAL
+
+## DEC-037 — Learning includes entry quality and exit/capture quality
+
+**Decision:** Learning evaluates TAKEN/MISSED/BLOCKED/INVALIDATED opportunities and explicitly measures entry efficiency, MFE/MAE, capture efficiency and premature-exit cost. Learning proposes challengers; it does not silently mutate current production.  
+**Status:** PROVISIONAL
+
+## DEC-038 — Strategy discovery/invention is governed and declarative
+
+**Decision:** Autonomous candidates are built from approved market primitives/recipes, retain genealogy and rejected-candidate memory, and cannot create arbitrary executable Python, change risk or call the broker directly.  
+**Status:** PROVISIONAL
+
+## DEC-039 — Promotion uses evidence stages and one-shot final holdout
+
+**Decision:** Candidate promotion proceeds through research/independent validation/locked candidate/final untouched holdout/stress/Shadow/DEMO Canary before production approval as applicable. The final holdout is consumed once for a locked candidate.  
+**Status:** PROVISIONAL
+
+## DEC-040 — Compact dashboard with restrained emojis and explicit reasons
+
+**Decision:** Main terminal UX remains compact, uses meaningful emojis as status markers (not decoration), separates Market/Decision/Risk/Execution/System/Learning state, and shows stable reason codes plus human explanation for WAIT/BLOCKED/MISSED/INVALID/EXIT.  
+**Status:** PROVISIONAL
+
+## DEC-041 — Research documentation is consolidated by authority
+
+**Decision:** There is no separate authoritative `OFFLINE_RESEARCH.md`. Chronological/offline methodology belongs to `RESEARCH_AND_VALIDATION.md`; discovery, invention and promotion each have their own documents.  
+**Status:** PROVISIONAL  
+**Reason:** Avoid duplicate research contracts.
 
 ## Change rule
 
