@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Governed Strategy Discovery
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-implementation  
+**Version:** 0.3-implementation  
 **Authority:** Parameter discovery, strategy-recipe discovery, candidate comparison and evidence-driven market-behaviour discovery.  
 **Depends on:** `RESEARCH_AND_VALIDATION.md`, `../20-trading-decisions/STRATEGY_FLOOR.md`, `LEARNING_AND_AI_BOUNDARIES.md`
 
@@ -15,7 +15,7 @@ The discovery system searches for improvements while preserving production seman
 
 Discovery must not exist only as a documented feature or silently remain inert.
 
-When a coherent evidence cluster reaches the configured eligibility requirements, each discovery cycle must produce one of two auditable outcomes:
+When a coherent evidence cluster reaches configured eligibility requirements, each discovery cycle must produce one of two auditable outcomes:
 
 ```text
 eligible recurring evidence
@@ -30,32 +30,27 @@ If eligible evidence cannot be processed and no governed reason is produced, dis
 
 ## Automatic evidence feed — implemented baseline
 
-V1 research persists outcome-labelled episodes and automatically converts eligible recurring episodes into discovery observations.
-
 ```text
 Replay / forward outcome
 → ResearchEpisodeRecord
 → durable ResearchEpisodeRepository
-→ approved-primitive observation mapping
+→ audited primitive mapping
 → recurring cluster
 → invention/discovery cycle
 → CandidateRegistry
 ```
 
-This wiring is important: normal operation must not depend on an operator manually constructing candidate observations one by one.
+Normal operation must not depend on an operator manually constructing candidate observations one by one.
 
 ## Discovery levels
 
 ### Level A — Parameter discovery
-
 May research bounded score/entry/management values explicitly designated as researchable. Hard safety invariants are not parameter-search space.
 
 ### Level B — Strategy recipe discovery
-
 May combine approved audited primitives into a declarative hypothesis containing required behaviour, optional support, timing profile, invalidation model, target model and preferred regime.
 
 ### Level C — Market-behaviour discovery
-
 May search repeated missed/losing/winning episode clusters for recurring behaviour not represented well by current families.
 
 The objective is evidence-driven hypothesis generation, not random combinatorial search.
@@ -70,11 +65,39 @@ The initial implementation can derive discovery triggers from repeated:
 - high-capture sequences;
 - later regime-deterioration research.
 
-Blocked/safety/system-fault attribution must remain distinct so discovery does not incorrectly rewrite a strategy for a broker or system failure.
+Blocked/safety/system-fault attribution must remain distinct so discovery does not incorrectly rewrite strategy logic for a broker/system failure.
 
 ## Approved primitive registry
 
-Autonomous discovery accepts only the audited primitive vocabulary implemented in `research/discovery.py`, including structure/break/MSS, candle rejection/displacement/compression, technical location, liquidity sweep/FVG/Order Block, EMA/RSI/ATR context, session context, target path and entry timing.
+Autonomous discovery accepts only audited `ApprovedPrimitive` values implemented in `research/discovery.py`.
+
+Current vocabulary includes:
+
+```text
+STRUCTURE_TREND
+STRUCTURE_BREAK
+MSS_SHIFT
+CANDLE_REJECTION
+DISPLACEMENT
+COMPRESSION
+TECHNICAL_LOCATION
+TRENDLINE
+FIBONACCI
+VOLUME_PROFILE_POC
+LIQUIDITY_SWEEP
+FVG
+ORDER_BLOCK
+EMA_FLOW
+RSI_MOMENTUM
+ATR_VOLATILITY
+SESSION_CONTEXT
+TARGET_PATH
+ENTRY_TIMING
+```
+
+Trendline/Fibonacci/POC are allowed **research primitives/context**, not automatic production requirements. Their inclusion exists so the research system can test whether they genuinely improve accuracy/Net R/capture and whether they form a useful recurring setup. Discovery may not silently turn them into mandatory hard filters.
+
+`episode_journal.py` maps durable strategy-evidence labels such as `TRENDLINE_*`, `FIB_*` and `POC_*`/`VOLUME_PROFILE_*` into these audited primitives.
 
 Arbitrary strings/executable code are not candidate primitives.
 
@@ -92,21 +115,23 @@ A candidate retains at least:
 - fingerprint and chronology;
 - current status / rejection reason.
 
-The initial implementation requires independent episode IDs; repeated copies of one source episode cannot inflate sample count.
+The implementation requires independent episode IDs; repeated copies of one source episode cannot inflate sample count.
 
 ## Duplicate / variant / rejected-memory handling
 
 A candidate close to an existing family is normally a variant rather than a fake new family. A materially unrepresented primitive pattern may become a `NEW_FAMILY` research candidate.
 
-Candidate fingerprints and similarity checks suppress duplicate candidates. Rejected candidates remain durable; a substantially similar rejected idea is not silently reinvented after restart without materially new evidence/versioning.
+Candidate fingerprints and similarity checks suppress duplicates. Rejected candidates remain durable; a substantially similar rejected idea is not silently reinvented after restart without materially new evidence/versioning.
 
 ## Complexity control
 
-Candidates are intentionally declarative and bounded. Initial implementation caps required/optional primitives per recipe and prefers a small stable primary pattern over filter soup. Exact thresholds remain research-calibratable rather than frozen profitability truth.
+Candidates are declarative and bounded. Initial implementation caps required/optional primitives per recipe and prefers a small stable primary pattern over filter soup.
+
+Trendline/Fibonacci/POC must not create a giant multi-confluence recipe merely because they are available. More conditions require stronger evidence.
 
 ## Hard exclusions
 
-Discovery may not optimize or remove:
+Discovery may not optimize/remove/bypass:
 
 - account/DEMO identity checks;
 - no-lookahead rules;
@@ -119,8 +144,6 @@ Discovery may not optimize or remove:
 - financial-secret handling.
 
 ## Candidate evaluation and promotion boundary
-
-Positive discovery evidence is not production permission.
 
 ```text
 Candidate Registry
@@ -150,11 +173,12 @@ research/promotion.py
 Key deterministic regressions include:
 
 - recurring independent missed-move evidence actually creates a candidate;
-- durable journal still feeds discovery after process/repository restart;
+- durable journal still feeds discovery after restart;
 - duplicate source IDs cannot fake evidence count;
 - variant versus new-family classification;
 - entry/exit policy challenger creation;
 - unapproved primitive rejection;
+- Trendline/Fibonacci/POC evidence maps to explicit audited primitives;
 - candidate/rejected memory persistence;
 - duplicate/rejected candidate suppression;
 - candidate cannot skip promotion stages;
@@ -165,8 +189,6 @@ Key deterministic regressions include:
 Deterministic CI proves software behaviour only. Replay quality and later DEMO/forward evidence are still required before any candidate can be considered production-ready.
 
 ## Outputs / dashboard visibility
-
-Expose, as available:
 
 ```text
 Discovery Health   IDLE / HEALTHY / DEGRADED
@@ -180,9 +202,10 @@ Broker Authority   NONE
 
 ## Tests required
 
-- liveness: eligible evidence creates a candidate or explicit governed suppression reason;
+- liveness: eligible evidence creates candidate or explicit suppression reason;
 - hard-safety fields excluded from search space;
 - approved primitive enforcement;
+- Trendline/Fibonacci/POC primitive mapping;
 - duplicate/variant/new-family classification;
 - failed-candidate persistence across restart;
 - independent-episode enforcement;
@@ -193,7 +216,7 @@ Broker Authority   NONE
 
 ## Explicit non-goals
 
-Discovery must not generate/execute arbitrary Python, directly edit production policy, learn around hard safety, self-promote candidates, or randomly search unlimited condition combinations.
+Discovery must not generate/execute arbitrary Python, directly edit production policy, learn around hard safety, self-promote candidates, randomly search unlimited condition combinations, or turn optional confluence into mandatory filters without governed evidence.
 
 ## Open questions / research calibration
 
@@ -201,4 +224,5 @@ Discovery must not generate/execute arbitrary Python, directly edit production p
 - final primitive similarity/complexity thresholds;
 - parameter-search bounds and scheduling/resource budget;
 - richer regime-deterioration clustering;
-- evidence thresholds required before candidate validation begins.
+- evidence thresholds required before candidate validation begins;
+- whether Trendline/Fibonacci/POC materially improve results in ablation/Opportunity Recall analysis or should remain lightweight context only.
