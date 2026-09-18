@@ -22,7 +22,7 @@ from goldswingtraderai.decisions.trade_plan import (
 from goldswingtraderai.domain.enums import Direction, OpportunityStage, Timeframe
 from goldswingtraderai.domain.market import Candle
 from goldswingtraderai.intelligence.snapshot import IntelligenceConfig, build_intelligence_snapshot
-from goldswingtraderai.research.replay import ReplayDataset, ReplayRun
+from goldswingtraderai.research.replay import ReplayDataset, ReplayDecision, ReplayRun
 
 
 class OutcomeRealism(StrEnum):
@@ -81,6 +81,40 @@ class EnterPlanOutcomeMetrics:
     reach_4r_rate: float
 
 
+def build_historical_trade_plan(
+    dataset: ReplayDataset,
+    replay_decision: ReplayDecision,
+    *,
+    minimum_bars: dict[Timeframe, int] | None = None,
+    intelligence_config: IntelligenceConfig | None = None,
+    trade_plan_config: TradePlanConfig | None = None,
+) -> TradePlan:
+    """Rebuild one production Trade Plan only from facts visible at decision time."""
+
+    timing = replay_decision.decision.timing
+    if timing is None or timing.action not in {
+        TimingAction.ENTER_BUY,
+        TimingAction.ENTER_SELL,
+    }:
+        raise ValueError("historical Trade Plan reconstruction requires ENTER decision")
+
+    opportunity = replay_decision.decision.opportunity
+    if opportunity is None or opportunity.stage is not OpportunityStage.READY:
+        raise ValueError("ENTER replay decision must retain a READY opportunity")
+
+    market = dataset.snapshot_at(replay_decision.as_of_utc, minimum_bars=minimum_bars)
+    if market is None:
+        raise ValueError("research cannot rebuild the original market snapshot")
+    intelligence = build_intelligence_snapshot(market, config=intelligence_config)
+    return build_trade_plan(
+        opportunity,
+        intelligence,
+        market,
+        replay_decision.as_of_utc,
+        config=trade_plan_config,
+    )
+
+
 def label_enter_plan_outcomes(
     dataset: ReplayDataset,
     run: ReplayRun,
@@ -110,22 +144,13 @@ def label_enter_plan_outcomes(
         }:
             continue
 
-        opportunity = item.decision.opportunity
-        if opportunity is None or opportunity.stage is not OpportunityStage.READY:
-            raise ValueError("ENTER replay decision must retain a READY opportunity")
-
-        market = dataset.snapshot_at(item.as_of_utc, minimum_bars=minimum_bars)
-        if market is None:
-            raise ValueError("replay outcome cannot rebuild the original market snapshot")
-        intelligence = build_intelligence_snapshot(market, config=intelligence_config)
-        plan = build_trade_plan(
-            opportunity,
-            intelligence,
-            market,
-            item.as_of_utc,
-            config=trade_plan_config,
+        plan = build_historical_trade_plan(
+            dataset,
+            item,
+            minimum_bars=minimum_bars,
+            intelligence_config=intelligence_config,
+            trade_plan_config=trade_plan_config,
         )
-
         if not plan.entry_ready:
             records.append(
                 EnterPlanOutcomeRecord(
