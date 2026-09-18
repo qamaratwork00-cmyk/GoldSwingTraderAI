@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Research and Validation
 
 **Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
-**Version:** 0.6-implementation  
+**Version:** 0.7-implementation  
 **Authority:** Chronological replay, no-lookahead validation, holdouts, robustness/stress evidence, opportunity/entry/exit research metrics and evidence claims.  
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../20-trading-decisions/ENTRY_TIMING.md`, `../20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`
 
@@ -21,6 +21,7 @@ research/ablation.py
 research/outcomes.py
 research/management_replay.py
 research/stress.py
+research/validation.py
 research/metrics.py
 research/learning.py
 research/episode_journal.py
@@ -46,6 +47,8 @@ Current deterministic research infrastructure supports:
 - deterministic declared execution-friction stress around fixed analytical decisions;
 - adverse entry-slippage, executable-side spread, manager-modify delay/rejection probes;
 - manager-modify request/applied/rejected/suppressed/pending audit counts;
+- fixed-policy chronological walk-forward validation with non-overlapping scored validation slices;
+- optional execution stress attached to each validation slice without changing analytical policy;
 - same-bar stop+target ambiguity preserved instead of favorably guessed;
 - unresolved/open horizons preserved rather than coerced into wins/losses;
 - actual trade/outcome versus counterfactual missed/blocked outcome separation;
@@ -53,7 +56,7 @@ Current deterministic research infrastructure supports:
 - StrategyMemory/bounded learning foundation;
 - governed candidate discovery/invention/promotion state.
 
-This remains a **software/research foundation**, not completed market validation. Broader historical XAU datasets, empirical stress calibration, walk-forward/independent validation, untouched holdout and DEMO forward evidence remain required before claiming a strategy edge.
+This remains a **software/research foundation**, not completed market validation. Broader historical XAU datasets, empirical stress calibration, sufficiently large independent validation, untouched holdout and DEMO forward evidence remain required before claiming a strategy edge.
 
 ## Replay principle
 
@@ -190,29 +193,46 @@ COMBINED            all four together
 
 These numbers are **research calibration baselines only**. They are not frozen broker assumptions, not changes to production spread/drift safety rules and not claims about actual Exness distributions.
 
-Stress reports include signed deltas versus BASE for:
-
-- managed trade / non-ready Trade Plan counts;
-- resolved coverage;
-- resolved Net R / Average R;
-- resolved max drawdown;
-- Capture Efficiency;
-- profit giveback;
-- manager modify request/applied/rejected/suppressed/pending counts.
+Stress reports include signed deltas versus BASE for managed trade / non-ready plan counts, resolved coverage, Net/Average R, drawdown, Capture Efficiency, giveback and manager-modify lifecycle counts.
 
 The current stress layer does **not** claim full Execution Permission Gate, margin, order-book, variable intrabar spread, close-order failure, PRE_CLOSE historical schedule or tick-ordering parity.
 
+## Fixed-policy walk-forward validation — implemented scaffold
+
+`research/validation.py` owns chronological **fixed-policy** walk-forward orchestration. It is deliberately not an optimizer.
+
+A window is:
+
+```text
+DEVELOPMENT CONTEXT
+→ immediately later VALIDATION SLICE
+```
+
+Rules:
+
+- development and validation event counts are explicit configuration;
+- exact window sizes remain research-calibratable rather than silently guessed;
+- validation slices may not overlap;
+- development slices may overlap because their purpose is context/state reconstruction;
+- production Opportunity state is allowed to evolve through development history before validation starts;
+- only events inside the validation slice are scored;
+- the policy/configuration is fixed across a validation run; there is no automatic parameter search or best-window reselection;
+- the dataset presented to outcome/management research is truncated at the validation end boundary;
+- therefore an entry near the end of a validation slice cannot inspect later-window candles merely to obtain a resolved result; it may remain `HORIZON_OPEN`;
+- optional declared execution stress can be attached to the validation slice using the same analytical decisions;
+- walk-forward validation does **not** consume or replace the governed one-shot final holdout in `research/promotion.py`.
+
+The implemented mode is:
+
+```text
+FIXED_POLICY_WALK_FORWARD
+```
+
+This scaffold proves chronology and evidence separation. Meaningful strategy conclusions still require broad real XAU datasets and sufficiently large/regime-diverse windows.
+
 ## Execution realism
 
-Research states its realism level. Depending on available data, simulation may model:
-
-- Bid/Ask/spread;
-- price drift;
-- slippage assumptions;
-- tick/point normalization;
-- min lot/volume step;
-- SL/TP geometry;
-- margin/risk constraints.
+Research states its realism level. Depending on available data, simulation may model Bid/Ask/spread, price drift, slippage assumptions, tick/point normalization, min lot/volume step, SL/TP geometry and margin/risk constraints.
 
 Bar-level simulation must not be described as tick-perfect execution.
 
@@ -223,6 +243,7 @@ Decision replay          BAR_CLOSE
 Initial bracket outcomes BAR_HIGH_LOW
 Trade Manager replay     BAR_CLOSE_IDEALIZED + active barriers
 Execution stress         BAR_CLOSE_EXECUTION_STRESS + declared assumptions
+Walk-forward             FIXED_POLICY_WALK_FORWARD over the declared replay layers
 ```
 
 None is a claim of tick-perfect broker execution.
@@ -231,25 +252,27 @@ None is a claim of tick-perfect broker execution.
 
 ```text
 DEVELOPMENT / SELECTION DATA
-→ INDEPENDENT VALIDATION
+→ INDEPENDENT VALIDATION / WALK-FORWARD
 → LOCK ONE CANDIDATE
 → FINAL UNTOUCHED HOLDOUT
-→ STRESS / WALK-FORWARD
+→ STRESS
 → SHADOW
 → DEMO CANARY
 ```
 
-Exact sample sizes remain research-calibratable.
+Walk-forward is repeatable chronological validation evidence; it is not the final untouched holdout. Exact sample/window sizes remain research-calibratable.
 
 ## Final holdout rule
 
 The final holdout is one-shot for the locked candidate. If that candidate fails, the system must not repeatedly try alternate parameters/candidates on the same data while still calling it untouched.
 
-Consumed holdout identity/status is durable under the promotion registry.
+Consumed holdout identity/status is durable under the promotion registry. Walk-forward utilities must never mark or consume this state automatically.
 
 ## Walk-forward and stability
 
-Research should test multiple chronological periods/regimes rather than depend on one historical split. Parameter regions that remain useful across nearby values are preferred over fragile single-number optima.
+The software scaffold is implemented. Research should run it across multiple chronological periods/regimes rather than depend on one historical split. Parameter regions that remain useful across nearby values are preferred over fragile single-number optima.
+
+Development context may support a separately governed candidate-selection process, but the current `run_walk_forward_validation()` itself performs **no tuning**. If optimization is added later, selection data and validation data must remain explicitly separated and every tuning choice must be reproducible.
 
 ## Ablation testing
 
@@ -302,7 +325,8 @@ At minimum research should report, when the required outcome realism exists:
 - Premature Exit Cost;
 - runner capture;
 - trade-frequency change versus baseline;
-- ambiguity/unresolved/open coverage.
+- ambiguity/unresolved/open coverage;
+- per-window and aggregate walk-forward results without hiding failed windows.
 
 Win rate is not sufficient by itself.
 
@@ -332,30 +356,13 @@ Hard safety rules are not automatically weakened because some blocked trades wou
 
 ## Entry research
 
-Entry analysis should compare, where available:
-
-- ideal structural zone;
-- planned/approved entry;
-- actual or modeled stressed fill;
-- MAE/MFE after entry;
-- early/optimal/late/chased classification;
-- lost RR from delay/drift/slippage;
-- missed-entry outcomes.
+Entry analysis should compare, where available, ideal structural zone, planned/approved entry, actual or modeled stressed fill, MAE/MFE, early/optimal/late/chased classification, lost RR from delay/drift/slippage and missed-entry outcomes.
 
 Research may propose family-specific Entry Policy Challengers but cannot mutate production directly.
 
 ## Exit research
 
-Exit research has deterministic production-manager replay support for:
-
-- realized modeled R;
-- MFE;
-- Capture Efficiency;
-- profit giveback;
-- structural protection/trailing action mix;
-- runner activation/target behavior;
-- manager EXIT reason;
-- declared stop/TP-modify delay/rejection sensitivity.
+Exit research has deterministic production-manager replay support for realized modeled R, MFE, Capture Efficiency, giveback, structural protection/trailing action mix, runner behavior, manager EXIT reason and declared modify delay/rejection sensitivity.
 
 A winning trade may still be a poor exit if capture is consistently weak; a losing trade may still be a valid high-quality setup and normal statistical loss.
 
@@ -363,17 +370,7 @@ Historical PRE_CLOSE integration, variable intrabar spread, tick ordering and re
 
 ## Attribution
 
-Poor outcomes should be attributed among at least:
-
-- opportunity/strategy quality;
-- optional confluence contribution;
-- entry timing;
-- Trade Plan/stop quality;
-- execution/slippage;
-- trade management/exit;
-- news/market shock;
-- system fault;
-- normal statistical loss.
+Poor outcomes should be attributed among opportunity/strategy quality, optional confluence contribution, entry timing, Trade Plan/stop quality, execution/slippage, trade management/exit, news/market shock, system fault and normal statistical loss.
 
 Learning should not modify the wrong subsystem.
 
@@ -381,15 +378,7 @@ Learning should not modify the wrong subsystem.
 
 The deterministic execution-stress foundation is implemented. It currently tests wider spread, adverse fill, manager-modify delay/rejection and a combined case while preserving the same analytical decisions.
 
-Future/calibration stress may additionally include:
-
-- empirically sampled spread/slippage by broker/session/volatility;
-- execution/close delays where reliable data exists;
-- parameter perturbation;
-- missing optional evidence;
-- multiple regimes/directions/sessions;
-- different starting dates;
-- PRE_CLOSE/session-specific behavior once trustworthy historical schedule data is available.
+Future/calibration stress may additionally include empirically sampled spread/slippage, execution/close delays where reliable data exists, parameter perturbation, missing optional evidence, multiple regimes/sessions/start dates and PRE_CLOSE/session-specific behavior once trustworthy historical schedule data is available.
 
 The goal is to identify fragile edges that disappear under small realistic friction. A stress scenario is evidence only if its assumptions are visible and reproducible.
 
@@ -410,12 +399,13 @@ Every serious research result should identify, as applicable:
 - code version;
 - strategy/policy version;
 - configuration version;
-- data version/period;
+- data identity/version/period;
 - replay/outcome/stress realism version;
+- explicit walk-forward window definitions;
 - explicit stress scenario values;
 - random seed where relevant.
 
-The evidence package should state selection/validation/holdout periods, metrics, stress/ablation results, limitations and decision.
+The evidence package should state selection/development/validation/holdout periods, metrics, stress/ablation results, limitations and decision.
 
 ## Evidence claims
 
@@ -425,8 +415,8 @@ Use precise language such as:
 - `resolved initial-bracket evidence under BAR_HIGH_LOW model`;
 - `resolved management evidence under BAR_CLOSE_IDEALIZED model`;
 - `execution-stress result under declared scenario assumptions`;
-- `passed independent validation`;
-- `passed final holdout`;
+- `fixed-policy walk-forward result on declared validation windows`;
+- `passed final untouched holdout`;
 - `positive DEMO forward evidence`.
 
 Do not claim `proven profitable` from historical results alone, and do not describe idealized/stressed bar replay as broker-realized P/L.
@@ -457,34 +447,34 @@ Deterministic coverage includes:
 - no-lookahead structure/confluence semantics through production Intelligence;
 - controlled confluence toggles defaulting ON in production;
 - same-chronology BASE/Trendline/Fibonacci/combined/ALL decision ablation;
-- signed final-score/frequency delta reporting rather than assumed confluence benefit;
-- Trade Plan path TARGET_FIRST / STOP_FIRST symmetry;
-- same-bar stop+target ambiguity preserved rather than favorably guessed;
-- unresolved outcome horizon isolation;
-- resolved bracket metrics exclude ambiguous/unresolved cases;
+- Trade Plan TARGET_FIRST / STOP_FIRST symmetry and ambiguity isolation;
 - active trailing-stop R realization;
 - production Trade Manager composition over chronological completed bars;
 - manager actions applied only after the bar that generated them;
 - management replay unresolved/ambiguous isolation from resolved Net R;
-- confluence management-ablation delta accounting;
 - executable-side spread barrier semantics;
 - adverse-fill original-R immutability;
 - explicit stress-scenario validation and fixed analytical-run reuse;
 - modification audit counters under stress assumptions;
+- walk-forward non-overlapping validation slices;
+- development context excluded from scored validation metrics;
+- validation outcome history clipped at the validation boundary;
+- optional stress attached only to validation evidence;
+- walk-forward path has no final-holdout mutation authority;
 - actual/counterfactual isolation;
-- outcome attribution and Opportunity Recall metrics;
 - durable research episode feed;
 - discovery liveness and independent-episode handling;
 - one-shot holdout/promotion governance.
 
-Current deterministic CI after the execution-stress foundation: **159 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic CI after the fixed-policy walk-forward foundation: **163 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 Still required for full research validation:
 
 - broad historical XAU datasets across regimes;
+- dataset identity/versioning and reproducible evidence packaging;
 - empirical calibration of stress assumptions against broker/DEMO evidence;
 - historical PRE_CLOSE/session integration;
-- walk-forward/independent validation;
+- sufficiently large walk-forward/independent validation runs on real data;
 - final untouched holdout on locked candidates;
 - Shadow/DEMO forward evidence;
 - controlled replay-versus-DEMO comparison.
@@ -495,9 +485,13 @@ Research must not:
 
 - directly send orders;
 - silently mutate production;
+- use walk-forward validation as hidden auto-tuning;
+- treat walk-forward as the one-shot final untouched holdout;
+- score development context as validation evidence;
+- allow later validation-window data to resolve an earlier window's modeled trade;
 - reuse final holdout as selection data while calling it untouched;
 - treat counterfactual or unresolved modeled results as real P/L;
-- resolve same-bar stop/target ambiguity in the favorable direction without adequate intrabar data;
+- resolve same-bar stop/target ambiguity favorably without adequate intrabar data;
 - call idealized or stressed manager modifications broker-verified fills;
 - hide stress assumptions;
 - rewrite structural stop/target or original R to make adverse-fill outcomes look better;
@@ -506,13 +500,14 @@ Research must not:
 
 ## Open questions
 
-- exact data periods/sample requirements;
+- exact real-data periods/sample requirements;
+- exact development/validation window sizes and stepping;
 - exact Opportunity Recall labeling method;
 - historical PRE_CLOSE/session integration into management replay;
 - empirical spread/slippage/modify-failure distributions by broker/session/volatility;
 - variable-spread/tick-order modeling where data supports it;
-- walk-forward window design;
+- dataset identity/versioning and evidence-manifest format;
 - Monte Carlo/bootstrap method;
-- minimum robustness/stress thresholds;
+- minimum robustness/stress/validation thresholds;
 - exact promotion evidence thresholds;
 - final evidence threshold for keeping/removing each optional confluence feature.
