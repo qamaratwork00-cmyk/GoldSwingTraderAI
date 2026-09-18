@@ -12,7 +12,7 @@ This folder is the design source of truth for GoldSwingTraderAI. Core rule:
 - **IMPLEMENTED** — corresponding behaviour exists in code.
 - **VERIFIED** — the exact implementation passed required executable validation.
 
-`FINAL_BUILD_PROMPT.md` intentionally lives at repository root because it is an implementation handoff artifact, not a topic authority.
+Cross-project handoff/meta documents may live directly in `docs/` when they coordinate the whole build rather than owning one subsystem. `FINAL_BUILD_PROMPT.md` lives here for that reason.
 
 ## Folder ownership
 
@@ -110,9 +110,10 @@ A separate `OFFLINE_RESEARCH.md` is intentionally not used: offline methodology 
 | [Open Questions](90-governance/OPEN_QUESTIONS.md) | Living ledger | Remaining calibration/implementation choices that must not be silently guessed |
 | [Documentation Standard](90-governance/DOCUMENTATION_STANDARD.md) | PROVISIONAL | Placement, authority, status, duplication and change-control rules |
 
-## Root-level handoff
+## Docs-root handoff / meta guides
 
-- [`../FINAL_BUILD_PROMPT.md`](../FINAL_BUILD_PROMPT.md) — DRAFT implementation handoff until required design contracts are frozen and remaining implementation-critical questions are resolved/deferred.
+- [`FINAL_BUILD_PROMPT.md`](FINAL_BUILD_PROMPT.md) — DRAFT implementation handoff until required design contracts are frozen and remaining implementation-critical questions are resolved/deferred.
+- `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` — reserved final meta-guide to be created at the end of the design phase; it will define large build phases, phase-resume logic, recovery from missing/context-lost/inconsistent work, and final project-completion flow.
 
 ## Key cross-document boundaries
 
@@ -133,6 +134,6 @@ When documents conflict, use this precedence until the contradiction is formally
 3. `90-governance/DESIGN_DECISIONS.md`
 4. `90-governance/OPEN_QUESTIONS.md` for explicitly unresolved choices
 5. Supporting engineering/operator documentation
-6. Root `FINAL_BUILD_PROMPT.md` summarizes frozen requirements; it does not override them
+6. `FINAL_BUILD_PROMPT.md` summarizes frozen requirements; it does not override them
 
 No implementation should silently resolve a documented contradiction by guessing.
