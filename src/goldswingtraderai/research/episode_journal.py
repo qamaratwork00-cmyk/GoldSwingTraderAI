@@ -183,6 +183,8 @@ def _strength(episode: ResearchEpisodeRecord, trigger: DiscoveryTrigger) -> floa
 
 
 def _primitives(labels: tuple[str, ...]) -> tuple[ApprovedPrimitive, ...]:
+    """Map durable evidence labels onto the audited declarative primitive vocabulary."""
+
     output: list[ApprovedPrimitive] = []
     for raw in labels:
         label = raw.upper()
@@ -201,6 +203,12 @@ def _primitives(labels: tuple[str, ...]) -> tuple[ApprovedPrimitive, ...]:
             matches.append(ApprovedPrimitive.COMPRESSION)
         if "LOCATION" in label:
             matches.append(ApprovedPrimitive.TECHNICAL_LOCATION)
+        if "TRENDLINE" in label:
+            matches.append(ApprovedPrimitive.TRENDLINE)
+        if "FIB" in label or "FIBONACCI" in label:
+            matches.append(ApprovedPrimitive.FIBONACCI)
+        if "POC" in label or "VOLUME_PROFILE" in label:
+            matches.append(ApprovedPrimitive.VOLUME_PROFILE_POC)
         if "SWEEP" in label:
             matches.append(ApprovedPrimitive.LIQUIDITY_SWEEP)
         if "FVG" in label:
