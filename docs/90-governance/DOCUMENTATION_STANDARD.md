@@ -1,22 +1,22 @@
 # GoldSwingTraderAI — Documentation Standard
 
 **Status:** PROVISIONAL  
-**Version:** 0.5-design  
+**Version:** 0.6-design  
 **Authority:** Documentation placement, ownership, status and change-control rules.
 
 ## 1. Purpose
 
 GoldSwingTraderAI is documentation-first.
 
-> **One behavioural rule has one authoritative home. Other documents link to it; they do not restate a competing version.**
+> **One behavioural or engineering rule has one authoritative home. Other documents link to it; they do not restate a competing version.**
 
-This standard prevents overlapping Markdown files from silently disagreeing about the same behaviour.
+This standard prevents overlapping Markdown files from silently disagreeing about the same behaviour or implementation-quality rule.
 
 ## 2. Repository root and docs-root primary guides
 
 Repository root is reserved for repository entry/runtime artifacts. `README.md` is the primary project introduction/navigation file.
 
-Detailed behavioural documentation belongs under `docs/`.
+Detailed behavioural and engineering documentation belongs under `docs/`.
 
 The following high-visibility whole-project/operator/developer guides intentionally live directly in `docs/`:
 
@@ -28,7 +28,7 @@ The following high-visibility whole-project/operator/developer guides intentiona
 
 The numbered folders still own the relevant domain categories. Previous subfolder paths for User/Setup/Coder guides may remain only as lightweight compatibility redirects; behavioural content must not be maintained in two places.
 
-These docs-root guides summarize/navigate authoritative subsystem contracts where appropriate; they do not create competing trading, risk, execution or research rules.
+These docs-root guides summarize/navigate authoritative subsystem contracts where appropriate; they do not create competing trading, risk, execution, research or coding-standard rules.
 
 ## 3. Folder ownership
 
@@ -94,15 +94,16 @@ There is intentionally no separate authoritative `OFFLINE_RESEARCH.md`.
 Owns operator-domain supporting material, especially dashboard/UX and operator-control semantics. Primary `USER_MANUAL.md` and `SETUP_AND_RUN_GUIDE.md` are surfaced at docs root.
 
 ### `docs/60-engineering/`
-Owns implementation/developer/diagnostic/release maps:
+Owns implementation/developer/diagnostic/release authority and maps:
 
+- `CODING_STANDARD.md` — source-code quality, complexity, dependency, commenting, performance and phase-quality contract;
 - module structure;
 - system health/diagnostics aggregation;
 - test/verification strategy;
 - release checklist;
 - final release audit.
 
-Primary `CODER_GUIDE.md` is surfaced at docs root. Coder Guide is feature-oriented; Module Structure is file/module-oriented.
+Primary `CODER_GUIDE.md` is surfaced at docs root. Coder Guide is feature-oriented; Module Structure is file/module-oriented; Coding Standard owns engineering-style rules that those documents consume.
 
 ### `docs/90-governance/`
 Owns:
@@ -114,7 +115,7 @@ Owns:
 
 ## 4. Status lifecycle
 
-Authoritative design documents use:
+Authoritative design/engineering documents use:
 
 ```text
 DRAFT
@@ -126,8 +127,8 @@ VERIFIED
 
 - `DRAFT` — incomplete working document;
 - `PROVISIONAL` — current agreed direction, still open to refinement/calibration;
-- `FROZEN` — approved behavioural contract for implementation;
-- `IMPLEMENTED` — corresponding behaviour exists in code;
+- `FROZEN` — approved behavioural or engineering contract for implementation;
+- `IMPLEMENTED` — corresponding behaviour/rule exists in code/process;
 - `VERIFIED` — exact implementation passed required executable validation.
 
 Do not mark a document `IMPLEMENTED` because a plan exists, or `VERIFIED` because Markdown is complete.
@@ -158,7 +159,7 @@ Explicit non-goals
 Open questions
 ```
 
-Not every document needs every heading, but omissions should be deliberate.
+Engineering standards may adapt this shape where states/market inputs are not relevant, but authority/status/change rules still apply.
 
 ## 6. Avoiding duplication
 
@@ -171,6 +172,7 @@ Examples:
 - initial entry/SL/targets/original R → `20-trading-decisions/TRADE_PLAN.md`;
 - post-entry management → `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`;
 - centralized broker-write permission/one-shot/controller semantics → `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`;
+- source-code quality/complexity/dependency/commenting rules → `60-engineering/CODING_STANDARD.md`;
 - decision attribution → `SCORING_AND_DECISION_FUSION.md` plus the actual blocking authority;
 - fault aggregation → `60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`;
 - promotion chronology → `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md`.
@@ -182,6 +184,8 @@ If two documents contain competing detailed versions of the same rule, that is a
 ## 7. Cross-references
 
 Use relative repository links wherever possible. Supporting docs should link to authoritative sources instead of pasting a second independent version.
+
+Final Build Prompt, Coder Guide, Module Structure and Build/Recovery Guide may summarize Coding Standard requirements for execution clarity, but `CODING_STANDARD.md` remains the detailed authority and must win if wording diverges.
 
 ## 8. Design decisions and freeze matrix
 
@@ -213,17 +217,18 @@ Synchronize as applicable:
 
 - authoritative topic doc;
 - `DESIGN_DECISIONS.md` / `OPEN_QUESTIONS.md`;
+- `60-engineering/CODING_STANDARD.md` only after an explicitly approved engineering-standard change;
 - `60-engineering/MODULE_STRUCTURE.md`;
 - `CODER_GUIDE.md`;
 - User/Setup/operator docs;
 - testing/release docs;
 - `docs/README.md`.
 
-A phase is not complete while code and authoritative documentation knowingly disagree.
+A phase is not complete while code and authoritative documentation knowingly disagree or while affected code knowingly violates the frozen Coding Standard.
 
 ## 10. Final Build Prompt rule
 
-`docs/FINAL_BUILD_PROMPT.md` is a whole-project handoff summary. It may summarize frozen/current implementation direction, but it must not override authoritative subsystem documents.
+`docs/FINAL_BUILD_PROMPT.md` is a whole-project handoff summary. It may summarize frozen/current implementation direction, including the Coding Standard, but it must not override authoritative subsystem documents.
 
 Before it is marked `FROZEN`:
 
@@ -239,6 +244,7 @@ It defines:
 
 - large phases and deliverables;
 - exit gates before moving forward;
+- Coding Standard quality review as part of phase completion;
 - context-loss reconstruction;
 - incomplete/broken phase recovery;
 - docs/code mismatch recovery;
@@ -248,7 +254,7 @@ It defines:
 - new-machine/disaster recovery;
 - final completion/audit flow.
 
-It points to authoritative documents rather than inventing behavioural rules.
+It points to authoritative documents rather than inventing behavioural or engineering rules.
 
 ## 12. Reference-project rule
 
