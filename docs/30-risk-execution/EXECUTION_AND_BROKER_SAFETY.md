@@ -1,9 +1,9 @@
 # GoldSwingTraderAI — Execution and Broker Safety
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE + DURABLE COORDINATION FOUNDATION  
-**Version:** 0.8-implementation  
+**Status:** PROVISIONAL — IMPLEMENTED BASELINE + DURABLE COORDINATION + RECOVERY GATE  
+**Version:** 0.9-implementation  
 **Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, controller ownership/fencing, takeover reconciliation and broker reconciliation.  
-**Depends on:** `RISK_CONTRACT.md`, `SESSION_AND_RISK_STATE_MACHINE.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
+**Depends on:** `RISK_CONTRACT.md`, `SESSION_AND_RISK_STATE_MACHINE.md`, `PERSISTENCE_RESTART_AND_RECOVERY.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
 
@@ -25,15 +25,12 @@ execution/sqlite_coordination.py
 execution/mt5_writer.py
 execution/service.py
 execution/reconcile.py
+app/recovery.py
 ```
 
-Deterministic CI proves the centralized gate, one-shot Intent lifecycle, persist-before-send ordering, stale-fencing rejection, no blind retry, OPEN/MODIFY/CLOSE request construction, broker reconciliation, durable monotonic controller epochs and reconciliation-gated takeover behaviour.
+Deterministic CI proves centralized permission, one-shot Intent lifecycle, persist-before-send ordering, no blind retry, broker reconciliation, durable monotonic controller epochs, reconciliation-gated takeover and governed startup recovery sequencing.
 
-A successful MT5 `order_send` retcode is treated as **broker acknowledgement, not final truth**. The intent remains unresolved until positions/orders/deals or action-specific broker state verifies the result. Local trade state may not pretend an ambiguous modify/close succeeded.
-
-`InMemoryCoordinationStore` remains deterministic-test-only. `SQLiteCoordinationStore` now provides transactional acquire/renew/release, one-winner contention and durable monotonic fencing across independent processes opening the same coordination database. This is a software coordination foundation, **not automatic cross-laptop certification**: the actual shared deployment/filesystem locking semantics still require controlled proof.
-
-Live Windows MT5 DEMO execution/fault-injection and real cross-laptop deployment evidence remain pending; therefore this document is not VERIFIED.
+A successful MT5 `order_send` return is broker acknowledgement, not final truth. Positions/orders/deals or action-specific broker state must verify the result.
 
 ## Governed execution path
 
@@ -50,83 +47,51 @@ Approved Trade Plan / verified management action
 → verify/reconcile broker truth
 ```
 
-No market score can bypass this path.
+No market score can bypass this path. Raw `order_send` remains confined to `execution/mt5_writer.py`.
 
-## Centralized broker-write permission gate
+## Centralized permission gate
 
-All create/modify/close actions pass one gate:
-
-```text
-DEMO guard / account identity ─┐
-market + quote integrity       ├─→ EXECUTION PERMISSION GATE
-news/session permission        ┤          │
-risk permission                ┤          ├─ PASS
-position/capacity state        ┤          ├─ BLOCK
-order/reconciliation state     ┤          └─ UNKNOWN → no write
-controller ownership           ┤
-fresh execution checks         ┘
-```
-
-Output exposes decision, primary/secondary reasons, authority trace and `Would Otherwise Trade` where meaningful.
-
-No intelligence, strategy, timing, Trade Plan, risk, management, dashboard, research or learning module may call raw `order_send` directly. The raw call lives only in the narrow MT5 writer boundary.
-
-## Positive DEMO guard — V1
+All create/modify/close actions require PASS from required hard authorities:
 
 ```text
-Connected MT5 account positively verified DEMO
-→ DEMO_GUARD = PASS
+DEMO guard / account identity
+market + quote integrity
+news/session permission
+risk permission
+position/capacity
+order/reconciliation lifecycle
+controller ownership
+fresh execution checks
 ```
 
-Broker writes may proceed only if this guard and every other required authority pass. If DEMO status is not verified, write permission is not granted.
+BLOCK prevents the write. UNKNOWN also prevents the write.
 
-V1 does not define a separate REAL authorization workflow, REAL hard-block contract, LIVE override or alternate REAL execution path.
+## Positive DEMO guard
 
-## Account / symbol / fresh-broker truth
+Broker writes require a positively verified connected MT5 DEMO account. V1 has no hidden REAL-money override or alternate write path.
 
-Immediately before irreversible execution, verify relevant current facts including:
+## Account / symbol / fresh broker truth
 
-- configured account login/server identity and DEMO status;
-- intended XAU symbol and tradeability;
-- fresh Bid/Ask;
-- point/tick/digits/volume/stops/freeze/filling facts as required;
-- Risk-approved volume against current broker constraints;
-- exact broker margin/order pre-check where applicable;
-- no unresolved lifecycle or foreign/manual exposure conflict.
+Before irreversible execution verify relevant current account/server, intended Gold symbol, fresh Bid/Ask, symbol geometry, approved volume, broker margin/order pre-check, capacity/ownership and unresolved lifecycle state.
 
-BUY execution uses Ask context; SELL execution uses Bid context. Stale/unknown quote prevents the current write without automatically destroying the underlying opportunity.
+BUY uses Ask context; SELL uses Bid context. Unknown/stale truth blocks the current write.
 
-## Spread policy — frozen initial rule
+## Spread / drift — frozen initial rules
 
 ```text
-SpreadRatio = CurrentExecutableSpread / HealthySpreadBaseline
+SpreadRatio <=1.50       NORMAL
+>1.50–2.25                ELEVATED + full revalidation
+>2.25                     block current entry
+spread >25% SL distance  block current entry
 
-<=1.50           → NORMAL
->1.50–2.25       → ELEVATED + full revalidation; not automatic block
->2.25            → current entry prevented
-spread >25% of approved entry-to-structural-SL distance
-                 → current entry prevented
+Adverse drift <=10%      normal revalidation
+>10–20%                  elevated + full revalidation
+>20%                      block current intent / rebuild if thesis survives
 ```
 
-The implemented execution checks preserve this non-restrictive distinction: elevated spread may still PASS after full revalidation.
-
-Healthy baseline must exclude known abnormal/news/reopen/stale periods. Exact sampling window remains calibration/implementation work.
-
-## Price drift — frozen initial rule
-
-Adverse drift from Approved Entry Reference normalized by original planned stop distance:
-
-```text
-<=10%       → normal revalidation
->10–20%     → elevated full revalidation; not automatic block
->20%        → current intent prevented / WAIT-rebuild if thesis survives
-```
-
-Any fresh quote that breaks hard risk, structural stop geometry, target economics or chase validity prevents the current intent regardless of ratio. Execution never moves structural SL merely to make drift fit.
+Fresh structural/risk/target/chase invalidation blocks regardless of ratio. Execution never moves a structural SL merely to fit execution conditions.
 
 ## Execution Intent lifecycle
-
-Durable lifecycle:
 
 ```text
 CREATED
@@ -137,128 +102,99 @@ CREATED
    └─ FAILED
 ```
 
-A pre-submit failure may become `FAILED` with `submit_attempts=0`. Once `SUBMITTING` is durably stored, the single irreversible-send allowance is consumed.
+One Intent ID may cause at most one irreversible `order_send` for its lifetime. Persisting `SUBMITTING` consumes that allowance before the broker call.
 
-### Lifetime one-shot invariant
+If an ambiguous/consumed attempt is later proven absent, a future attempt requires a **fresh governed Intent ID**. Blind retries are prohibited.
 
-One Execution Intent ID may cause **at most one** irreversible `order_send` for its lifetime. Recreating a new in-memory object with a previously used Intent ID may not bypass this rule; durable intent history is checked.
+## Broker reconciliation
 
-If reconciliation proves no broker exposure/action occurred, any later attempt must use a **fresh governed Intent ID**, not resend the consumed one.
+`SUBMITTING` / `ACCEPTED_UNKNOWN` must reconcile current broker truth:
 
-Blind retry loops are prohibited.
+- OPEN: positions/orders/deals + lineage/tag/context;
+- MODIFY: actual position SL/TP + ticket;
+- CLOSE: position absence/reduced exposure plus deal/history evidence where needed.
 
-## Broker acknowledgement and reconciliation
-
-`order_send` returning a success-like retcode is not sufficient to finalize local truth.
-
-```text
-SUBMITTING
-→ broker ACK
-→ reconcile broker truth
-   → ACCEPTED_VERIFIED
-   OR
-   → ACCEPTED_UNKNOWN
-```
-
-Ambiguity prevents conflicting new writes and triggers reconciliation; it never triggers automatic resubmission.
-
-Reconciliation uses appropriate broker evidence:
-
-- OPEN: positions/orders/deals plus durable intent lineage, magic/comment reconciliation aids, direction/volume/time context;
-- MODIFY: current broker position SL/TP and position identity;
-- CLOSE: current position absence/reduced exposure plus deal/history evidence where required.
-
-Magic/comment are aids, not sole ownership authority.
-
-Broker positions/orders/deals own current exposure truth; local state owns intent and strategy lifecycle context.
+Magic/comment are aids, not ownership authority. Broker truth owns current exposure; persistence owns intent/context/history.
 
 ## Stop/TP / modification / close safety
 
-Broker-normalized geometry must preserve structural intent. Harmless broker rounding is allowed; a broker constraint that materially changes the thesis makes the request unexecutable instead of silently redesigning the stop/target.
+PROTECT/TRAIL/RUNNER modifications and EXIT/PRE_CLOSE closes use the same Intent/gate/controller/reconciliation path. Local management state changes only after broker acceptance is verified.
 
-PROTECT/TRAIL/RUNNER modifications and EXIT/PRE_CLOSE closes are irreversible broker writes and use the same Intent/gate/controller/reconciliation path as new entries.
-
-Management code updates durable local SL/TP/closed state only after `ACCEPTED_VERIFIED`.
-
-## `order_check` / filling mode
-
-Supported filling mode must be known for market OPEN/CLOSE requests. Do not cycle through alternative irreversible sends hoping one succeeds.
-
-`order_check` is pre-submit validation only. If it fails, no send attempt is consumed. If it passes, it is still not execution proof.
+Broker normalization may perform harmless rounding; it may not redesign structural geometry.
 
 ## Position ownership / capacity
 
-V1 allows `0/1` independently risk-bearing Gold position.
+V1 allows `0/1` independently risk-bearing Gold position. Manual/foreign/unknown Gold exposure blocks fresh bot entry and is never modified as bot-owned.
+
+## Single active execution controller
+
+Frozen initial policy:
 
 ```text
-no Gold exposure                    → capacity may be available
-one BOT_MANAGED Gold position       → second independent entry prevented
-MANUAL / FOREIGN_EA / UNKNOWN Gold  → fresh bot Gold entry prevented
-```
-
-Manual/foreign/unknown positions are never modified as bot-owned. Opposite evidence routes to Trade Manager first rather than opening an automatic hedge.
-
-## Single active execution controller — frozen policy
-
-For one managed account/symbol scope:
-
-```text
-one PRIMARY
+one PRIMARY per managed account/symbol scope
 renewal target 10s
 lease TTL 30s
 monotonic fencing epoch
-fresh ownership verification before every broker write
+fresh holder/epoch/expiry verification before every broker write
 ```
 
-The coordination backend must support atomic acquire/CAS-equivalent semantics, one winner under contention, authoritative expiry/time semantics, monotonic fencing and sufficient durability across process/laptop failure. A local-only file lock is not sufficient.
+### Coordination backends
 
-### Durable SQLite coordination foundation
+`InMemoryCoordinationStore` is deterministic-test-only.
 
-`SQLiteCoordinationStore` implements the `CoordinationStore` contract with `BEGIN IMMEDIATE` transactional ownership changes and a separate durable epoch ledger.
+`SQLiteCoordinationStore` implements transactional acquire/renew/release with `BEGIN IMMEDIATE` and a separate durable monotonic epoch ledger. Deterministic tests prove one winner under independent-instance contention, higher epoch after expiry/reopen, stale-holder denial and persisted lease/epoch integrity.
 
-Deterministic guarantees now covered:
+`shared_locking_verified=False` by default. Setting it true is only a deployment assertion; code cannot self-certify arbitrary network/shared filesystems. Real cross-laptop deployment remains pending controlled fault proof.
 
-- independent store instances contending on one database yield exactly one holder;
-- expiry permits a later holder to obtain a strictly higher epoch;
-- graceful release does not reset the epoch ledger;
-- stale holders cannot renew or release a newer holder's lease;
-- persisted lease/epoch integrity is checked;
-- `shared_locking_verified` defaults false and only records an explicit deployment assertion.
+### Takeover is not immediate write permission
 
-The code cannot prove that an arbitrary network/shared filesystem correctly preserves SQLite locking/durability. Cross-laptop use therefore remains uncertified until the exact deployment is fault-tested.
+If a valid holder exists, a contender is blocked with `ANOTHER_ACTIVE_CONTROLLER`.
 
-### Takeover is not immediate write authority
-
-If another valid holder exists, the second instance is Observer for writes. If the prior lease expires, a standby may atomically acquire the next epoch, but acquisition returns:
+After prior lease expiry a standby may atomically obtain a newer epoch, but it returns:
 
 ```text
 BLOCK — CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED
 ```
 
-The new holder owns the epoch but **cannot perform broker writes yet**. Renewing the lease preserves this blocked takeover state.
+Renewal preserves this blocked state. `verify_write_authority()` also remains blocked.
 
-Required sequence:
+Required takeover sequence:
 
 ```text
-expired prior holder
-→ standby acquires higher epoch
-→ takeover reconciliation required
-→ restore/verify durable state
-→ query current broker positions/orders/deals
-→ reconcile unresolved Intent/open-trade state
-→ verify account/risk/session/execution facts
-→ freshly verify same holder + same epoch still authoritative
+old lease expires
+→ standby gets higher epoch
+→ takeover recovery BLOCK
+→ durable state integrity/restore
+→ broker current truth
+→ unresolved Intent reconciliation
+→ ManagedTrade reconciliation
+→ all hard recovery authorities PASS
+→ fresh same holder + same epoch verification
 → complete_takeover_reconciliation()
-→ CONTROLLER_PRIMARY / write authority may PASS
+→ CONTROLLER_PRIMARY
 ```
 
-If ownership is lost or the epoch changes during reconciliation, completion fails and the stale takeover remains unable to write. A returned old primary also fails fresh holder/epoch verification.
+## Startup recovery integration — implemented deterministic foundation
 
-Coordination uncertainty prevents irreversible writes while read-only analysis/dashboard may continue.
+`app/recovery.py` is now the governed software owner of the valid call sequence for takeover completion.
+
+It loads/validates persistent recovery state, checks current DEMO/account/server/symbol context, reconciles ambiguous Intents, checks ManagedTrade against current broker-position facts, requires explicit hard recovery authorities PASS, and only then may call `complete_takeover_reconciliation()`.
+
+Important semantics:
+
+- `APPROVED` but never `SUBMITTING` may be cancelled safely on recovery with zero sends;
+- `CREATED` requires review/reconciliation rather than implicit send;
+- `SUBMITTING` / `ACCEPTED_UNKNOWN` use existing `MT5Reconciler` and never resend blindly;
+- verified OPEN without durable ManagedTrade context stays `RECONCILING`;
+- missing/mismatched ManagedTrade broker truth cannot become READY;
+- any hard authority BLOCK/UNKNOWN prevents takeover completion;
+- if holder/epoch changes during recovery, completion fails.
+
+The coordinator itself performs no broker write.
 
 ## Failure / runtime states
 
-Typical lifecycle/failure classes:
+Typical states/reasons include:
 
 ```text
 PRE_SUBMIT_BLOCK
@@ -267,71 +203,46 @@ AMBIGUOUS_ACK
 ACCEPTED_VERIFIED
 RECONCILIATION_FAILED
 CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED
+STARTUP_RECOVERY_READY
 ```
 
-Runtime execution states include `READY`, `DEGRADED`, `RECONCILING`, `BLOCKED`. `RECONCILING` prevents conflicting new writes until uncertainty resolves.
-
-## Market closure/reopen
-
-No write attempts are spammed while Gold is unavailable. PRE_CLOSE flatten uses the governed close path. After reopen, hard warmup/data/spread/reconciliation requirements must pass before fresh entry execution.
+Runtime may be `READY`, `DEGRADED`, `RECONCILING`, or `BLOCKED`. Uncertainty prevents conflicting writes.
 
 ## Diagnostics
 
-Expose enough state for operator/audit visibility:
+Expose account/symbol/DEMO guard, quote/spread/drift, volume/margin/stop validation, Intent ID/state/send count, reconciliation result, ownership/capacity, controller ID/epoch/lease, takeover-recovery state and exact gate/recovery reason.
 
-- account/symbol + DEMO guard;
-- fresh quote and spread baseline/ratio;
-- drift and execution-check state;
-- volume/margin/stop validation;
-- Intent ID/state/send-attempt count;
-- reconciliation result;
-- ownership/capacity;
-- controller ID/epoch/lease status;
-- takeover-reconciliation-required state;
-- shared-coordination deployment certification/assertion state;
-- gate primary/secondary reasons.
-
-## Tests required / current evidence
+## Tests / current evidence
 
 Deterministic coverage includes:
 
-- centralized gate is the only route to raw irreversible writes;
-- positive DEMO guard composition;
-- account mismatch/stale quote/spec changes prevent current write;
-- elevated spread/drift can pass after full revalidation;
-- hard spread/drift limits prevent current intent;
-- precheck rejection gives zero sends;
-- persist `SUBMITTING` before send;
-- maximum one send per Intent ID lifetime;
-- success acknowledgement still requires broker verification;
-- ambiguous acknowledgement is never blind-retried;
-- restart with `SUBMITTING/ACCEPTED_UNKNOWN` reconciles before new writes;
-- OPEN/MODIFY/CLOSE action-specific reconciliation;
-- manual/foreign ownership protection;
-- multi-instance SQLite contention yields one holder;
-- fencing epoch survives release/reopen and increases monotonically;
-- stale lease cannot renew/release after takeover;
-- expired-lease takeover remains BLOCKED until explicit reconciliation completion;
-- reconciliation completion fails if holder/epoch authority was lost;
-- stale fencing epoch cannot write;
-- coordination outage prevents writes.
+- central gate + raw-writer confinement;
+- exactly one send per Intent ID;
+- ambiguous ACK no blind retry;
+- action-specific reconciliation;
+- stale fencing denial;
+- SQLite one-winner contention + monotonic epoch;
+- stale renew/release denial;
+- takeover blocked until explicit reconciliation;
+- authority loss during takeover prevents completion;
+- clean startup recovery READY;
+- non-DEMO/account mismatch recovery block;
+- unresolved intent preserves RECONCILING;
+- ManagedTrade broker mismatch preserves RECONCILING/BLOCK;
+- hard-authority UNKNOWN prevents READY;
+- startup coordinator is the governed successful takeover-completion path.
 
-Current repository checkpoint after takeover enforcement: **209 tests PASS**, Ruff PASS and financial-secret scan PASS.
-
-Still required before VERIFIED release:
-
-- controlled shared-filesystem/cross-laptop locking and failover proof;
-- controlled real MT5 DEMO takeover/reconciliation/fault-injection proof.
+Current repository checkpoint: **219 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Explicit non-goals
 
-Execution must not decide strategy direction, increase risk, redesign structural SL/targets, use a fixed Gold spread number as sole rule, blind-retry ambiguity, assume unknown exposure is zero, open an automatic hedge/second Gold position, modify foreign positions, allow multiple write controllers, provide hidden non-DEMO authorization, or permit alternate raw broker-write paths.
+Execution must not decide strategy direction, increase risk, redesign structural SL/targets, blind-retry ambiguity, assume unknown exposure is zero, hedge with a second independent Gold position, modify foreign positions, permit multiple write controllers, treat a new epoch as sufficient write authority, or provide hidden non-DEMO authorization.
 
-## Remaining implementation / calibration work
+## Remaining work
 
-- certify or replace the shared coordination deployment after real cross-laptop fault tests; SQLite code alone is not deployment proof;
-- integrate takeover completion with the final startup/recovery orchestrator so callers cannot mark reconciliation complete prematurely;
-- real MT5 account/symbol/filling/order-check/modify/close DEMO validation;
-- healthy-spread baseline sampling/persistence details;
-- broker-specific magic/comment values and safe read-only retry/backoff configuration;
-- future evidence-backed spread/drift/lease timing refinements.
+- read-only live MT5 recovery-snapshot adapter through the existing MT5 read boundary;
+- final runtime wiring so live startup supplies all recovery authorities from authoritative owners;
+- controlled shared-storage/cross-laptop failover proof;
+- real MT5 DEMO account/symbol/filling/modify/close/takeover fault evidence;
+- healthy-spread baseline persistence/calibration;
+- broker-specific magic/comment and safe read retry configuration.
