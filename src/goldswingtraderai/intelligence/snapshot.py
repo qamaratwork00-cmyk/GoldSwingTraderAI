@@ -12,6 +12,11 @@ from goldswingtraderai.intelligence.candle_structure import (
     StructureReport,
     analyze_structure,
 )
+from goldswingtraderai.intelligence.confluence import (
+    ConfluenceConfig,
+    ConfluenceReport,
+    analyze_confluence,
+)
 from goldswingtraderai.intelligence.indicators import (
     QuantConfig,
     QuantReport,
@@ -39,6 +44,7 @@ class TimeframeIntelligence:
     structure: StructureReport
     technical: TechnicalReport
     liquidity: LiquidityReport
+    confluence: ConfluenceReport | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +67,7 @@ class IntelligenceConfig:
     structure: StructureConfig = StructureConfig()
     technical: TechnicalConfig = TechnicalConfig()
     liquidity: LiquidityConfig = LiquidityConfig()
+    confluence: ConfluenceConfig = ConfluenceConfig()
     session: SessionConfig = SessionConfig()
 
     def __post_init__(self) -> None:
@@ -111,6 +118,14 @@ def build_intelligence_snapshot(
             tick_size=market.symbol_spec.tick_size,
             config=cfg.liquidity,
         )
+        confluence = analyze_confluence(
+            candles,
+            structure,
+            quant,
+            current_price=price,
+            tick_size=market.symbol_spec.tick_size,
+            config=cfg.confluence,
+        )
         frames.append(
             TimeframeIntelligence(
                 timeframe=candle_series.timeframe,
@@ -118,6 +133,7 @@ def build_intelligence_snapshot(
                 structure=structure,
                 technical=technical,
                 liquidity=liquidity,
+                confluence=confluence,
             )
         )
 
