@@ -1,139 +1,123 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT  
-**Version:** 0.6-implementation-map  
-**Authority:** Feature-oriented developer navigation and implementation map. It does **not** redefine trading behaviour.
+**Version:** 0.7-implementation-map  
+**Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
-## Purpose
+## Core rule
 
-Use this file to find the real code owner for a feature and to trace a change across the system without creating duplicate authority.
+> **Behaviour comes from the authoritative topic document. Code implements it. This guide only tells you where the real implementation lives.**
 
-Core rule:
-
-> **Behaviour comes from the authoritative topic document. Code implements it. This guide tells you where to look; it does not invent another version of the rule.**
-
-For whole-project phase sequencing/recovery use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`. For code-quality rules use `60-engineering/CODING_STANDARD.md`.
-
-## Authority/change path
-
-For trading-affecting work, follow only the layers that actually apply:
-
-```text
-authoritative design contract
-→ config/domain facts
-→ market-data snapshot
-→ market intelligence
-→ strategy/decision/timing
-→ Trade Plan
-→ risk/session/news authority
-→ centralized execution permission
-→ governed broker write
-→ persistence/reconciliation
-→ operator/research/tests
-```
-
-Do not fix a cross-cutting issue only in the dashboard or most visible file.
+For whole-project sequencing/recovery use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`; for code-quality rules use `60-engineering/CODING_STANDARD.md`.
 
 ## Current implementation checkpoint — 2026-09-18
 
 ### Phase 1 — Foundation — IMPLEMENTED + deterministic CI green
 
-Primary files:
+Primary owners:
 
 ```text
-src/goldswingtraderai/config/settings.py
-src/goldswingtraderai/domain/enums.py
-src/goldswingtraderai/domain/ids.py
-src/goldswingtraderai/domain/models.py
-src/goldswingtraderai/diagnostics/reasons.py
-src/goldswingtraderai/diagnostics/logging.py
-src/goldswingtraderai/app/main.py
+config/settings.py
+domain/enums.py
+domain/ids.py
+domain/models.py
+diagnostics/reasons.py
+diagnostics/logging.py
+app/main.py
 scripts/scan_financial_secrets.py
 .github/workflows/ci.yml
 ```
 
-Implemented facts:
-- immutable/typed baseline domain contracts;
-- local secret-free configuration pattern;
-- positive DEMO requirement is a code invariant, not a user-disableable switch;
-- structured logging foundation;
-- financial-secret scanner in CI;
-- no broker-write implementation.
+Positive DEMO requirement is a code invariant, tracked config is secret-free, and there is still no irreversible broker-write implementation.
 
-### Phase 2 — MT5 read layer + MarketSnapshot — IMPLEMENTED, live Windows DEMO evidence still pending
-
-Primary files:
+### Phase 2 — MT5 read layer — IMPLEMENTED + deterministic CI green; live Windows DEMO proof pending
 
 ```text
-src/goldswingtraderai/domain/market.py
-src/goldswingtraderai/market_data/mt5_reader.py
-src/goldswingtraderai/market_data/snapshot.py
-src/goldswingtraderai/app/main.py
+domain/market.py
+market_data/mt5_reader.py
+market_data/snapshot.py
+app/main.py
 ```
 
-Runtime path:
+Runtime:
 
 ```text
 Settings
-→ MT5Reader.initialize()
-→ account facts + positive DEMO verification
-→ optional account/server pin check
-→ XAUUSDm/XAUUSD resolution
-→ SymbolSpec + Bid/Ask
-→ completed H4/H1/M15/M5 candles
+→ MT5 read-only connection/account facts + DEMO verification
+→ Gold symbol/spec/quote
+→ completed H4/H1/M15/M5 history
 → data-quality evaluation
 → MarketSnapshot
 ```
 
-Important implementation facts:
-- read layer contains no irreversible order-send path;
-- forming bar is excluded from completed-candle history;
-- downstream code consumes normalized domain types, not raw MT5 named-tuples;
-- broker/account/symbol facts are read once per snapshot scope where practical;
-- real Windows/MetaTrader5 DEMO-terminal forward verification must still be recorded before Phase 2 is called externally VERIFIED.
+Forming bars are excluded. Raw MT5 structures stay at the boundary. Real MetaTrader5 DEMO-terminal evidence is still required before calling this externally VERIFIED.
 
 ### Phase 3 — Market intelligence — IMPLEMENTED + deterministic CI green
+
+```text
+intelligence/indicators.py
+intelligence/candle_structure.py
+intelligence/technical.py
+intelligence/liquidity.py
+intelligence/session.py
+intelligence/news.py
+intelligence/snapshot.py
+```
+
+Runtime:
+
+```text
+MarketSnapshot
+→ IndicatorSeries once/timeframe
+→ QuantReport
+→ StructureReport using shared ATR
+→ TechnicalReport
+→ LiquidityReport
+→ SessionReport + optional NewsFacts
+→ IntelligenceSnapshot
+```
+
+Market intelligence has zero broker authority. News/session here are facts/context, not hard permission.
+
+### Phase 4 — Strategies + fusion + Opportunity + Entry Timing — IMPLEMENTED + deterministic CI green
 
 Primary files:
 
 ```text
-src/goldswingtraderai/intelligence/indicators.py
-src/goldswingtraderai/intelligence/candle_structure.py
-src/goldswingtraderai/intelligence/technical.py
-src/goldswingtraderai/intelligence/liquidity.py
-src/goldswingtraderai/intelligence/session.py
-src/goldswingtraderai/intelligence/news.py
-src/goldswingtraderai/intelligence/snapshot.py
+strategies/floor.py
+decisions/fusion.py
+decisions/opportunity.py
+decisions/timing.py
+decisions/snapshot.py
 ```
 
-Unified runtime path:
+Runtime:
 
 ```text
-MarketSnapshot
-→ per-timeframe IndicatorSeries computed once
-→ QuantReport
-→ StructureReport using the same precomputed ATR
-→ TechnicalReport
-→ LiquidityReport
-→ M5 SessionReport
-→ optional normalized NewsFacts
-→ IntelligenceSnapshot
+IntelligenceSnapshot
+→ six strategy families in parallel, each BUY + SELL
+→ StrategyFloorReport
+→ independent BUY Thesis + SELL Thesis
+→ bounded correlation/synergy + conflict + Red Team
+→ Opportunity create/update with stable opportunity_id/episode_id
+→ M5 Entry Timing
+→ DecisionSnapshot
 ```
 
-Implemented intelligence boundaries:
-- `indicators.py`: EMA20/EMA50, RSI14, ATR14 baseline plus volatility/momentum/extension facts;
-- `candle_structure.py`: completed-candle facts, causal confirmed swings with separate `pivot_time`/`confirmed_at`, structure state, break hierarchy and protected swings;
-- `technical.py`: adaptive zones, location and target-room facts from existing structure/ATR;
-- `liquidity.py`: clustered liquidity pools, sweep vs accepted-break facts, FVG and structurally-qualified OB primitives;
-- `session.py`: timezone-safe Asia/London/New York/overlap context using standard-library `zoneinfo`;
-- `news.py`: provider-neutral scheduled-event normalization, TIER 1/2/3 facts, event windows, cluster merging and provider freshness state;
-- `snapshot.py`: one reusable multi-timeframe intelligence object for later strategies.
+Phase-4 invariants now executable:
+- all six families evaluate from the same snapshot; no sequential filter chain;
+- optional unavailable evidence is omitted/reweighted rather than forced to zero;
+- strong opposition remains visible as conflict;
+- Opportunity and Entry Timing are separate;
+- severe extension normally becomes `WAIT`, not thesis deletion;
+- MISSED re-arm requires a genuinely fresh event assertion;
+- surviving setup keeps Opportunity/Episode identity;
+- `ENTER_BUY/ENTER_SELL` means analytical readiness only, not broker permission;
+- strategy/decision modules contain no MetaTrader5/order-send boundary.
 
-The market-intelligence package has **zero broker authority**. Session/news here are facts/context only; hard permission remains under `30-risk-execution/`.
+Current strategy/fusion/timing numbers are research-calibratable implementation baselines, not frozen profitability truth.
 
-## Current deterministic test ownership
-
-Important suites include:
+## Current test ownership
 
 ```text
 tests/test_settings.py
@@ -144,9 +128,10 @@ tests/test_app_readiness.py
 tests/test_indicators_structure.py
 tests/test_technical_liquidity.py
 tests/test_intelligence_snapshot.py
+tests/test_strategy_decisions.py
 ```
 
-CI currently runs:
+CI gates remain:
 
 ```text
 ruff check .
@@ -154,25 +139,25 @@ pytest
 financial-secret scan
 ```
 
-Do not weaken these gates to make a build green.
+Do not weaken a safety/regression test merely to make CI green.
 
 ## Feature ownership index
 
-| Feature | Behaviour authority | Primary code owner/current state |
+| Feature | Authority | Current owner |
 |---|---|---|
-| Global invariants | `00-foundation/SYSTEM_CONTRACT.md` | domain/config + later coordinator |
 | Market data/history | `10-market-intelligence/MARKET_DATA_AND_HISTORY.md` | `market_data/` IMPLEMENTED |
 | Candle/structure | `10-market-intelligence/CANDLE_STRUCTURE.md` | `intelligence/candle_structure.py` IMPLEMENTED baseline |
-| EMA/RSI/ATR/volatility | `10-market-intelligence/INDICATORS_AND_VOLATILITY.md` | `intelligence/indicators.py` IMPLEMENTED baseline |
-| S/R/location/target room | `10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md` | `intelligence/technical.py` IMPLEMENTED baseline |
-| Liquidity/FVG/OB | `10-market-intelligence/LIQUIDITY_AND_SMC.md` | `intelligence/liquidity.py` IMPLEMENTED baseline |
+| Quant/volatility | `10-market-intelligence/INDICATORS_AND_VOLATILITY.md` | `intelligence/indicators.py` IMPLEMENTED baseline |
+| Technical/location | `10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md` | `intelligence/technical.py` IMPLEMENTED baseline |
+| Liquidity/SMC | `10-market-intelligence/LIQUIDITY_AND_SMC.md` | `intelligence/liquidity.py` IMPLEMENTED baseline |
 | Session context | `10-market-intelligence/SESSION_CONTEXT.md` | `intelligence/session.py` IMPLEMENTED baseline |
-| Scheduled news facts | `10-market-intelligence/FUNDAMENTAL_AND_NEWS.md` | `intelligence/news.py` IMPLEMENTED baseline; production provider TBD |
-| Strategy families | `20-trading-decisions/STRATEGY_FLOOR.md` | Phase 4 |
-| BUY/SELL fusion + Red Team | `20-trading-decisions/SCORING_AND_DECISION_FUSION.md` | Phase 4 |
-| Opportunity/entry timing | `20-trading-decisions/ENTRY_TIMING.md` | Phase 4 |
-| Trade Plan | `20-trading-decisions/TRADE_PLAN.md` | Phase 5 |
-| Monetary risk | `30-risk-execution/RISK_CONTRACT.md` | Phase 5 |
+| Scheduled news facts | `10-market-intelligence/FUNDAMENTAL_AND_NEWS.md` | `intelligence/news.py` baseline; production provider TBD |
+| Strategy families | `20-trading-decisions/STRATEGY_FLOOR.md` | `strategies/floor.py` IMPLEMENTED baseline |
+| BUY/SELL fusion + Red Team | `20-trading-decisions/SCORING_AND_DECISION_FUSION.md` | `decisions/fusion.py` IMPLEMENTED baseline |
+| Opportunity/Entry Timing | `20-trading-decisions/ENTRY_TIMING.md` | `decisions/opportunity.py`, `timing.py` IMPLEMENTED baseline |
+| Decision orchestration | supporting engineering owner | `decisions/snapshot.py` IMPLEMENTED |
+| Trade Plan | `20-trading-decisions/TRADE_PLAN.md` | **Phase 5 next** |
+| Monetary risk | `30-risk-execution/RISK_CONTRACT.md` | **Phase 5 next** |
 | Hard session/news state | `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` | Phase 6 |
 | Persistence/recovery | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | Phase 6 |
 | Execution gate/MT5 writes | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | Phase 7 |
@@ -182,60 +167,52 @@ Do not weaken these gates to make a build green.
 
 ## Coding invariants
 
-Keep these implementation rules visible while coding:
+- Python 3.11+; standard library first;
+- one normalized broker snapshot and one shared intelligence derivation;
+- pure deterministic functions where practical;
+- no decorative framework/inheritance layers;
+- no raw broker writes from intelligence/strategies/decisions/research/dashboard;
+- no lookahead;
+- hard safety never becomes a weighted strategy score;
+- financial-authority credentials never enter tracked config/logs.
 
-- Python 3.11+;
-- standard library first, minimal runtime dependencies;
-- pure functions for deterministic calculations where practical;
-- classes only for genuine lifecycle/state/resource ownership;
-- one verified snapshot and shared derived facts instead of repeated MT5 reads/calculations;
-- no giant all-in-one `bot.py` and no decorative Service/Manager/Factory framework;
-- no raw MT5 write from intelligence/strategy/research/dashboard;
-- unknown critical broker/risk/order/controller state must not become implicit permission;
-- no lookahead in live/replay chronology;
-- financial-authority credentials never enter tracked config/templates/logs.
+## Next implementation owner — Phase 5
 
-The exact safety/trading values are owned by their authoritative topic docs, not this guide.
-
-## Next implementation owner — Phase 4
-
-Phase 4 should consume only `IntelligenceSnapshot` and build:
+Consume `DecisionSnapshot` and build:
 
 ```text
-six strategy-family reports in parallel
-→ independent BUY thesis
-→ independent SELL thesis
-→ conflict / evidence coverage / Red Team
-→ Opportunity lifecycle
-→ M5 Entry Timing: ENTER / WAIT / MISSED / INVALID
+analytically ready Opportunity
+→ structural Trade Plan
+   signal/reference/executable-price separation
+   structural invalidation + volatility buffer
+   Primary / Expansion / Runner objectives
+   original R immutable
+→ broker-aware Risk Result
+   SMALL/MEDIUM/NORMAL profile
+   executable lot/min-lot handling
+   all-in risk/ceiling/margin facts
+   daily Account Safety P/L state inputs
 ```
 
-It must not query MT5 directly, size lots, place orders, or turn every soft imperfection into a hard filter.
+Phase 5 still must not send orders. Hard session/news/controller/execution permission remains later.
 
 ## Debugging order
 
-When later runtime says no trade, inspect in authority order:
-
 ```text
-market/account/data truth
-→ intelligence evidence
-→ strategy family reports
-→ BUY/SELL fusion/conflict
-→ opportunity state
-→ entry timing
-→ Trade Plan/target room
-→ risk/session/news permission
-→ execution freshness/gate
-→ broker lifecycle/reconciliation
+MarketSnapshot
+→ IntelligenceSnapshot
+→ StrategyFloorReport
+→ BUY/SELL DecisionBoard
+→ Opportunity
+→ EntryTiming
+→ Trade Plan
+→ Risk/session/news
+→ Execution Gate
+→ broker lifecycle
 ```
 
-Do not weaken strategy thresholds when the actual blocker belongs to data, risk or execution.
+Do not weaken strategy when the actual problem belongs to risk/execution/data.
 
-## Documentation rule after every large phase
+## Documentation rule
 
-After each phase:
-1. update the authoritative topic docs only where implementation choices/evidence matter;
-2. update `60-engineering/MODULE_STRUCTURE.md` with real files/dependencies;
-3. update this guide with real call paths/tests;
-4. update operator docs only for functionality that actually exists;
-5. record verification honestly — deterministic CI green is not the same as live MT5/DEMO certification.
+After each phase, update the authoritative topic docs, `60-engineering/MODULE_STRUCTURE.md`, this guide, relevant tests and operator docs only for functionality that actually exists. Deterministic CI green is not the same as live DEMO certification.
