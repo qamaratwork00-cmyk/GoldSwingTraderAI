@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Fundamental and News Intelligence
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-design  
+**Version:** 0.3-implementation-baseline  
 **Authority:** Macro/fundamental Gold context, scheduled-event facts, provider freshness and holiday context.  
 **Depends on:** `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -11,9 +11,29 @@ This document defines market-intelligence facts and opinions related to Gold fun
 
 > **Macro/fundamental opinion is soft evidence. Event-risk permission is enforced by the risk/session safety layer.**
 
+## Phase 3 implementation checkpoint
+
+Provider-neutral scheduled-event normalization is implemented in:
+
+```text
+src/goldswingtraderai/intelligence/news.py
+```
+
+It currently accepts supplied provider records and publishes normalized event facts. A production external calendar provider/credential integration is **not yet selected or implemented**.
+
+Implemented baseline outputs include:
+- provider health/freshness: `VERIFIED/DEGRADED/STALE/UNAVAILABLE/UNKNOWN`;
+- provider event ID/title/currency/scheduled UTC time;
+- internal TIER 1/2/3 classification;
+- factual pre/post window bounds;
+- merging of overlapping/linked non-Tier-3 event windows;
+- explicit `required_event_truth_available` instead of silently assuming no news.
+
+`intelligence/snapshot.py` may attach these `NewsFacts` to the shared `IntelligenceSnapshot`. The intelligence layer still does **not** derive hard `NEWS_BLACKOUT` permission.
+
 ## Fundamental context
 
-Potential inputs include:
+Potential future provider-backed soft inputs include:
 
 - USD/DXY behaviour;
 - US Treasury yields;
@@ -23,11 +43,11 @@ Potential inputs include:
 - risk sentiment;
 - geopolitical stress where a reliable source exists.
 
-The desk may produce BUY and SELL fundamental support with confidence/freshness. Price/structure remains primary trading evidence.
+These macro-opinion feeds are not required for the Phase-3 baseline and remain future adapter work. Price/structure remains primary trading evidence.
 
 ## Scheduled-event facts
 
-The desk may ingest provider-backed facts for events such as:
+Normalized facts may represent events such as:
 
 - FOMC/rate decisions;
 - Fed Chair communications;
@@ -41,32 +61,15 @@ The desk may ingest provider-backed facts for events such as:
 - JOLTS/ADP/jobless claims;
 - other provider-classified high-impact USD events.
 
-For each event, publish at least:
-
-- event identity;
-- relevant currency/market;
-- scheduled time;
-- impact/severity metadata;
-- provider timestamp/freshness;
-- source health.
-
 This document publishes event facts/classification. `../30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` owns final hard permission state.
 
 ## Initial V1 event tiers
 
-The initial implementation uses three operational tiers.
-
 ### TIER 1 — Critical Gold/USD shock events
 
-Initial examples include:
+Baseline title mapping includes FOMC/rate decision, Fed Chair press conference, CPI, NFP and Core PCE/PCE high-impact concepts.
 
-- FOMC rate decision / policy statement / SEP or dot-plot release;
-- Fed Chair press conference or clearly scheduled major Fed Chair communication;
-- CPI / Core CPI;
-- NFP;
-- Core PCE / PCE where provider marks the release as high impact.
-
-Initial hard no-new-entry window:
+Initial hard-safety policy consumed later is:
 
 ```text
 15 minutes before scheduled event
@@ -74,20 +77,15 @@ through
 15 minutes after scheduled event
 ```
 
-For a known event cluster, such as a rate decision followed by a scheduled press conference, the hard window covers the cluster and extends through **15 minutes after the final scheduled critical item** rather than reopening briefly between linked events.
+The Phase-3 facts adapter records these bounds but does not itself block trading.
+
+Linked/overlapping critical windows are merged so a known rate-decision/press-conference cluster does not falsely reopen between adjacent windows.
 
 ### TIER 2 — High-impact USD events
 
-Initial examples may include:
+Baseline concepts include PPI, Retail Sales, GDP, ISM, JOLTS, ADP and jobless/unemployment claims. Other USD events explicitly marked high/critical by a provider fall into Tier 2 unless a Tier-1 mapping applies.
 
-- PPI;
-- Retail Sales;
-- GDP;
-- ISM releases;
-- JOLTS / ADP / major labour updates;
-- weekly claims or other events when the accepted provider marks them high impact for USD/Gold.
-
-Initial hard no-new-entry window:
+Initial factual window:
 
 ```text
 5 minutes before scheduled event
@@ -97,19 +95,19 @@ through
 
 ### TIER 3 — Contextual / ordinary events
 
-Tier 3 does **not** create an automatic hard blackout in V1. It may affect macro/session context and confidence but remains soft evidence unless market behaviour itself triggers another safety authority.
+Tier 3 records event context but carries no automatic hard blackout window in the Phase-3 facts model.
 
-Provider-specific names may differ. The mapping layer must normalize provider labels into these internal tiers and keep the mapping versioned/auditable.
+Provider-specific mapping tables may later supersede the baseline keyword mapper. Any such mapping must remain versioned/auditable.
 
 ## Open trades during scheduled news
 
-A scheduled news blackout blocks **new entries**. It does not automatically force-close an already-open bot-managed trade merely because an event approaches.
+A scheduled news blackout blocks **new entries** under the later safety state machine. It does not automatically force-close an already-open bot-managed trade merely because an event approaches.
 
-Open positions remain under Trade Manager + execution safety. They may be protected or exited for structural, session, execution or risk reasons, but news timing alone is not an automatic close command in V1.
+Open positions remain under Trade Manager + execution safety.
 
 ## Provider health and fallback
 
-The desk must distinguish at least:
+The intelligence model distinguishes:
 
 ```text
 VERIFIED
@@ -119,19 +117,15 @@ UNAVAILABLE
 UNKNOWN
 ```
 
-Where practical, V1 should support an accepted primary event-calendar source plus an accepted fallback/secondary source so one provider outage does not unnecessarily stop trading.
+The current baseline default freshness TTL is 30 minutes when the adapter is called without a provider-specific value. That TTL is an implementation default, not a frozen provider policy.
 
-Examples:
+Required event truth is usable only when effective provider health is `VERIFIED` or `DEGRADED`. Missing fetch time, stale data, unavailable provider or unknown health never becomes silent `no news`.
 
-- macro-opinion feed unavailable but scheduled-event feed healthy → macro evidence UNKNOWN/DEGRADED; event facts remain usable;
-- primary event source unavailable but accepted fallback verifies required event truth → event safety may continue;
-- required event-calendar truth unavailable/stale across all accepted sources → publish insufficient event truth so the safety layer enters `NEWS_SAFETY_UNKNOWN` for new entries.
-
-The system must never silently assume `no news` because a provider failed.
+Future production integration should support an accepted primary source and, where practical, an accepted fallback source. The later safety layer decides how combined-provider truth becomes `NEWS_CLEAR/BLACKOUT/UNKNOWN/WARMUP`.
 
 ## Fundamental evidence
 
-Suggested directional outputs:
+Future soft outputs may include:
 
 - Fundamental BUY Support;
 - Fundamental SELL Support;
@@ -139,8 +133,7 @@ Suggested directional outputs:
 - yield/rates context;
 - Fed/inflation context;
 - risk-sentiment context;
-- confidence;
-- freshness;
+- confidence/freshness;
 - concise reasons/counter-evidence.
 
 Fundamental evidence cannot force a trade against clearly contrary price structure.
@@ -157,7 +150,7 @@ The system cannot guarantee advance knowledge of every breaking geopolitical or 
 
 ## News-safety handoff
 
-This desk publishes event facts, internal tier and provider health. The hard safety layer consumes those facts to derive:
+This desk publishes event facts, internal tier and provider health. The later hard safety layer consumes those facts to derive:
 
 ```text
 NEWS_CLEAR
@@ -172,34 +165,35 @@ The intelligence desk must not bypass or duplicate that permission state machine
 
 Historical event research must preserve what event information would have been known at the decision time. Revised future macro data cannot be silently substituted into prior decisions where that would create look-ahead.
 
-Replay should preserve the event tier/window policy version used at the time of the simulated decision.
+Replay should preserve event tier/window mapping version and provider-health assumptions used at the simulated decision time.
 
 ## Dashboard visibility
 
 Compact example:
 
 ```text
-Macro Bias       MILD BUY
+Macro Bias       UNKNOWN / MILD BUY
 Next Event       CPI • TIER 1
 Event In         00:42:15
 News Facts       VERIFIED
 ```
 
-Hard `CLEAR/BLACKOUT/UNKNOWN/WARMUP` status should be displayed from the safety layer, not invented here.
+Hard `CLEAR/BLACKOUT/UNKNOWN/WARMUP` status must be displayed from the safety layer, not invented here.
 
-## Tests required
+## Tests required / current evidence
 
+Required:
 - provider freshness/stale handling;
-- accepted fallback provider path;
-- macro-opinion missing versus event-facts missing;
+- fallback-provider path when implemented;
 - event identity/time normalization;
-- Tier 1 mapping and `-15/+15 minute` event window facts;
+- Tier 1 mapping and `-15/+15` factual windows;
 - linked critical-event cluster handling;
-- Tier 2 mapping and `-5/+5 minute` event window facts;
-- Tier 3 does not independently create a hard blackout;
-- holiday context not equalling market closure;
+- Tier 2 mapping and `-5/+5` factual windows;
+- Tier 3 no automatic hard blackout;
 - no silent `no news` fallback;
-- replay chronology where historical news data is used.
+- replay chronology.
+
+Phase-3 deterministic tests cover tier mapping, cluster merging and stale-provider handling in `tests/test_intelligence_snapshot.py`.
 
 ## Explicit non-goals
 
@@ -215,7 +209,8 @@ This desk must not:
 ## Open questions
 
 - final production data provider(s) and credentials/configuration;
-- final provider-specific mapping table for every named event;
-- exact freshness TTL by provider/API;
-- future evidence-based changes to initial tier membership/windows if DEMO/research justifies them;
+- provider-specific mapping table and freshness TTL;
+- primary/fallback reconciliation rules;
+- macro-opinion data sources;
+- future evidence-based changes to initial tier membership/windows;
 - detailed treatment of unusual long-duration speeches or unscheduled events.
