@@ -1,6 +1,7 @@
 # GoldSwingTraderAI — Documentation Standard
 
 **Status:** PROVISIONAL  
+**Version:** 0.2-design  
 **Authority:** Documentation placement, ownership, status and change-control rules.
 
 ## 1. Purpose
@@ -41,47 +42,48 @@ Owns what the system can observe and infer about the market:
 
 - market data/history;
 - candle structure;
-- HTF technical structure/levels;
+- HTF technical structure/levels/location;
 - liquidity/SMC primitives;
 - indicators/volatility;
-- macro/fundamental evidence;
+- macro/fundamental/event facts;
 - session context as market evidence.
 
-Market-intelligence documents do not grant execution authority.
+Market-intelligence documents do not grant final execution authority.
 
 ### `docs/20-trading-decisions/`
 Owns how market evidence becomes a trade idea or open-trade action:
 
 - production strategy families;
 - BUY/SELL thesis construction;
-- scoring/fusion/debate;
+- scoring/fusion/debate and decision attribution;
 - setup lifecycle and entry timing;
-- structural trade plan;
-- trade manager and exits.
+- structural Trade Plan;
+- Trade Manager and exits.
 
 ### `docs/30-risk-execution/`
 Owns hard financial/operational authority:
 
-- monetary risk;
-- daily loss/manual reset;
-- session safety state machine;
+- monetary risk and dynamic sizing;
+- daily loss/manual reset accounting;
+- hard market/news/risk permission states;
 - cooldown/blocked states;
-- broker/account write guards;
-- one-shot execution;
-- persistence, restart and reconciliation.
+- centralized broker-write permission;
+- account/symbol/order safety and one-shot execution;
+- persistence, restart, reconciliation, backup and migration.
 
 Risk/safety rules are not converted into weighted strategy scores.
 
 ### `docs/40-research-learning/`
 Owns evidence generation and governed improvement:
 
-- replay/backtest parity;
-- offline research;
+- chronological replay/backtest parity;
 - validation/holdouts/WFA/stress;
+- StrategyMemory and entry/exit learning boundaries;
 - strategy discovery;
 - autonomous declarative invention;
-- experiments/promotion/rollback;
-- learning/ML/AI boundaries.
+- experiments/promotion/rollback.
+
+There is intentionally no separate authoritative `OFFLINE_RESEARCH.md`; offline/replay methodology belongs in `RESEARCH_AND_VALIDATION.md` to avoid duplicate contracts.
 
 Research cannot silently redefine production or hard-risk semantics.
 
@@ -91,20 +93,21 @@ Owns human-facing usage:
 - dashboard/UX;
 - operator controls;
 - user manual;
-- setup/run guide.
+- setup/run/migration/recovery guide.
 
 Operator docs explain authoritative behaviour but do not redefine it.
 
 ### `docs/60-engineering/`
-Owns implementation/developer/release maps:
+Owns implementation/developer/diagnostic/release maps:
 
 - module structure;
 - coder guide;
+- system health/diagnostics aggregation;
 - test/verification strategy;
 - release checklist;
 - final release audit.
 
-The Coder Guide is feature-oriented. Module Structure is file-oriented.
+The Coder Guide is feature-oriented. Module Structure is file/module-oriented. System Health explains fault aggregation, not the underlying risk/execution rules.
 
 ### `docs/90-governance/`
 Owns design governance:
@@ -131,7 +134,7 @@ VERIFIED
 Meaning:
 
 - `DRAFT`: incomplete; do not treat as settled behaviour.
-- `PROVISIONAL`: current agreed direction, still open to refinement.
+- `PROVISIONAL`: current agreed direction, still open to refinement/calibration.
 - `FROZEN`: approved behavioural contract for implementation.
 - `IMPLEMENTED`: corresponding behaviour exists in code, but not necessarily fully validated.
 - `VERIFIED`: exact implementation passed the required executable validation.
@@ -171,20 +174,26 @@ Not every document needs every heading, but omissions should be deliberate.
 
 Examples:
 
-- Exact daily-loss/manual-reset semantics belong in `30-risk-execution/`; `USER_MANUAL.md` links/explains them.
-- Exact entry-state semantics belong in `20-trading-decisions/ENTRY_TIMING.md`; `ARCHITECTURE.md` only shows the high-level flow.
-- Exact candle definitions belong in `10-market-intelligence/CANDLE_STRUCTURE.md`; strategy docs consume those definitions rather than redefining them.
-- Exact promotion chronology belongs in `40-research-learning/`; Coder Guide maps its code path once implemented.
+- Exact daily-loss/manual-reset arithmetic belongs in `30-risk-execution/RISK_CONTRACT.md`; the state machine consumes the resulting risk state and the User Manual explains it to the operator.
+- Exact news-event facts belong in `10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`; hard news permission belongs in `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md`.
+- Exact entry-state semantics belong in `20-trading-decisions/ENTRY_TIMING.md`; `ARCHITECTURE.md` only shows high-level flow.
+- Exact candle/BOS/MSS definitions belong in `10-market-intelligence/CANDLE_STRUCTURE.md`; Technical/Liquidity/Strategy documents consume them rather than redefine them.
+- Initial Trade Plan semantics belong in `20-trading-decisions/TRADE_PLAN.md`; post-entry management belongs in `TRADE_MANAGER_AND_EXIT.md`.
+- Final broker-write permission/one-shot semantics belong in `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`; Coder/Module docs only map the code owner.
+- `Why no trade?` decision attribution belongs in `SCORING_AND_DECISION_FUSION.md` plus the blocking authority; `SYSTEM_HEALTH_AND_DIAGNOSTICS.md` owns fault aggregation, not a competing decision engine.
+- Exact promotion chronology belongs in `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md`; engineering docs map its implementation path.
 
-If two documents currently contain competing detailed versions of the same rule, that is a documentation defect and must be resolved before implementation.
+If two documents contain competing detailed versions of the same rule, that is a documentation defect and must be resolved before implementation.
 
 ## 7. Cross-references
 
-Use relative repository links wherever possible. A supporting doc should say, for example:
+Use relative repository links wherever possible. A supporting doc should link to the authoritative source instead of pasting a second independent version.
 
-> Daily loss and reset semantics are defined by `../30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md`.
+Examples:
 
-It should not paste a second independent version of those semantics.
+> Daily loss calculation/reset-reference semantics are defined by `../30-risk-execution/RISK_CONTRACT.md`.
+
+> Hard news permission is defined by `../30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` from event facts supplied by `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`.
 
 ## 8. Design decisions and open questions
 
@@ -196,10 +205,26 @@ When an open question is resolved:
 
 1. update the authoritative topic document;
 2. add/adjust the design-decision entry;
-3. remove or mark the open question resolved;
-4. update any affected supporting links/summaries.
+3. remove/mark the open question resolved;
+4. update affected supporting links/summaries.
 
-## 9. Final Build Prompt rule
+## 9. Implementation synchronization rule
+
+Documentation is updated during each implementation phase, not after the project is finished.
+
+When code ownership/behaviour changes, synchronize as applicable:
+
+- authoritative topic doc;
+- `DESIGN_DECISIONS.md` / `OPEN_QUESTIONS.md`;
+- `MODULE_STRUCTURE.md`;
+- `CODER_GUIDE.md`;
+- operator docs;
+- test/release docs;
+- `docs/README.md`.
+
+A phase is not complete while code and its authoritative documentation knowingly disagree.
+
+## 10. Final Build Prompt rule
 
 `FINAL_BUILD_PROMPT.md` is a handoff summary. It may reference frozen design documents and implementation sequence, but it must not become a shadow specification that contradicts them.
 
@@ -210,6 +235,6 @@ Before it can become FROZEN:
 - cross-document contradiction audit must be complete;
 - implementation phases and validation expectations must be explicit.
 
-## 10. Reference-project rule
+## 11. Reference-project rule
 
 External/prior repositories may be studied for lessons, but GoldSwingTraderAI documentation must describe GoldSwingTraderAI itself. Do not copy prior project identity, legacy compatibility constraints or file architecture merely because they existed in a reference project.
