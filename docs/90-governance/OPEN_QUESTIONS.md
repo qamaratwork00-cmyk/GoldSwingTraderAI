@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 2.1-design
+**Version:** 2.2-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -30,8 +30,9 @@ Deterministic core implementation currently exists through Phase 10, including r
 7  Execution intent/gate/controller/writer/reconciliation
 8  Trade Manager + execution bridge
 9  Dashboard renderer
-10 Chronological replay + ablation + Trade Plan outcomes + idealized Trade Manager replay
-   + metrics/learning + discovery/invention/promotion
+10 Chronological replay + ablation + Trade Plan outcomes + Trade Manager replay
+   + declared execution-friction stress + metrics/learning
+   + discovery/invention/promotion
 ```
 
 This does **not** mean live DEMO release is complete. The normal launcher remains read-only readiness; final persistent runtime orchestration, production shared cross-laptop coordination, backup/fresh-machine drill and controlled Windows/MT5 DEMO certification remain pending.
@@ -114,9 +115,11 @@ Primary Structural Target is normally a management checkpoint. Valid Expansion T
 
 ### IMPLEMENTED RESEARCH EVIDENCE BASELINE
 
-The production Trade Manager is now reused chronologically in `research/management_replay.py` at completed-M5 boundaries. It records HOLD/PROTECT/TRAIL/RUNNER/EXIT, current active stop/TP outcomes, Capture Efficiency and giveback under explicit `BAR_CLOSE_IDEALIZED` assumptions.
+The production Trade Manager is reused chronologically in `research/management_replay.py` at completed-M5 boundaries. It records HOLD/PROTECT/TRAIL/RUNNER/EXIT, current active stop/TP outcomes, Capture Efficiency and giveback.
 
-This closes the former software gap of having no Trade Manager replay. It does **not** close broker-realism questions below.
+The default replay is `BAR_CLOSE_IDEALIZED`. Research-only assumptions now additionally support adverse entry slippage, executable-side spread approximation, completed-M5 modify delay and deterministic modify rejection without changing production management logic.
+
+`research/stress.py` holds analytical decisions fixed and compares those execution assumptions versus a clean BASE. This closes the software gap of having no deterministic execution-friction stress foundation; it does **not** close broker-realism questions below.
 
 ### CALIBRATE IN RESEARCH
 
@@ -127,7 +130,8 @@ This closes the former software gap of having no Trade Manager replay. It does *
 - continuation/reversal thresholds for HOLD/PROTECT/TRAIL/RUNNER/EXIT;
 - objective-quality thresholds for runner progression;
 - family/regime RR refinements;
-- management replay versus DEMO outcome differences.
+- management replay versus DEMO outcome differences;
+- empirical stress severity by broker/session/volatility.
 
 ### DEFER LATER
 
@@ -248,6 +252,21 @@ V1 defines no separate REAL authorization workflow.
 - durable lineage authority;
 - lease/fencing semantics with deterministic in-memory test backend.
 
+### IMPLEMENTED RESEARCH-STRESS BASELINE
+
+Transparent deterministic research probes now exist for:
+
+```text
+BASE                no added friction
+WIDER_SPREAD        1.50x dataset spread
+ADVERSE_ENTRY       0.10R adverse fill
+MODIFY_DELAY        1 completed M5
+MODIFY_REJECTION    every 2nd submitted modify rejected
+COMBINED            all four together
+```
+
+These are configurable **research baselines only**. They do not alter the frozen production spread/drift rules and are not claims about actual Exness/broker distributions.
+
 ### IMPLEMENTATION CHOICE / INTEGRATION PENDING
 
 - **production shared cross-laptop coordination backend** satisfying atomic lease/fencing contract;
@@ -259,8 +278,9 @@ V1 defines no separate REAL authorization workflow.
 ### CALIBRATE IN RESEARCH / DEMO OBSERVATION
 
 - spread baseline sample window/minimum count/expiry;
-- slippage/entry-delay assumptions;
-- manager stop/TP modification delay/failure assumptions;
+- empirical slippage distribution by broker/session/volatility;
+- empirical manager stop/TP modification delay/failure distribution;
+- variable-spread/tick-order stress where trustworthy data exists;
 - evidence-backed spread/drift/lease timing refinements.
 
 ## Persistence / backup / migration
@@ -298,7 +318,8 @@ Live mutable SQLite DB is runtime state, not a mergeable source artifact. Public
 - same-chronology confluence ablation with production sources default ON;
 - historical production Trade Plan reconstruction;
 - ambiguity-safe initial bracket outcome model;
-- chronological idealized production Trade Manager replay;
+- chronological production Trade Manager replay;
+- declared execution-friction stress engine;
 - decision/bracket/management confluence ablation;
 - actual/counterfactual metric separation;
 - research episode journal;
@@ -316,6 +337,7 @@ Research realism is explicitly scoped:
 Decision replay          BAR_CLOSE
 Initial bracket outcomes BAR_HIGH_LOW
 Trade Manager replay     BAR_CLOSE_IDEALIZED
+Execution stress         BAR_CLOSE_EXECUTION_STRESS + declared assumptions
 ```
 
 Ambiguous/unresolved/open modeled outcomes are not forced into resolved P/L.
@@ -328,9 +350,9 @@ Eligible recurring discovery evidence must produce a candidate or explicit gover
 
 ### IMPLEMENTATION CHOICE / NEXT RESEARCH ENGINEERING
 
-- lightweight execution-friction/stress framework using declared assumptions rather than hidden optimistic defaults;
 - historical PRE_CLOSE integration once trustworthy schedule history is available;
 - dataset ingestion/identity/versioning for broader XAU history;
+- walk-forward/independent-validation orchestration over declared dataset splits;
 - reproducible evidence-report packaging.
 
 ### CALIBRATE IN RESEARCH
@@ -338,6 +360,7 @@ Eligible recurring discovery evidence must produce a candidate or explicit gover
 - minimum sample/confidence by family/regime;
 - development/validation/holdout periods;
 - walk-forward/stress details;
+- empirical execution-stress severity and acceptance thresholds;
 - Shadow/DEMO Canary/Main DEMO promotion thresholds;
 - bounded StrategyMemory influence;
 - Entry/Exit Learning candidate thresholds;
@@ -408,8 +431,8 @@ Eligible recurring discovery evidence must produce a candidate or explicit gover
 
 Behavioural design is complete enough to continue implementation/integration. No major subsystem or `FIX BEFORE BUILD` item is currently known.
 
-Closed software gaps now include the former `$100` floor, local persistence-engine choice and absence of a chronological production Trade Manager research path.
+Closed software gaps now include the former `$100` floor, local persistence-engine choice, chronological production Trade Manager research path and deterministic declared execution-stress foundation.
 
-Current main work is **integration and evidence**, not redesign: add realistic stress layers and broader XAU evidence, then finish runtime/provider/shared-coordination/backup integration and controlled DEMO certification.
+Current main work is **integration and evidence**, not redesign: calibrate stress on real XAU/DEMO evidence, add walk-forward/independent validation and historical session realism, then finish runtime/provider/shared-coordination/backup integration and controlled DEMO certification.
 
 Documents remain `DRAFT/PROVISIONAL` where live broker evidence does not yet exist. Do not relabel them VERIFIED until required evidence passes.
