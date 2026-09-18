@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT  
-**Version:** 0.8-implementation-map  
+**Version:** 0.9-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -13,8 +13,6 @@ For project sequencing/recovery use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md
 ## Current implementation checkpoint — 2026-09-18
 
 ### Phase 1 — Foundation — IMPLEMENTED + deterministic CI green
-
-Primary owners:
 
 ```text
 config/settings.py
@@ -28,7 +26,7 @@ scripts/scan_financial_secrets.py
 .github/workflows/ci.yml
 ```
 
-Positive DEMO requirement is a code invariant, tracked config is secret-free, and there is no irreversible broker-write implementation yet.
+Positive DEMO requirement is a code invariant, tracked config is secret-free, and irreversible broker writes are still absent.
 
 ### Phase 2 — MT5 read layer — IMPLEMENTED + deterministic CI green; live Windows DEMO proof pending
 
@@ -114,76 +112,105 @@ Important behaviour:
 
 ### Phase 5 — Trade Plan + Risk Engine — IMPLEMENTED + deterministic CI green
 
-Primary files:
-
 ```text
 decisions/trade_plan.py
 risk/engine.py
 risk/state.py
-risk/__init__.py
 ```
 
-Runtime boundary:
+Runtime:
 
 ```text
-DecisionSnapshot / READY Opportunity
+READY Opportunity
 → structural Trade Plan
-   Signal Price
-   Approved Entry Reference
-   structural invalidation
-   volatility/noise buffer
-   Initial SL
-   Immediate / Primary / Expansion / Runner objectives
-   immutable original-R price distance
-   RR/path/plan quality
-→ Risk Engine
-   UTC risk-day profile
-   target-size calculation
-   broker volume-grid normalization
-   min-lot evaluation
-   all-in SL risk + friction exactly once
-   daily lock / cooldown / episode re-entry / 0-of-1 capacity
-   optional exact broker-margin fact
-→ RiskEvaluation PASS / BLOCK / UNKNOWN
+→ broker-aware monetary RiskEvaluation
 ```
 
-Phase-5 implementation invariants:
-- Trade Plan defines market geometry before monetary sizing;
-- BUY plans use Ask and SELL plans use Bid as the approved planning reference; Phase 7 still revalidates a fresh executable quote before broker write;
-- a nearby low-quality internal obstacle may remain `Immediate Obstacle` instead of automatically becoming the Primary target and killing otherwise valid target room;
-- frozen structural RR policy is enforced: `<1.20R` current plan degrades, `1.20–<1.50R` needs credible `~2R+` expansion path, `1.50R+` is acceptable subject to other geometry;
-- fragile/noisy stop geometry becomes `DEGRADED/WAIT` rather than inventing a tighter stop;
-- invalid plans contain explicit missing (`None`) stop geometry rather than fabricated placeholder SL/R values;
-- score/Plan Quality never increases monetary risk;
-- account profile is fixed from UTC risk-day start equity so floating P/L does not make profile boundaries oscillate intraday;
-- SMALL raw size below broker minimum does not auto-block; actual `0.01` all-in risk is evaluated and may PASS in NORMAL or ELEVATED acceptable band;
-- target sizing uses the midpoint of each frozen normal band only as an explicit implementation baseline: SMALL `3.75%`, MEDIUM `2.5%`, NORMAL `1.5%`;
-- spread is not added twice when Bid/Ask planning geometry already embeds it; it remains visible as a diagnostic;
-- current friction baseline is explicit/configurable (`2` ticks slippage reserve, commission supplied separately) and remains research/broker calibration work;
-- heuristic `price × contract / leverage` margin is diagnostic only because Gold/CFD margin can be broker-specific;
-- exact broker-required margin, when supplied, is authoritative and may block; Phase 7 must obtain/revalidate the broker margin fact before irreversible write;
-- daily safety P/L, one-reset semantics, 3-loss cooldown and same-episode one-fresh-re-entry rules are executable pure state transitions ready for Phase-6 persistence.
+Phase-5 invariants:
+- structural invalidation/SL/objectives exist before monetary sizing;
+- low-quality nearby obstacles do not automatically become the Primary target;
+- frozen RR guard is implemented without becoming a high-RR-only trade filter;
+- invalid plans use explicit missing geometry rather than fake SL/R values;
+- strategy/Plan Quality never increases monetary risk;
+- SMALL is **any positive UTC day-start equity below $300**; there is no `$100` minimum-account floor;
+- practical broker minimum volume such as `0.01` is evaluated from actual all-in risk rather than raw fractional-lot theory;
+- heuristic margin is diagnostic only; exact broker margin is authoritative when supplied;
+- daily safety P/L, one-reset semantics, 3-loss cooldown and same-episode re-entry rules are executable state transitions.
 
-Phase 5 still contains **zero broker writes**.
+### Phase 6 — Hard Session/News Permission + Persistence — IMPLEMENTED + deterministic CI green
+
+Primary files:
+
+```text
+risk/permissions.py
+persistence/store.py
+persistence/runtime_state.py
+persistence/__init__.py
+diagnostics/reasons.py
+```
+
+Permission flow:
+
+```text
+BrokerSessionFacts
+→ MarketPermission
+
+NewsFacts + NewsRecoveryFacts
+→ NewsPermission
+
+MarketPermission + NewsPermission
+→ SessionNewsPermission
+```
+
+Implemented safety behaviour:
+- daily PRE_CLOSE `T-20m` no-new-entry and `T-10m` flatten;
+- weekend `T-60m` / `T-30m`;
+- daily reopen requires one clean completed M5 plus normalized conditions;
+- weekend reopen requires two clean M5 candles plus gap assessment and normalized conditions;
+- holiday context is caution, not a fake market closure;
+- required session schedule/news truth missing → `UNKNOWN`, never invented clear;
+- Tier-1/Tier-2 hard windows and post-news severe-dislocation recovery are explicit;
+- scheduled-news blackout does not itself force-close an existing managed trade.
+
+Persistence flow:
+
+```text
+critical typed runtime state
+→ RuntimeStateRepository
+→ StateStore
+→ SQLite canonical JSON + checksum + schema version + event rows
+→ RecoveryBundle
+```
+
+Phase-6 persistence currently round-trips:
+- `RiskDayState`;
+- `CooldownState`;
+- `EpisodeRiskState`;
+- active `Opportunity`;
+- active `TradePlan` with target/original-R context.
+
+Recovery validates checksum/database integrity and Opportunity/Episode/TradePlan identity. Corrupt or mismatched critical state raises an explicit error instead of silently becoming blank state.
+
+Execution Intent/order/trade persistence is deliberately not faked before those Phase-7 types exist.
 
 ## Current deterministic test ownership
 
+Core suites now include:
+
 ```text
 tests/test_settings.py
-tests/test_domain.py
-tests/test_mt5_reader.py
-tests/test_market_snapshot.py
+tests/test_market_data.py
 tests/test_app_readiness.py
-tests/test_indicators_structure.py
-tests/test_technical_liquidity.py
+tests/test_intelligence_core.py
 tests/test_intelligence_snapshot.py
+tests/test_technical_liquidity.py
 tests/test_strategy_decisions.py
 tests/test_trade_plan_risk.py
 tests/test_risk_state_regressions.py
 tests/test_margin_authority.py
+tests/test_session_news_permissions.py
+tests/test_persistence_recovery.py
 ```
-
-Phase-5 tests protect BUY/SELL structural geometry, immediate-vs-primary target distinction, frozen RR guard, min-lot behaviour, no stop distortion, no score-leveraged risk, spread no-double-count, cash-flow-adjusted daily lock, one manual reset, 3-loss cooldown release, episode re-entry limit and exact broker-margin authority.
 
 CI gates remain:
 
@@ -211,9 +238,9 @@ Do not weaken a safety/regression test merely to make CI green.
 | Opportunity/Entry Timing | `20-trading-decisions/ENTRY_TIMING.md` | `decisions/opportunity.py`, `timing.py` IMPLEMENTED baseline |
 | Trade Plan | `20-trading-decisions/TRADE_PLAN.md` | `decisions/trade_plan.py` IMPLEMENTED baseline |
 | Monetary risk | `30-risk-execution/RISK_CONTRACT.md` | `risk/engine.py`, `risk/state.py` IMPLEMENTED baseline |
-| Hard session/news state | `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` | **Phase 6 next** |
-| Persistence/recovery | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | **Phase 6 next** |
-| Execution gate/MT5 writes | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | Phase 7 |
+| Hard session/news state | `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` | `risk/permissions.py` IMPLEMENTED baseline |
+| Persistence/recovery | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/` IMPLEMENTED foundation |
+| Execution gate/MT5 writes | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | **Phase 7 next** |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | Phase 8 |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | Phase 9 |
 | Replay/learning/research | `40-research-learning/*` | Phase 10 |
@@ -221,37 +248,49 @@ Do not weaken a safety/regression test merely to make CI green.
 ## Coding invariants
 
 - Python 3.11+; standard library first;
-- one normalized broker snapshot and one shared intelligence derivation;
+- one normalized broker snapshot and shared derived facts;
 - pure deterministic functions where practical;
 - no decorative framework/inheritance layers;
-- no raw broker writes from intelligence/strategies/decisions/risk/research/dashboard;
 - no lookahead;
-- hard safety never becomes a weighted strategy score;
-- safety rules must not be multiplied into unnecessary filters that suppress valid opportunities;
-- financial-authority credentials never enter tracked config/logs.
+- hard safety never becomes weighted strategy scoring;
+- soft evidence must not be multiplied into unnecessary hard filters;
+- positive account balance alone is not an artificial minimum-balance trade restriction;
+- no raw broker writes from intelligence/strategies/decisions/risk/persistence/research/dashboard;
+- financial-authority credentials never enter tracked config/logs/state exports.
 
-## Next implementation owner — Phase 6
+## Next implementation owner — Phase 7
 
-Phase 6 builds two safety/state foundations without sending orders:
+Phase 7 introduces the **only irreversible MT5 write path**.
+
+Build in this order:
 
 ```text
-A) hard session/news permission
-   verified scheduled-close facts
-   T-20/T-10 daily policy
-   T-60/T-30 weekend policy
-   Tier-1/Tier-2/Tier-3 news state
-   reopen/post-news warmup
-
-B) persistence/recovery
-   lightweight durable store
-   schema/version/integrity
-   risk-day/cooldown/episode state
-   Opportunity/TradePlan lifecycle
-   unresolved execution/reconciliation state contracts
-   startup recovery and broker-reconciliation inputs
+1. Execution Intent + order lifecycle types
+2. persist intent/lifecycle before write
+3. broker position/order/deal reconciliation
+4. controller lease + monotonic fencing ownership
+5. fresh execution quote/spread/drift/spec/margin validation
+6. centralized Execution Permission Gate
+7. one-shot governed MT5 create/modify/close adapter
+8. acknowledgement classification + reconcile; never blind retry
 ```
 
-Use the smallest safe persistence stack; standard-library SQLite is preferred unless an actual requirement proves it insufficient. Phase 6 must not add broker-write authority.
+The gate consumes existing authorities rather than re-implementing them:
+
+```text
+positive DEMO guard
+account identity
+fresh data/quote
+RiskEvaluation
+SessionNewsPermission
+position ownership/capacity
+controller ownership
+order/reconciliation state
+exact broker checks
+→ ALLOW / BLOCK / UNKNOWN
+```
+
+Phase 7 must remain compact. No strategy/scoring/dashboard module may gain raw MT5 write access.
 
 ## Debugging order
 
@@ -263,7 +302,9 @@ MarketSnapshot
 → Opportunity
 → EntryTiming
 → Trade Plan
-→ Risk/session/news
+→ Risk
+→ Session/News Permission
+→ Persistence/Recovery
 → Execution Gate
 → broker lifecycle
 ```
