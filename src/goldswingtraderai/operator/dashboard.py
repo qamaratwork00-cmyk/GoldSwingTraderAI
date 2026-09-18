@@ -252,8 +252,11 @@ def _pct(value: float | None) -> str:
 def _money(value: float | None) -> str:
     if value is None:
         return "—"
-    sign = "+" if value > 0 else ""
-    return f"{sign}${value:.2f}"
+    if value > 0:
+        return f"+${value:.2f}"
+    if value < 0:
+        return f"-${abs(value):.2f}"
+    return "$0.00"
 
 
 def _countdown(seconds: int | None) -> str:
