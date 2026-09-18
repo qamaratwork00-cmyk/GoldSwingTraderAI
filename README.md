@@ -2,7 +2,7 @@
 
 > Institutional-style XAUUSD/XAUUSDm trading system designed to capture meaningful intraday/open-session Gold moves using multi-timeframe structure, parallel market intelligence, intelligent entry/exit timing, governed learning/discovery, and broker-aware risk/execution safety.
 
-**Project status:** Design close-out — architecture and V1 behavioural direction are substantially documented; production trading implementation has not started yet.
+**Project status:** Implementation in progress. **Phase 1 — Foundation/package/contracts is complete and CI-green. Phase 2 — MT5 read layer + Gold market data is active.** No irreversible MT5 broker-write path exists yet.
 
 GoldSwingTraderAI is a fresh, independent Gold trading system. It is not intended to scalp every tiny fluctuation or wait only for ultra-rare perfect setups. It should identify meaningful opportunities, time entries intelligently, manage positions around structure, and remain in strong moves long enough to capture substantial expansion while respecting hard safety.
 
@@ -15,7 +15,22 @@ GoldSwingTraderAI is a fresh, independent Gold trading system. It is not intende
 - [`docs/SETUP_AND_RUN_GUIDE.md`](docs/SETUP_AND_RUN_GUIDE.md) — setup/startup/shutdown/migration/recovery guide.
 - [`docs/CODER_GUIDE.md`](docs/CODER_GUIDE.md) — feature-oriented developer map.
 - [`docs/00-foundation/SYSTEM_CONTRACT.md`](docs/00-foundation/SYSTEM_CONTRACT.md) — highest-level behavioural contract.
-- [`docs/60-engineering/MODULE_STRUCTURE.md`](docs/60-engineering/MODULE_STRUCTURE.md) — planned module/dependency ownership map.
+- [`docs/60-engineering/CODING_STANDARD.md`](docs/60-engineering/CODING_STANDARD.md) — frozen lightweight production-code standard.
+- [`docs/60-engineering/MODULE_STRUCTURE.md`](docs/60-engineering/MODULE_STRUCTURE.md) — module/dependency ownership map.
+
+## Current implementation checkpoint
+
+Phase 1 currently provides:
+
+- Python 3.11+ package/bootstrap and validated non-secret configuration;
+- domain enums/models/typed IDs and stable diagnostic reason codes;
+- structured secret-redacting logging;
+- financial-secret scanner;
+- pytest unit-test harness and GitHub Actions CI;
+- positive DEMO policy treated as a non-configurable runtime invariant, not a user switch;
+- no broker-write implementation.
+
+Phase 1 quality gate passed Ruff, Pytest and financial-secret scanning. Phase 2 now owns MT5 initialization/read-only facts, verified account/symbol data, XAUUSD/XAUUSDm resolution, Bid/Ask, broker symbol specifications and synchronized H4/H1/M15/M5 candle snapshots.
 
 ## Core design direction
 
@@ -42,14 +57,14 @@ GoldSwingTraderAI is a fresh, independent Gold trading system. It is not intende
 
 ## Documentation-first development
 
-The documentation under `docs/` is the design source of truth. One behavioural rule should have one authoritative home; supporting guides point to that authority rather than create competing versions.
+The documentation under `docs/` is the design source of truth. One behavioural or engineering rule should have one authoritative home; supporting guides point to that authority rather than create competing versions.
 
 Document statuses:
 
 - `DRAFT` — incomplete working document.
 - `PROVISIONAL` — current agreed direction, still open to refinement/calibration.
-- `FROZEN` — approved design contract for implementation.
-- `IMPLEMENTED` — corresponding behaviour exists in code.
+- `FROZEN` — approved design/engineering contract for implementation.
+- `IMPLEMENTED` — corresponding behaviour/rule exists in code/process.
 - `VERIFIED` — exact implementation passed required executable validation.
 
 Remaining calibration and ordinary implementation choices are classified in [`docs/90-governance/OPEN_QUESTIONS.md`](docs/90-governance/OPEN_QUESTIONS.md) so they do not unnecessarily delay the build.
