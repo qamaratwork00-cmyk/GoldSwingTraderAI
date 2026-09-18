@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Risk Contract
 
 **Status:** PROVISIONAL  
-**Version:** 0.3-design  
+**Version:** 0.4-design  
 **Authority:** Monetary risk, account-size risk profiles, dynamic/hybrid lot sizing, aggregate exposure, daily-loss/manual-reset semantics and risk-policy invariants.  
 **Depends on:** `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -35,6 +35,18 @@ These are the accepted initial implementation boundaries. They remain configurat
 
 Balances below $100 are not assigned a default V1 trading profile by this decision; final handling remains an open implementation/policy question.
 
+### Frozen initial hard limits
+
+The initial implementation uses these hard new-entry ceilings and daily loss locks:
+
+| Profile | New-Entry Hard Ceiling | Daily Loss Lock |
+|---|---:|---:|
+| SMALL | 7% | 12% |
+| MEDIUM | 5% | 9% |
+| NORMAL | 4% | 7% |
+
+These are hard policy limits, not sizing targets. Normal/Preferred Target Risk and the Acceptable Gold Risk Band remain separately calibrated values below these ceilings.
+
 ### SMALL
 
 Designed for accounts where broker minimum volume (commonly `0.01`) is a coarse risk unit.
@@ -44,7 +56,7 @@ Default sizing behaviour:
 - practical base/minimum lot is normally `0.01` where broker rules require it;
 - a theoretical raw size below `0.01` does **not** automatically reject the trade;
 - calculate the real all-in risk of `0.01` using the approved structural SL and current execution costs;
-- allow the trade only when that all-in risk remains inside the configured SMALL profile permission band/ceiling;
+- allow the trade only when that all-in risk remains inside the configured SMALL profile permission band and never above the 7% New-Entry Hard Ceiling;
 - if current entry geometry is too expensive but the thesis remains valid, the opportunity may remain ARMED while Entry/Trade Plan waits for a naturally better structural entry;
 - never tighten the structural SL merely to make `0.01` affordable.
 
@@ -57,7 +69,7 @@ Default sizing behaviour:
 - stepped dynamic lots such as `0.01`, `0.02`, `0.03` according to broker step;
 - percentage Target Risk is increasingly meaningful;
 - actual all-in risk is recalculated after lot normalization;
-- controlled deviation around Target Risk may be allowed inside the configured MEDIUM risk band/ceiling.
+- controlled deviation around Target Risk may be allowed inside the configured MEDIUM risk band, never above the 5% New-Entry Hard Ceiling.
 
 ### NORMAL
 
@@ -68,7 +80,8 @@ Default sizing behaviour:
 - fully dynamic percentage-based sizing;
 - broker-step normalization;
 - fresh all-in monetary-risk revalidation before execution;
-- narrower dependence on minimum-lot exceptions because position granularity is normally sufficient.
+- narrower dependence on minimum-lot exceptions because position granularity is normally sufficient;
+- no new entry may exceed the 4% New-Entry Hard Ceiling.
 
 ## Risk concepts
 
@@ -84,17 +97,23 @@ A configurable bounded range around/above Target Risk used mainly where Gold min
 
 This prevents an otherwise valid SMALL-account trade from being rejected merely because the theoretical lot was, for example, `0.007` while the broker minimum is `0.01`.
 
-The band is not permission for unlimited risk.
+The band is not permission for unlimited risk and may never exceed the profile New-Entry Hard Ceiling.
 
 ### New-Entry Hard Ceiling
 
-The maximum allowed actual all-in risk for a new entry. A trade above this ceiling is not permitted at the current entry/SL geometry.
+The maximum allowed actual all-in risk for a new entry:
+
+```text
+SMALL   7%
+MEDIUM  5%
+NORMAL  4%
+```
+
+A current plan above its profile ceiling is not permitted at that entry/SL geometry.
 
 ### Emergency Safety Ceiling
 
-A catastrophic invariant/circuit limit, **not** permission to size normal trades at that level.
-
-Exact Target Risk, acceptable-band and ceiling percentages are profile-specific and remain open to validation/freeze.
+A catastrophic invariant/circuit limit, **not** permission to size normal trades at that level. Exact emergency/aggregate ceilings remain open.
 
 ## Broker-aware all-in monetary risk
 
@@ -202,19 +221,23 @@ The current provisional risk-day direction is:
 
 > **UTC calendar risk day (`00:00 UTC` boundary), independent of XAU reopen/holiday labels.**
 
-This choice is deterministic/replayable and keeps daily risk accounting separate from broker market-open semantics.
+Initial profile daily-loss limits are:
 
-The exact daily-loss percentage/tiering remains open.
+```text
+SMALL   12%
+MEDIUM   9%
+NORMAL   7%
+```
 
-When the daily limit is reached:
+When the applicable daily limit is reached:
 
 - risk state becomes `LOSS_LOCKED`;
 - no new entries/re-entry/add-ons are permitted;
 - open-trade management remains active where safely possible;
 - broker P/L/history is not erased;
-- the dashboard shows verified daily P/L, lock and remaining/reset state.
+- the dashboard shows verified daily P/L, profile daily limit and remaining/reset state.
 
-The exact realized/floating P/L accounting formula must be frozen before implementation; broker truth is authoritative where available.
+The exact realized/floating P/L accounting formula must still be frozen before implementation; broker truth is authoritative where available.
 
 ## Governed manual loss reset
 
@@ -275,6 +298,7 @@ Every risk evaluation should expose, as applicable:
 - Risk Decision and reason code;
 - Target Risk;
 - Acceptable Gold Risk Band status;
+- profile New-Entry Hard Ceiling;
 - Actual Proposed All-in Risk;
 - structural SL monetary risk;
 - spread/execution-friction diagnostics;
@@ -282,7 +306,8 @@ Every risk evaluation should expose, as applicable:
 - minimum-lot risk;
 - aggregate open risk;
 - margin result;
-- daily P/L/budget remaining;
+- daily P/L;
+- profile Daily Loss Lock and budget remaining;
 - risk state;
 - position-capacity state.
 
@@ -315,11 +340,13 @@ Profile          SMALL
 Sizing           BASE 0.01
 Target Risk      ...
 All-in Risk      ...
+Entry Ceiling    7%
 Risk Band        NORMAL / ACCEPTABLE / EXCESSIVE
 Spread Impact    ...
 Lot              0.01
-Open Risk        ...
 Daily P/L        ...
+Daily Lock       12%
+Daily Remaining  ...
 Decision         PASS / BLOCK
 ```
 
@@ -328,6 +355,8 @@ If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY
 ## Tests required
 
 - account-profile boundary tests: SMALL `$100–299`, MEDIUM `$300–999`, NORMAL `$1,000+`;
+- hard-ceiling tests: SMALL `7%`, MEDIUM `5%`, NORMAL `4%`;
+- daily-loss lock tests: SMALL `12%`, MEDIUM `9%`, NORMAL `7%`;
 - broker-aware all-in monetary risk calculation;
 - spread price-distance to account-currency conversion;
 - execution friction included exactly once;
@@ -347,12 +376,11 @@ If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY
 ## Open questions
 
 - exact Target Risk per SMALL/MEDIUM/NORMAL profile;
-- exact Acceptable Gold Risk Band and new-entry hard ceiling per profile;
+- exact Acceptable Gold Risk Band per profile;
 - emergency/aggregate risk ceilings;
 - policy for account balances below `$100`;
 - exact slippage-reserve model and commission treatment by broker/account type;
-- exact daily-loss percentage/tiering;
-- realized/floating daily-loss accounting formula;
+- exact realized/floating daily-loss accounting formula;
 - bounded manual-reset count/confirmation window;
 - exact cooldown trigger/release rules;
 - final one-position-at-a-time confirmation;
