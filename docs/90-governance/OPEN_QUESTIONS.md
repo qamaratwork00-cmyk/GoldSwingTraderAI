@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.3-design
+**Version:** 1.4-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -141,14 +141,16 @@ Remaining session/news questions:
 
 **Resolved initial price-drift policy:** adverse drift normalized by planned stop distance. `<=10%` normal revalidation; `>10–20%` elevated full revalidation; `>20%` blocks current Execution Intent/returns to WAIT when thesis survives. Risk/stop/target-room/chase invalidation blocks regardless of ratio.
 
+**Resolved V1 controller/failover policy:** one shared cross-machine controller lease with monotonic fencing epoch. Initial renewal target is 10 seconds and TTL is 30 seconds. Every irreversible broker write must freshly verify current holder + non-expired matching epoch. A second laptop stays Observer while another valid controller exists. Standby takeover may occur only after lease expiry, must acquire a new epoch atomically, and must complete durable-state + broker reconciliation before becoming PRIMARY READY. Old/stale epochs cannot write after failover. Coordination uncertainty fails closed for broker writes.
+
 Remaining execution questions:
 
 - Exact healthy-spread rolling sampling window, minimum valid sample count and persisted-baseline expiry.
 - Exact DEMO-to-future-REAL approval/config mechanism; REAL uses same centralized gate/engine.
-- Exact execution-controller/lease mechanism, timeout/clock/failover semantics and coordination store.
+- Final shared coordination-store backend/library satisfying the frozen lease/fencing contract.
 - Exact broker comment/magic/lineage conventions.
 - Exact retry policy for safe read-only/before-submit operations; irreversible ambiguous writes remain no-blind-retry.
-- Future research-backed changes, if any, to initial spread/drift bands.
+- Future research-backed changes, if any, to initial spread/drift bands or controller lease timing.
 
 ## Persistence / backup / migration
 
