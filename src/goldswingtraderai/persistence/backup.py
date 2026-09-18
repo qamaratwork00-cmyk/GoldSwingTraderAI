@@ -1,8 +1,8 @@
 """Verified local checkpoint cadence, retention and catalog management.
 
-This module deliberately stops at local/public-safe artifact management. Publishing
-artifacts to GitHub or another remote requires external authenticated tooling with
-credentials kept outside the runtime checkpoint and repository.
+Remote publication is intentionally outside this module because authenticated
+GitHub/cloud credentials must remain external to repository/runtime checkpoint
+state. This owner manages only local public-safe checkpoint artifacts.
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ def create_backup_if_due(
     policy: BackupPolicy | None = None,
     now_utc: datetime | None = None,
 ) -> BackupRunResult:
-    """Create, verify, catalog and retain one checkpoint when the cadence is due."""
+    """Create, verify, catalog and retain one checkpoint when cadence is due."""
 
     cfg = policy or BackupPolicy()
     now = now_utc or datetime.now(timezone.utc)
@@ -98,75 +98,65 @@ def create_backup_if_due(
 
     current = _load_catalog_optional(root_path, verify_checkpoints=True)
     if current.entries:
-        latest = current.entries[-1]
-        due_at = latest.created_at_utc + timedelta(minutes=cfg.interval_minutes)
+        due_at = current.entries[-1].created_at_utc + timedelta(minutes=cfg.interval_minutes)
         if now < due_at:
-            return BackupRunResult(
-                status=BackupRunStatus.SKIPPED_NOT_DUE,
-                entry=None,
-                catalog=current,
-            )
+            return BackupRunResult(BackupRunStatus.SKIPPED_NOT_DUE, None, current)
 
     staging = checkpoints_root / f".pending-{uuid4().hex}"
-    exported = export_runtime_checkpoint(
-        store,
-        staging,
-        source_label=source_label,
-        source_version=source_version,
-        created_at_utc=now,
-    )
-    verified = import_runtime_checkpoint(staging)
-    if verified.manifest.checkpoint_sha256 != exported.checkpoint_sha256:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise BackupCatalogError("new checkpoint failed post-export identity verification")
+    try:
+        exported = export_runtime_checkpoint(
+            store,
+            staging,
+            source_label=source_label,
+            source_version=source_version,
+            created_at_utc=now,
+        )
+        verified = import_runtime_checkpoint(staging)
+        if verified.manifest.checkpoint_sha256 != exported.checkpoint_sha256:
+            raise BackupCatalogError("new checkpoint identity verification failed")
 
-    final_name = f"runtime-{now.strftime('%Y%m%dT%H%M%SZ')}-{exported.checkpoint_sha256[:12]}"
-    _validate_entry_name(final_name)
-    final_path = checkpoints_root / final_name
-    if final_path.exists() or final_path.is_symlink():
+        name = f"runtime-{now.strftime('%Y%m%dT%H%M%SZ')}-{exported.checkpoint_sha256[:12]}"
+        _validate_entry_name(name)
+        final_path = checkpoints_root / name
+        if final_path.exists() or final_path.is_symlink():
+            raise FileExistsError(f"verified backup destination already exists: {final_path}")
+        os.replace(staging, final_path)
+    except Exception:
         shutil.rmtree(staging, ignore_errors=True)
-        raise FileExistsError(f"verified backup destination already exists: {final_path}")
-    os.replace(staging, final_path)
+        raise
 
     entry = BackupCatalogEntry(
-        name=final_name,
+        name=name,
         created_at_utc=now,
         checkpoint_sha256=exported.checkpoint_sha256,
         records_count=exported.records_count,
         events_count=exported.events_count,
     )
     all_entries = tuple(sorted((*current.entries, entry), key=lambda item: item.created_at_utc))
-    kept_entries = all_entries[-cfg.keep_latest :]
-    new_catalog = _write_catalog(root_path, kept_entries, updated_at_utc=now)
+    kept = all_entries[-cfg.keep_latest :]
 
-    kept_names = {item.name for item in kept_entries}
-    for old_entry in all_entries:
-        if old_entry.name not in kept_names:
-            shutil.rmtree(checkpoints_root / old_entry.name, ignore_errors=True)
+    # Publish the new known-good catalog before pruning. A crash can therefore
+    # leave only harmless unreferenced old directories, never a catalog that
+    # points at a backup deliberately deleted first.
+    catalog = _write_catalog(root_path, kept, updated_at_utc=now)
+    keep_names = {item.name for item in kept}
+    for old in all_entries:
+        if old.name not in keep_names:
+            shutil.rmtree(checkpoints_root / old.name, ignore_errors=True)
 
-    return BackupRunResult(
-        status=BackupRunStatus.CREATED,
-        entry=entry,
-        catalog=new_catalog,
-    )
+    return BackupRunResult(BackupRunStatus.CREATED, entry, catalog)
 
 
 def load_backup_catalog(root: str | Path, *, verify_checkpoints: bool = True) -> BackupCatalog:
-    """Load a catalog and optionally verify every referenced checkpoint."""
-
     root_path = Path(root)
-    catalog = _load_catalog_optional(root_path, verify_checkpoints=verify_checkpoints)
     if not (root_path / BACKUP_CATALOG_FILENAME).exists():
         raise FileNotFoundError(f"backup catalog does not exist: {root_path}")
-    return catalog
+    return _load_catalog_optional(root_path, verify_checkpoints=verify_checkpoints)
 
 
 def latest_verified_checkpoint(root: str | Path) -> Path | None:
-    """Return the newest catalogued checkpoint after full verification."""
-
     root_path = Path(root)
-    catalog_path = root_path / BACKUP_CATALOG_FILENAME
-    if not catalog_path.exists():
+    if not (root_path / BACKUP_CATALOG_FILENAME).exists():
         return None
     catalog = _load_catalog_optional(root_path, verify_checkpoints=True)
     if not catalog.entries:
@@ -175,32 +165,27 @@ def latest_verified_checkpoint(root: str | Path) -> Path | None:
 
 
 def _load_catalog_optional(root: Path, *, verify_checkpoints: bool) -> BackupCatalog:
-    catalog_path = root / BACKUP_CATALOG_FILENAME
-    if not catalog_path.exists():
+    path = root / BACKUP_CATALOG_FILENAME
+    if not path.exists():
         return _empty_catalog()
-    if catalog_path.is_symlink() or not catalog_path.is_file():
+    if path.is_symlink() or not path.is_file():
         raise BackupCatalogError("backup catalog must be a regular file")
 
-    text = catalog_path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
     _reject_financial_secrets(text)
-    try:
-        raw = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise BackupCatalogError("backup catalog contains invalid JSON") from exc
-    if not isinstance(raw, dict):
-        raise BackupCatalogError("backup catalog must be a JSON object")
-
+    raw = _load_object(text)
     expected_hash = _hash_payload({key: value for key, value in raw.items() if key != "catalog_sha256"})
+
     try:
-        schema_version = int(raw["schema_version"])
-        if schema_version != BACKUP_CATALOG_SCHEMA_VERSION:
+        schema = int(raw["schema_version"])
+        if schema != BACKUP_CATALOG_SCHEMA_VERSION:
             raise BackupCatalogError("unsupported backup catalog schema version")
         entries_raw = raw["entries"]
         if not isinstance(entries_raw, list):
             raise BackupCatalogError("backup catalog entries must be a list")
         entries = tuple(_parse_entry(item) for item in entries_raw)
         catalog = BackupCatalog(
-            schema_version=schema_version,
+            schema_version=schema,
             updated_at_utc=_parse_utc(str(raw["updated_at_utc"])),
             entries=entries,
             catalog_sha256=_require_sha256(str(raw["catalog_sha256"]), "catalog hash"),
@@ -218,8 +203,10 @@ def _load_catalog_optional(root: Path, *, verify_checkpoints: bool) -> BackupCat
     if verify_checkpoints:
         checkpoints_root = root / CHECKPOINTS_DIRECTORY
         for entry in entries:
-            checkpoint_path = checkpoints_root / entry.name
-            imported = import_runtime_checkpoint(checkpoint_path)
+            try:
+                imported = import_runtime_checkpoint(checkpoints_root / entry.name)
+            except (RuntimeCheckpointError, FileNotFoundError, OSError) as exc:
+                raise BackupCatalogError(f"invalid catalogued checkpoint: {entry.name}") from exc
             if imported.manifest.checkpoint_sha256 != entry.checkpoint_sha256:
                 raise BackupCatalogError(f"catalog checkpoint hash mismatch: {entry.name}")
             if len(imported.snapshot.records) != entry.records_count:
@@ -242,8 +229,7 @@ def _write_catalog(
         "entries": [_entry_payload(item) for item in entries],
     }
     digest = _hash_payload(base)
-    payload = {**base, "catalog_sha256": digest}
-    text = _canonical_json(payload) + "\n"
+    text = _canonical_json({**base, "catalog_sha256": digest}) + "\n"
     _reject_financial_secrets(text)
 
     destination = root / BACKUP_CATALOG_FILENAME
@@ -288,9 +274,7 @@ def _parse_entry(value: Any) -> BackupCatalogEntry:
         entry = BackupCatalogEntry(
             name=name,
             created_at_utc=_parse_utc(str(value["created_at_utc"])),
-            checkpoint_sha256=_require_sha256(
-                str(value["checkpoint_sha256"]), "checkpoint hash"
-            ),
+            checkpoint_sha256=_require_sha256(str(value["checkpoint_sha256"]), "checkpoint hash"),
             records_count=int(value["records_count"]),
             events_count=int(value["events_count"]),
         )
@@ -309,6 +293,16 @@ def _entry_payload(entry: BackupCatalogEntry) -> dict[str, Any]:
         "records_count": entry.records_count,
         "events_count": entry.events_count,
     }
+
+
+def _load_object(text: str) -> dict[str, Any]:
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise BackupCatalogError("backup catalog contains invalid JSON") from exc
+    if not isinstance(value, dict):
+        raise BackupCatalogError("backup catalog must be a JSON object")
+    return value
 
 
 def _validate_entry_name(name: str) -> None:
