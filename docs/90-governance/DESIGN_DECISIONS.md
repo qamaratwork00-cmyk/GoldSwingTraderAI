@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.4-design
+**Version:** 1.6-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -160,7 +160,8 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-031 — DEMO-first is a release safeguard, not a permanent LIVE prohibition
 
 **Decision:** Initial release authorizes broker writes only on approved DEMO. Future REAL uses the same strategy/risk/gate/execution path after explicit frozen release approval.  
-**Status:** PROVISIONAL
+**Status:** SUPERSEDED FOR V1 BY DEC-062  
+**Note:** Retained as historical design evolution. V1 now defines only a positive DEMO guard and intentionally does not specify REAL authorization/hard-block behaviour.
 
 ## DEC-032 — One-shot irreversible submission with reconciliation
 
@@ -312,6 +313,19 @@ This ledger records accepted/provisional architectural decisions so future imple
 **Decision:** V1 must remain fully correct for an indivisible broker-minimum `0.01` position. The baseline manager handles the full position through HOLD/PROTECT/TRAIL/RUNNER/EXIT and does not require partial profit taking. Partial-profit policies may be researched for a later version/larger executable volumes but are not an implicit V1 dependency.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
 **Reason:** Keep behaviour consistent across small accounts and avoid designing core exit logic around volume reductions that may not be executable.
+
+## DEC-061 — Cross-machine execution ownership uses lease + monotonic fencing
+
+**Decision:** V1 permits one PRIMARY execution controller for a managed account/symbol. Controller ownership uses a shared coordination store with atomic acquisition, authoritative expiry semantics and a monotonic fencing epoch. Initial renewal target is `10s` and lease TTL is `30s`. Every irreversible broker write must freshly verify current holder, unexpired lease and matching current epoch. A second laptop remains Observer while another valid holder exists. Standby takeover is allowed only after authoritative lease expiry, must obtain a new epoch atomically and must complete durable-state + broker reconciliation before becoming PRIMARY READY. A stale old epoch can never regain write authority by local assumption.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Prevent split-brain/duplicate broker writes while still allowing controlled recovery after laptop/process failure.
+
+## DEC-062 — V1 defines only a positive DEMO guard
+
+**Decision:** V1 broker-write environment permission is granted only when the connected MT5 account is positively verified as DEMO: `DEMO_GUARD = PASS`. If DEMO status is not verified, broker-write permission is not granted. V1 intentionally does **not** define a separate REAL authorization workflow, REAL hard-block contract, LIVE override or alternate REAL execution path. A verified DEMO account is real-time broker execution on that DEMO account, not dry-run simulation.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Supersedes for V1:** DEC-031 environment-policy wording.  
+**Reason:** Keep the first implementation narrowly scoped to the user's requested DEMO guard without inventing unnecessary REAL-account policy.
 
 ## Change rule
 
