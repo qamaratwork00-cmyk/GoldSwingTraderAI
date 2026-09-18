@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Risk Contract
 
 **Status:** PROVISIONAL  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** Monetary risk, account-size risk profiles, dynamic/hybrid lot sizing, aggregate exposure, daily-loss/manual-reset semantics and risk-policy invariants.  
 **Depends on:** `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -35,17 +35,19 @@ These are the accepted initial implementation boundaries. They remain configurat
 
 Balances below $100 are not assigned a default V1 trading profile by this decision; final handling remains an open implementation/policy question.
 
-### Frozen initial hard limits
+## Frozen initial profile bands
 
-The initial implementation uses these hard new-entry ceilings and daily loss locks:
+The initial implementation/research policy uses:
 
-| Profile | New-Entry Hard Ceiling | Daily Loss Lock |
-|---|---:|---:|
-| SMALL | 7% | 12% |
-| MEDIUM | 5% | 9% |
-| NORMAL | 4% | 7% |
+| Profile | Normal / Target Risk Band | Elevated but Acceptable Gold Risk | New-Entry Hard Ceiling | Daily Loss Lock |
+|---|---:|---:|---:|---:|
+| SMALL | 3.0%–4.5% | >4.5%–6.5% | 7% | 12% |
+| MEDIUM | 2.0%–3.0% | >3.0%–4.5% | 5% | 9% |
+| NORMAL | 1.0%–2.0% | >2.0%–3.5% | 4% | 7% |
 
-These are hard policy limits, not sizing targets. Normal/Preferred Target Risk and the Acceptable Gold Risk Band remain separately calibrated values below these ceilings.
+These values are **initial DEMO/research implementation policy**, not a profitability claim. Research may later propose a governed change, but production may not silently alter them.
+
+A value inside the elevated band is not automatically preferred. It means the trade may remain executable when Gold lot granularity/structural geometry makes exact target sizing impossible and all other hard checks pass.
 
 ### SMALL
 
@@ -54,9 +56,11 @@ Designed for accounts where broker minimum volume (commonly `0.01`) is a coarse 
 Default sizing behaviour:
 
 - practical base/minimum lot is normally `0.01` where broker rules require it;
+- normal/target effective risk is `3.0%–4.5%`;
+- elevated but acceptable effective risk is `>4.5%–6.5%`;
+- no new entry may exceed the `7%` New-Entry Hard Ceiling;
 - a theoretical raw size below `0.01` does **not** automatically reject the trade;
 - calculate the real all-in risk of `0.01` using the approved structural SL and current execution costs;
-- allow the trade only when that all-in risk remains inside the configured SMALL profile permission band and never above the 7% New-Entry Hard Ceiling;
 - if current entry geometry is too expensive but the thesis remains valid, the opportunity may remain ARMED while Entry/Trade Plan waits for a naturally better structural entry;
 - never tighten the structural SL merely to make `0.01` affordable.
 
@@ -67,9 +71,10 @@ Designed for accounts where several broker lot steps are practically available.
 Default sizing behaviour:
 
 - stepped dynamic lots such as `0.01`, `0.02`, `0.03` according to broker step;
-- percentage Target Risk is increasingly meaningful;
-- actual all-in risk is recalculated after lot normalization;
-- controlled deviation around Target Risk may be allowed inside the configured MEDIUM risk band, never above the 5% New-Entry Hard Ceiling.
+- normal/target effective risk is `2.0%–3.0%`;
+- elevated but acceptable effective risk is `>3.0%–4.5%`;
+- no new entry may exceed the `5%` New-Entry Hard Ceiling;
+- actual all-in risk is recalculated after lot normalization.
 
 ### NORMAL
 
@@ -78,26 +83,38 @@ Designed for accounts where broker lot granularity is less restrictive.
 Default sizing behaviour:
 
 - fully dynamic percentage-based sizing;
-- broker-step normalization;
-- fresh all-in monetary-risk revalidation before execution;
-- narrower dependence on minimum-lot exceptions because position granularity is normally sufficient;
-- no new entry may exceed the 4% New-Entry Hard Ceiling.
+- normal/target effective risk is `1.0%–2.0%`;
+- elevated but acceptable effective risk is `>2.0%–3.5%`;
+- no new entry may exceed the `4%` New-Entry Hard Ceiling;
+- broker-step normalization and fresh all-in monetary-risk revalidation apply before execution.
 
 ## Risk concepts
 
 Keep distinct:
 
-### Target Risk
+### Target Risk Band
 
-The preferred sizing target. It is a target, not necessarily an exact equality requirement after broker lot normalization.
+The preferred effective all-in risk range for ordinary entries after broker normalization and execution-friction accounting:
+
+```text
+SMALL   3.0%–4.5%
+MEDIUM  2.0%–3.0%
+NORMAL  1.0%–2.0%
+```
+
+The system should normally size toward this band where broker granularity allows it.
 
 ### Acceptable Gold Risk Band
 
-A configurable bounded range around/above Target Risk used mainly where Gold minimum-lot granularity prevents exact sizing.
+A bounded elevated range used where Gold minimum-lot/volume-step granularity or valid structural geometry prevents exact preferred sizing:
 
-This prevents an otherwise valid SMALL-account trade from being rejected merely because the theoretical lot was, for example, `0.007` while the broker minimum is `0.01`.
+```text
+SMALL   >4.5%–6.5%
+MEDIUM  >3.0%–4.5%
+NORMAL  >2.0%–3.5%
+```
 
-The band is not permission for unlimited risk and may never exceed the profile New-Entry Hard Ceiling.
+Elevated risk is a tolerance, not a target. It may never exceed the profile New-Entry Hard Ceiling.
 
 ### New-Entry Hard Ceiling
 
@@ -146,12 +163,12 @@ Conceptual flow:
 ```text
 Resolve account profile
 → build structural Trade Plan
-→ calculate preferred Target Risk
+→ target the profile Normal Risk Band
 → calculate raw volume
 → normalize to broker volume step/minimum
 → calculate realistic all-in risk for normalized volume
-→ compare with profile Target / Acceptable Band / Hard Ceiling
-→ verify margin/exposure/daily-risk state
+→ classify NORMAL / ELEVATED / EXCESSIVE
+→ verify hard ceiling, margin, exposure and daily-risk state
 → PASS or BLOCK current plan
 ```
 
@@ -173,13 +190,22 @@ Instead:
 raw lot < broker minimum
 → evaluate broker minimum lot
 → calculate actual all-in risk
-→ if inside permitted profile band/ceiling: PASS
-→ if above hard ceiling: BLOCK current plan
+→ NORMAL band: PASS if all other checks pass
+→ ELEVATED band: PASS may be allowed if all other checks pass
+→ above hard ceiling: BLOCK current plan
 ```
 
 `MIN_LOT_UNAFFORDABLE` is reserved for cases where broker minimum volume itself creates all-in risk beyond the configured new-entry hard ceiling (or another hard financial constraint).
 
 If the current plan is blocked only because entry geometry makes `0.01` too expensive, the market opportunity may remain valid/ARMED and wait for a genuinely better structural entry. Risk does not force a tighter stop.
+
+## Drawdown-aware preference
+
+Dynamic sizing should not become more aggressive as the account approaches its daily loss lock.
+
+Within a valid profile policy, the sizing engine should prefer the lower/safer side of its normal band when verified daily drawdown is already material. Exact drawdown-to-risk reduction curve remains an implementation/calibration question.
+
+This preference must never be used to increase the hard ceiling.
 
 ## Dynamic does not mean score-leveraged risk
 
@@ -296,8 +322,8 @@ Every risk evaluation should expose, as applicable:
 - Account Profile (`SMALL`, `MEDIUM`, `NORMAL`);
 - sizing mode (`BASE_MIN_LOT`, `STEPPED_DYNAMIC`, `FULL_DYNAMIC` or equivalent);
 - Risk Decision and reason code;
-- Target Risk;
-- Acceptable Gold Risk Band status;
+- Target Risk Band;
+- risk classification (`NORMAL`, `ELEVATED`, `EXCESSIVE`);
 - profile New-Entry Hard Ceiling;
 - Actual Proposed All-in Risk;
 - structural SL monetary risk;
@@ -318,7 +344,7 @@ Every risk evaluation should expose, as applicable:
 - silent risk-limit expansion by strategy/research/AI;
 - multiplying risk merely because a strategy score is high or recent trades won;
 - moving structural SL merely to fit risk budget;
-- treating emergency ceiling as target sizing permission;
+- treating elevated band or emergency ceiling as preferred target sizing;
 - assuming unknown exposure/P&L is zero;
 - double-counting spread/execution friction;
 - redefining original R after stop movement;
@@ -338,10 +364,10 @@ Compact example:
 🛡 RISK
 Profile          SMALL
 Sizing           BASE 0.01
-Target Risk      ...
-All-in Risk      ...
+Target Band      3.0–4.5%
+All-in Risk      5.2%
 Entry Ceiling    7%
-Risk Band        NORMAL / ACCEPTABLE / EXCESSIVE
+Risk Band        ELEVATED
 Spread Impact    ...
 Lot              0.01
 Daily P/L        ...
@@ -355,6 +381,7 @@ If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY
 ## Tests required
 
 - account-profile boundary tests: SMALL `$100–299`, MEDIUM `$300–999`, NORMAL `$1,000+`;
+- normal/elevated band boundary tests for all profiles;
 - hard-ceiling tests: SMALL `7%`, MEDIUM `5%`, NORMAL `4%`;
 - daily-loss lock tests: SMALL `12%`, MEDIUM `9%`, NORMAL `7%`;
 - broker-aware all-in monetary risk calculation;
@@ -375,13 +402,12 @@ If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY
 
 ## Open questions
 
-- exact Target Risk per SMALL/MEDIUM/NORMAL profile;
-- exact Acceptable Gold Risk Band per profile;
 - emergency/aggregate risk ceilings;
 - policy for account balances below `$100`;
 - exact slippage-reserve model and commission treatment by broker/account type;
 - exact realized/floating daily-loss accounting formula;
 - bounded manual-reset count/confirmation window;
 - exact cooldown trigger/release rules;
+- exact drawdown-aware target-band reduction curve;
 - final one-position-at-a-time confirmation;
 - emergency trade-count circuit-breaker value.
