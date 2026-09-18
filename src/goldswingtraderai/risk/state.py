@@ -184,7 +184,10 @@ def record_closed_trade(
         raise ValueError("minimum cooldown must be positive")
 
     if outcome is ClosedTradeOutcome.WIN:
-        return CooldownState(consecutive_losses=0)
+        # A win resets the loss counter but does not erase a cooldown that was
+        # already triggered by three consecutive losses; its release conditions
+        # still have to pass.
+        return replace(state, consecutive_losses=0)
     if outcome is ClosedTradeOutcome.SCRATCH:
         return state
 
