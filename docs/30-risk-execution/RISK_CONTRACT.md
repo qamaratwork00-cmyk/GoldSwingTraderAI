@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Risk Contract
 
-**Status:** PROVISIONAL  
-**Version:** 0.9-implementation-baseline  
+**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
+**Version:** 1.0-implementation  
 **Authority:** Monetary risk, account-size risk profiles, dynamic/hybrid lot sizing, exposure, daily-loss/manual-reset semantics and risk-policy invariants.  
 **Depends on:** `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -50,7 +50,7 @@ structural SL geometry
 
 Account size by itself is not an extra trade filter.
 
-For risk-day consistency, the profile is resolved from the positive `DayStartEquity` and remains fixed for that UTC risk day instead of switching profile because of intraday floating P/L.
+For risk-day consistency, the profile is resolved from positive `DayStartEquity` and remains fixed for that UTC risk day instead of switching because of intraday floating P/L.
 
 ## Frozen initial profile bands
 
@@ -74,7 +74,7 @@ Designed for accounts where broker minimum volume, commonly `0.01`, is a coarse 
 - elevated but acceptable effective risk is `>4.5%–6.5%`;
 - no new entry may exceed the `7%` New-Entry Hard Ceiling;
 - a theoretical raw size below `0.01` does **not** automatically reject the trade;
-- calculate the actual all-in risk of broker minimum volume using the approved structural SL and current execution costs;
+- calculate actual all-in risk of broker minimum volume using approved structural SL and current execution costs;
 - if current geometry is too expensive, the current plan may be blocked while the underlying opportunity remains ARMED for a naturally better entry;
 - never tighten structural SL merely to make minimum volume affordable;
 - never block merely because equity is below `$100`.
@@ -214,9 +214,9 @@ Unexpected manual/foreign/unknown Gold exposure blocks new bot Gold entries unti
 
 Actual broker margin authority is broker-specific.
 
-Phase-5 may expose a generic margin estimate as a diagnostic only. It must **not** falsely block a valid Gold plan merely because a generic `price × contract / leverage` approximation is high.
+The Risk Engine may expose a generic margin estimate as a **diagnostic only**. It must not falsely block a valid Gold plan merely because a generic `price × contract / leverage` approximation is high.
 
-When exact broker-required margin is available, such as through MT5 `order_calc_margin`, it is authoritative. Phase-7 fresh execution revalidation must obtain/verify broker margin before order submission.
+When exact broker-required margin is available it is authoritative. The implemented execution path performs fresh broker pre-submit validation/margin authority through the MT5 execution boundary; controlled real-DEMO broker evidence is still required before this behaviour is called VERIFIED.
 
 ## Daily P/L and daily loss-lock accounting — frozen V1 policy
 
@@ -348,17 +348,21 @@ Every evaluation should expose as applicable:
 - using manual reset to bypass non-loss hard blocks;
 - using a broker-inaccurate generic margin estimate as a hard blocker.
 
-## Implementation checkpoint — Phase 5
+## Current implementation checkpoint
 
-Implemented owners:
+Implemented owners include:
 
 ```text
 src/goldswingtraderai/risk/engine.py
 src/goldswingtraderai/risk/state.py
 src/goldswingtraderai/decisions/trade_plan.py
+src/goldswingtraderai/persistence/runtime_state.py
+src/goldswingtraderai/execution/checks.py
+src/goldswingtraderai/execution/gate.py
+src/goldswingtraderai/execution/service.py
 ```
 
-Executable Phase-5 behaviour includes:
+Deterministic behaviour includes:
 
 - positive equity `<$300` resolves to SMALL with no `$100` floor;
 - day-start-equity profile stability;
@@ -368,13 +372,17 @@ Executable Phase-5 behaviour includes:
 - daily lock/manual-reset state;
 - loss streak/cooldown/episode re-entry;
 - capacity/external-exposure checks;
-- broker margin exact authority when supplied, heuristic margin diagnostic otherwise.
+- exact broker margin authority when supplied, heuristic margin diagnostic otherwise;
+- durable risk/cooldown/episode state;
+- centralized execution consumes risk authority without allowing strategy score to bypass it.
 
-Phase 5 still has no broker-write authority.
+Risk modules themselves still contain no raw broker-write authority; irreversible MT5 writes remain confined to the execution boundary.
 
 ## Persistence / replay
 
-Day-start equity, cash-flow adjustments, cycle reference, daily lock/reset/cooldown/loss-streak/episode-reentry state and relevant risk references are durable. Restart/laptop migration must not silently reset them. Phase 6 owns storage/reconstruction.
+Day-start equity, cash-flow adjustments, cycle reference, daily lock/reset/cooldown/loss-streak/episode-reentry state and relevant risk references are durable through the SQLite persistence layer. Restart/laptop migration must not silently reset them.
+
+Phase-10 research/replay can evaluate risk attribution separately from opportunity quality so a safety/risk block is not incorrectly blamed on the strategy. Counterfactual outcomes remain separate from actual broker P/L.
 
 ## Dashboard visibility
 
@@ -398,7 +406,9 @@ Position         0/1
 Decision         PASS / BLOCK / UNKNOWN
 ```
 
-## Tests required
+## Tests required / current evidence
+
+Deterministic coverage includes:
 
 - positive equity below `$100` remains SMALL rather than becoming blocked by profile classification;
 - profile/risk-band/ceiling/daily-lock boundaries;
@@ -419,7 +429,11 @@ Decision         PASS / BLOCK / UNKNOWN
 - one fresh same-episode re-entry maximum;
 - second same-episode loss locks that episode;
 - three consecutive losses trigger minimum 30-minute cooldown;
-- cooldown release requires fresh M15 context, not timer only.
+- cooldown release requires fresh M15 context, not timer only;
+- risk state survives restart;
+- centralized execution gate cannot override a Risk BLOCK/UNKNOWN.
+
+Live broker margin/slippage/commission behaviour still requires controlled DEMO evidence.
 
 ## Open questions
 
