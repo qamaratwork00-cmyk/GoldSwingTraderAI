@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.5-design
+**Version:** 0.6-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -231,6 +231,12 @@ This ledger records accepted/provisional architectural decisions so future imple
 
 **Decision:** If broker minimum volume exceeds the profile hard risk ceiling at the current entry, the current plan is blocked, but the underlying opportunity may remain `ARMED` when the thesis is still valid and a naturally better structural entry could reduce risk. Structural SL is never artificially tightened to make the minimum lot fit.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
+
+## DEC-045 — Preserve useful GoldScalperAI dashboard observability
+
+**Decision:** GoldSwingTraderAI may reorganize and improve the dashboard, but it must preserve useful operator-facing facts from the prior GoldScalperAI dashboard where the data remains meaningful: mode/runtime identity, Bid/Ask, spread, M5 candle timer, concise trend/structure, EMA20/EMA50, RSI, ATR, action/signal and reason, risk/lot, daily P/L/loss-limit visibility, position count/capacity, loss streak, and open-trade entry/SL/TP/objective context. New decision, execution, learning, backup and health panels are additive rather than a reason to remove this useful visibility.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Operator observability that proved useful in the earlier dashboard should survive the new architecture rather than be lost to cosmetic simplification.
 
 ## Change rule
 
