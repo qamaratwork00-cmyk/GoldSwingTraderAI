@@ -1,5 +1,17 @@
 """Durable runtime-state persistence and recovery contracts."""
 
+from goldswingtraderai.persistence.backup import (
+    BACKUP_CATALOG_SCHEMA_VERSION,
+    BackupCatalog,
+    BackupCatalogEntry,
+    BackupCatalogError,
+    BackupPolicy,
+    BackupRunResult,
+    BackupRunStatus,
+    create_backup_if_due,
+    latest_verified_checkpoint,
+    load_backup_catalog,
+)
 from goldswingtraderai.persistence.checkpoint import (
     RUNTIME_CHECKPOINT_SCHEMA_VERSION,
     ExportedRuntimeCheckpoint,
@@ -28,9 +40,16 @@ from goldswingtraderai.persistence.store import (
 )
 
 __all__ = [
+    "BACKUP_CATALOG_SCHEMA_VERSION",
     "DATABASE_SCHEMA_VERSION",
     "RUNTIME_CHECKPOINT_SCHEMA_VERSION",
     "RECORD_SCHEMA_VERSION",
+    "BackupCatalog",
+    "BackupCatalogEntry",
+    "BackupCatalogError",
+    "BackupPolicy",
+    "BackupRunResult",
+    "BackupRunStatus",
     "ExportedRuntimeCheckpoint",
     "ImportedRuntimeCheckpoint",
     "RecoveryBundle",
@@ -45,7 +64,10 @@ __all__ = [
     "StoreSnapshot",
     "StoredEvent",
     "StoredRecord",
+    "create_backup_if_due",
     "export_runtime_checkpoint",
     "import_runtime_checkpoint",
+    "latest_verified_checkpoint",
+    "load_backup_catalog",
     "restore_runtime_checkpoint",
 ]
