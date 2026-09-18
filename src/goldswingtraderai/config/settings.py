@@ -1,8 +1,7 @@
 """Validated runtime settings for GoldSwingTraderAI V1.
 
 Only non-secret configuration belongs here. Authority-bearing credentials must be
-supplied through secure/local mechanisms in the later adapter phase and must not
-be added to committed configuration templates.
+supplied through secure/local mechanisms and must never be committed.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ from dotenv import load_dotenv
 
 
 class ConfigError(ValueError):
-    """Raised when runtime configuration violates a frozen V1 contract."""
+    """Raised when runtime configuration violates a V1 configuration contract."""
 
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
@@ -47,12 +46,16 @@ def _parse_optional_int(name: str, raw: str | None) -> int | None:
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    """Immutable, secret-free V1 runtime settings."""
+    """Immutable, secret-free V1 runtime settings.
+
+    DEMO-only broker-write authority is intentionally not configurable. The
+    positive DEMO guard is a runtime account-verification invariant, implemented
+    at the broker/execution boundary rather than as an environment switch.
+    """
 
     environment: str
     preferred_symbol: str
     symbol_aliases: tuple[str, ...]
-    require_demo_account: bool
     manual_reset_enabled: bool
     state_dir: Path
     log_level: str
@@ -61,10 +64,7 @@ class Settings:
 
     @classmethod
     def from_env(cls, env_file: str | Path | None = ".env") -> "Settings":
-        """Load and validate settings from environment variables.
-
-        Loading `.env` is optional and local-only. Existing process variables win.
-        """
+        """Load and validate non-secret settings from environment variables."""
 
         if env_file is not None:
             load_dotenv(dotenv_path=env_file, override=False)
@@ -73,14 +73,6 @@ class Settings:
         aliases_raw = os.getenv("GSTAI_SYMBOL_ALIASES", "XAUUSDm,XAUUSD")
         aliases = tuple(dict.fromkeys(part.strip() for part in aliases_raw.split(",") if part.strip()))
 
-        require_demo = _parse_bool(
-            "GSTAI_REQUIRE_DEMO", os.getenv("GSTAI_REQUIRE_DEMO", "true")
-        )
-        manual_reset = _parse_bool(
-            "GSTAI_MANUAL_RESET_ENABLED",
-            os.getenv("GSTAI_MANUAL_RESET_ENABLED", "false"),
-        )
-        log_level = os.getenv("GSTAI_LOG_LEVEL", "INFO").strip().upper()
         allowed_server = os.getenv("GSTAI_ALLOWED_SERVER")
         if allowed_server is not None:
             allowed_server = allowed_server.strip() or None
@@ -89,10 +81,12 @@ class Settings:
             environment=os.getenv("GSTAI_ENV", "development").strip() or "development",
             preferred_symbol=preferred_symbol,
             symbol_aliases=aliases,
-            require_demo_account=require_demo,
-            manual_reset_enabled=manual_reset,
+            manual_reset_enabled=_parse_bool(
+                "GSTAI_MANUAL_RESET_ENABLED",
+                os.getenv("GSTAI_MANUAL_RESET_ENABLED", "false"),
+            ),
             state_dir=Path(os.getenv("GSTAI_STATE_DIR", ".state")).expanduser(),
-            log_level=log_level,
+            log_level=os.getenv("GSTAI_LOG_LEVEL", "INFO").strip().upper(),
             allowed_account_login=_parse_optional_int(
                 "GSTAI_ALLOWED_ACCOUNT_LOGIN", os.getenv("GSTAI_ALLOWED_ACCOUNT_LOGIN")
             ),
@@ -102,12 +96,8 @@ class Settings:
         return settings
 
     def validate(self) -> None:
-        """Validate the non-negotiable Phase-1/V1 configuration contract."""
+        """Validate the non-secret Phase-1/V1 configuration contract."""
 
-        if not self.require_demo_account:
-            raise ConfigError(
-                "GSTAI_REQUIRE_DEMO cannot be disabled in V1; positive DEMO verification is required"
-            )
         if not self.preferred_symbol:
             raise ConfigError("GSTAI_PREFERRED_SYMBOL cannot be empty")
         if not self.symbol_aliases:
@@ -126,13 +116,12 @@ class Settings:
         return getattr(logging, self.log_level)
 
     def safe_summary(self) -> dict[str, object]:
-        """Return only fields safe to log or display publicly."""
+        """Return fields that are safe to log or display publicly."""
 
         return {
             "environment": self.environment,
             "preferred_symbol": self.preferred_symbol,
             "symbol_aliases": list(self.symbol_aliases),
-            "require_demo_account": self.require_demo_account,
             "manual_reset_enabled": self.manual_reset_enabled,
             "state_dir": str(self.state_dir),
             "log_level": self.log_level,
