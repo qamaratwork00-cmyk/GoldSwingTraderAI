@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Documentation Standard
 
 **Status:** PROVISIONAL  
-**Version:** 0.3-design  
+**Version:** 0.4-design  
 **Authority:** Documentation placement, ownership, status and change-control rules.
 
 ## 1. Purpose
@@ -12,18 +12,23 @@ Core rule:
 
 > **One behavioural rule has one authoritative home. Other documents link to it; they do not restate a competing version.**
 
-## 2. Repository root and docs-root meta documents
+## 2. Repository root and docs-root primary guides
 
 Repository root is reserved for repository entry/runtime artifacts. `README.md` remains the primary project introduction/navigation file. Future root artifacts such as `CHANGELOG.md`, `VERSION`, release manifests, dependency/runtime files and source folders may exist when implementation begins.
 
 Detailed behavioural documentation belongs under `docs/`.
 
-A small number of **whole-project handoff/meta guides** may live directly in `docs/` rather than a numbered subsystem folder when they coordinate the entire build and are not themselves a topic authority. Current/reserved roles are:
+A small set of **high-visibility whole-project/operator/developer guides** live directly in `docs/` so they can be found without opening numbered subfolders:
 
 - `docs/FINAL_BUILD_PROMPT.md` — final implementation handoff; DRAFT until design freeze.
-- `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` — final build-phase/recovery navigation guide, created at the end of design when the actual phase plan is stable.
+- `docs/USER_MANUAL.md` — authoritative operator/user manual.
+- `docs/SETUP_AND_RUN_GUIDE.md` — authoritative installation/startup/shutdown/migration/recovery guide.
+- `docs/CODER_GUIDE.md` — authoritative feature-oriented developer map.
+- `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` — final large-phase build/recovery navigation guide, created at the end of design when the actual phase plan is stable.
 
-These meta guides summarize/navigate authoritative contracts; they do not create competing trading, risk, execution or research rules.
+The numbered folders still own the relevant **domain category**, but the three high-use User/Setup/Coder guides are intentionally surfaced at docs root. Their previous subfolder paths may remain as lightweight compatibility redirects only; behavioural content must not be maintained in two places.
+
+These root-level guides summarize/navigate authoritative subsystem contracts where appropriate; they do not create competing trading, risk, execution or research rules.
 
 ## 3. Folder ownership
 
@@ -88,12 +93,7 @@ There is intentionally no separate authoritative `OFFLINE_RESEARCH.md`; offline/
 Research cannot silently redefine production or hard-risk semantics.
 
 ### `docs/50-operator/`
-Owns human-facing usage:
-
-- dashboard/UX;
-- operator controls;
-- user manual;
-- setup/run/migration/recovery guide.
+Owns the operator-domain supporting material, especially dashboard/UX and operator-control semantics. The primary high-use `USER_MANUAL.md` and `SETUP_AND_RUN_GUIDE.md` are surfaced directly in `docs/` for convenience while remaining operator-domain documents.
 
 Operator docs explain authoritative behaviour but do not redefine it.
 
@@ -101,13 +101,12 @@ Operator docs explain authoritative behaviour but do not redefine it.
 Owns implementation/developer/diagnostic/release maps:
 
 - module structure;
-- coder guide;
 - system health/diagnostics aggregation;
 - test/verification strategy;
 - release checklist;
 - final release audit.
 
-The Coder Guide is feature-oriented. Module Structure is file/module-oriented. System Health explains fault aggregation, not the underlying risk/execution rules.
+The primary high-use `CODER_GUIDE.md` is surfaced directly in `docs/` for convenience while remaining an engineering-domain document. The Coder Guide is feature-oriented; Module Structure is file/module-oriented. System Health explains fault aggregation, not the underlying risk/execution rules.
 
 ### `docs/90-governance/`
 Owns design governance:
@@ -117,7 +116,7 @@ Owns design governance:
 - this documentation standard;
 - future change-control records if needed.
 
-Whole-project handoff/meta guides do **not** live here; they live directly in `docs/`.
+Whole-project handoff/high-use guides do **not** live here; they live directly in `docs/`.
 
 ## 4. Status lifecycle
 
@@ -182,6 +181,7 @@ Examples:
 - Final broker-write permission/one-shot semantics belong in `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`; Coder/Module docs only map the code owner.
 - `Why no trade?` decision attribution belongs in `SCORING_AND_DECISION_FUSION.md` plus the blocking authority; `SYSTEM_HEALTH_AND_DIAGNOSTICS.md` owns fault aggregation, not a competing decision engine.
 - Exact promotion chronology belongs in `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md`; engineering docs map its implementation path.
+- Compatibility redirect files must contain only a pointer to the new authoritative path, not a second behavioural copy.
 
 If two documents contain competing detailed versions of the same rule, that is a documentation defect and must be resolved before implementation.
 
@@ -191,9 +191,9 @@ Use relative repository links wherever possible. A supporting doc should link to
 
 Examples:
 
-> Daily loss calculation/reset-reference semantics are defined by `../30-risk-execution/RISK_CONTRACT.md`.
+> Daily loss calculation/reset-reference semantics are defined by `30-risk-execution/RISK_CONTRACT.md`.
 
-> Hard news permission is defined by `../30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` from event facts supplied by `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`.
+> Hard news permission is defined by `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` from event facts supplied by `10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`.
 
 ## 8. Design decisions and open questions
 
@@ -216,7 +216,7 @@ When code ownership/behaviour changes, synchronize as applicable:
 
 - authoritative topic doc;
 - `DESIGN_DECISIONS.md` / `OPEN_QUESTIONS.md`;
-- `MODULE_STRUCTURE.md`;
+- `60-engineering/MODULE_STRUCTURE.md`;
 - `CODER_GUIDE.md`;
 - operator docs;
 - test/release docs;
