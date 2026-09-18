@@ -1,145 +1,211 @@
 # GoldSwingTraderAI — User Manual
 
 **Status:** DRAFT  
-**Version:** 0.2-design  
+**Version:** 0.4-design  
 **Authority:** Human-facing explanation of normal operation and operator actions.  
 **Depends on:** `50-operator/DASHBOARD_AND_UX.md`, `SETUP_AND_RUN_GUIDE.md`
 
 ## Purpose
 
-This manual explains how to interpret and operate the bot. It does not redefine trading logic; authoritative subsystem docs own behaviour.
+This manual explains how to operate and interpret GoldSwingTraderAI. It does not redefine trading logic; authoritative subsystem documents own behaviour.
 
 ## Normal daily use
 
-Typical operation should be simple:
-
 ```text
-1. Open MT5 and verify the intended account/environment.
+1. Open MT5 and connect the intended DEMO account.
 2. Start GoldSwingTraderAI.
-3. Wait for startup checks and broker reconciliation.
-4. Confirm dashboard shows the expected runtime role and readiness.
+3. Let startup validation and broker reconciliation complete.
+4. Confirm DEMO guard, controller role and execution readiness.
 5. Let the bot analyze/manage automatically.
-6. Use safe shutdown when stopping the process.
+6. Use governed safe shutdown when stopping it.
 ```
 
-Normal operation should not require editing code or tuning scores manually.
+Normal use should not require editing code or manually tuning scores.
 
-## Reading the main status
+## V1 DEMO guard
 
-Common meanings:
+Broker writes are enabled only when the connected MT5 account is positively verified as DEMO and every other required authority passes.
 
-- `🟢 ENTER BUY/SELL` — market/timing/plan/risk/safety/execution authorities have passed for the current governed action;
-- `🟡 WAIT` — the thesis may remain valid but current entry/timing is not good enough;
-- `MISSED` — an executable opportunity window passed without justified fill;
-- `INVALID` — the trade thesis itself no longer survives;
-- `🔴 BLOCKED` — a hard risk/news/execution/system authority prevents action;
-- `📈 OPEN TRADE` — Trade Manager owns ongoing position-management decisions.
+Typical dashboard state:
 
-Always read the reason code/human explanation rather than interpreting status color alone.
+```text
+Environment       DEMO ✅ VERIFIED
+DEMO Guard        ✅ PASS
+Controller        ⚡ PRIMARY
+Execution         ✅ ALLOW
+```
+
+If DEMO status cannot be verified, the DEMO guard does not pass and broker-write permission is not granted. V1 does not define a separate REAL authorization workflow.
+
+## Main status meanings
+
+- `🟢 ENTER BUY/SELL` — current market/timing/plan/risk/safety/execution path passed;
+- `🟡 WAIT` — thesis may remain valid but current entry/timing is not acceptable yet;
+- `MISSED` — executable opportunity window passed without justified fill;
+- `INVALID` — thesis no longer survives;
+- `🔴 BLOCKED` — a hard authority prevents action;
+- `📈 OPEN TRADE` — Trade Manager owns the managed position.
+
+Always read the reason code and short explanation rather than interpreting color alone.
 
 ## Why no trade?
 
-The bot should tell the operator whether the trade stopped at market opportunity, entry timing, Trade Plan, news, risk or execution.
-
 Examples:
 
-- `ENTRY_EXTENDED` — setup remains valid but price is too late/extended;
-- `TARGET_ROOM_POOR` — plan economics/location are poor;
-- `NEWS_BLACKOUT` — expected safety block;
-- `MIN_LOT_UNAFFORDABLE` — minimum broker volume exceeds approved risk;
-- `DATA_STALE` — system/data problem requiring safe block.
+- `ENTRY_EXTENDED` — valid idea, poor current entry;
+- `TARGET_ROOM_POOR` — structural reward/path is insufficient;
+- `NEWS_BLACKOUT` — scheduled safety window;
+- `SESSION_PRE_CLOSE` — scheduled XAU closure is approaching;
+- `MIN_LOT_UNAFFORDABLE` — broker minimum volume makes current structural plan too risky;
+- `SPREAD_TOO_HIGH` — current execution friction is excessive;
+- `PRICE_DRIFT` — price moved too far from approved entry reference;
+- `POSITION_CAPACITY_FULL` — bot already has its one V1 Gold risk position;
+- `EXTERNAL_GOLD_EXPOSURE` — manual/foreign Gold exposure exists;
+- `DATA_STALE` — required market truth is stale/invalid;
+- `ANOTHER_ACTIVE_CONTROLLER` — another instance owns broker-write authority.
 
-Do not treat every non-trade as a fault.
+A non-trade is not automatically a fault.
 
-## Central Execution Permission
+## Risk profile and daily safety
 
-All final bot-managed MT5 create/modify/close actions pass through one centralized Execution Permission Gate.
-
-The dashboard should show its result clearly, for example:
-
-```text
-⚙️ EXECUTION
-Environment       DEMO ✅ AUTHORIZED
-Controller        ⚡ PRIMARY
-Permission        ✅ ALLOW
-```
-
-or:
+Initial V1 profiles:
 
 ```text
-Environment       REAL
-Permission        🔴 BLOCK
-Reason            ENVIRONMENT_NOT_AUTHORIZED
-Policy            DEMO-FIRST
+SMALL   $100–$299
+MEDIUM  $300–$999
+NORMAL  $1,000+
 ```
 
-The current project release is DEMO-first. This does not mean the architecture can never trade a real account. A future explicitly approved REAL policy is intended to use the same strategy/risk/execution gate and broker path.
+The dashboard should show profile, proposed lot, all-in risk, current risk band, hard entry ceiling, daily Account Safety P/L and remaining loss budget.
 
-Normal safety blockers such as daily loss, news, spread, price drift, min-lot risk, margin, order ambiguity or another active controller apply to the approved execution environment and are not hidden permanent LIVE blockers.
+Daily safety accounting includes floating account drawdown through verified broker equity. Deposits/withdrawals and identifiable non-trading balance changes are adjusted out of trading P/L accounting.
 
-## Risk states
+## Daily loss lock and manual reset
 
-- `NORMAL` — risk system permits evaluation;
-- `LOSS_LOCKED` — daily loss budget exhausted; no new entries;
-- `COOLDOWN` — temporary churn/adverse-behaviour pause according to frozen policy;
-- `BLOCKED` — critical financial/system truth is unavailable/unsafe.
+When the active daily loss limit is exhausted:
 
-Open-trade management remains active where safely possible.
+```text
+LOSS_LOCKED
+→ no new entries/re-entry/add-ons
+→ open managed trade still receives safe Trade Manager handling
+```
 
-## Manual loss reset
+Manual loss reset is **OFF by default**. If deliberately enabled, V1 allows maximum one governed `R,R` reset per UTC risk day from `LOSS_LOCKED`. It does not erase cumulative day losses/history and cannot bypass unrelated risk/data/news/account/execution blocks.
 
-If available under the frozen Risk Contract, manual reset is a deliberate governed action. It does not delete today's broker loss and cannot bypass technical/account/order/execution blocks.
+## Loss streak and cooldown
 
-## Open trade
+One ordinary losing trade does not trigger a global cooldown.
 
-When a managed trade is open, read:
+V1 allows at most one genuinely fresh re-entry in the same Market Episode. If that re-entry also loses, that episode is locked.
 
-- strategy/episode identity;
-- entry/current price;
-- original/current SL;
-- current R, MFE and MAE;
-- primary/expansion objectives;
-- Continuation/Reversal state;
-- Trade Manager action and reason.
+Three consecutive closed bot losses trigger at least a 30-minute cooldown. Time alone does not release it; fresh completed M15 context, a fresh valid opportunity and healthy execution state are also required.
 
-Small opposite candles or a temporary pullback do not automatically mean the bot should exit.
+## Position capacity
 
-## Learning
+V1 uses Gold position capacity `0/1`.
 
-The Learning panel may show StrategyMemory, Entry Learning, Exit Learning and Champion/Challenger status.
+- one bot-managed independently risk-bearing Gold position maximum;
+- opposite opportunity first becomes Trade Manager reversal/exit evidence;
+- no automatic hedge/second independent Gold position;
+- manual/foreign/unknown-owner Gold exposure is never managed as bot-owned and prevents a fresh bot Gold entry until reconciled clear.
 
-Learning does not immediately rewrite live rules after a few trades. Proposed improvements go through research, validation, holdout, Shadow and DEMO Canary before production promotion.
+## Targets and large-move behaviour
 
-## Autonomous strategies
+The bot does **not** use fixed 100/200/300-pip take profits.
 
-Autonomous candidates are declarative research hypotheses. They do not directly send orders or self-promote. Their status/history survives restart and machine migration.
+It tracks:
 
-## System Health
+- Immediate Obstacle;
+- Primary Structural Target;
+- Expansion Target;
+- Runner Objective.
 
-A normal trading decision such as `WAIT` or an expected policy block such as `NEWS_BLACKOUT` is not automatically a system problem.
+Primary target is normally a management checkpoint, not an automatic full exit. A valid Expansion Target is normally the initial broker TP. Runner extension must be earned through fresh continuation/acceptance evidence and a new structural/liquidity objective.
 
-System Health reports actual operational issues such as stale data, account mismatch, order ambiguity, state corruption, provider failure or backup/restore problems.
+V1 remains fully functional with one indivisible `0.01` position; partial profit is not required.
 
-Follow the dashboard's `Trading Impact`, `Recovery` and `Action Required` fields.
+## Open-trade actions
+
+The Trade Manager selects among:
+
+```text
+HOLD
+PROTECT
+TRAIL
+RUNNER
+EXIT
+```
+
+Small opposite candles or a small floating profit do not automatically mean exit. Protection/trailing should follow proven structure and may tighten risk, but must not intentionally widen beyond original approved risk.
+
+## Scheduled market close
+
+V1 intentionally flattens bot-managed Gold before known XAU closure/reopen gap risk.
+
+```text
+Daily break:
+T-20m no new entry
+T-10m mandatory flatten
+
+Weekend:
+T-60m no new entry
+T-30m mandatory flatten
+```
+
+After daily reopen, at least one clean completed M5 plus normalized conditions is required. Weekend reopen requires gap assessment, normalized conditions and at least two clean completed M5 candles.
+
+Runner status does not override mandatory PRE_CLOSE flatten.
+
+## News safety
+
+Initial V1 new-entry windows:
+
+```text
+TIER 1 CRITICAL  -15/+15 min
+TIER 2 HIGH      -5/+5 min
+TIER 3 CONTEXT   no automatic hard blackout
+```
+
+Scheduled news alone does not automatically close an existing managed trade. Severe post-news dislocation keeps entry paused until execution conditions normalize and at least one clean completed M5 is available.
+
+## Spread and price drift
+
+The bot evaluates spread dynamically against a healthy broker/symbol baseline. Elevated spread may still be tradable after full revalidation; clearly excessive spread prevents the current entry.
+
+Price movement away from the approved entry reference is also normalized by the planned structural stop distance. Large adverse drift prevents the current intent rather than chasing the market.
 
 ## Runtime roles
 
-- `PRIMARY EXECUTOR` — the only active broker-write controller for the managed account/symbol;
-- `OBSERVER` — analysis/dashboard with broker writes disabled;
-- `RESEARCH` — replay/experiment use with no production broker writes.
+- `PRIMARY` — the only instance with current governed broker-write authority;
+- `STANDBY` — may take over only after valid lease expiry and full reconciliation;
+- `OBSERVER` — analysis/dashboard, no broker writes;
+- `RESEARCH` — replay/experiments, no production broker writes;
+- `RECOVERING/RECONCILING` — ownership may exist but broker writes are not ready yet.
 
-A second laptop should not independently execute against the same managed account/symbol.
+A second laptop must not independently execute while another valid PRIMARY exists.
+
+## System Health
+
+Normal states such as `WAIT`, `NEWS_BLACKOUT` or `LOSS_LOCKED` are not automatically technical faults.
+
+System Health should separately report operational issues such as stale data, account mismatch, unresolved broker acknowledgement, controller coordination failure, state corruption, provider failure or backup/restore problems.
+
+## Learning and research
+
+Learning measures taken, missed, blocked/rejected and invalidated opportunities plus MFE/MAE, entry quality, realized R and move-capture efficiency.
+
+StrategyMemory and autonomous candidates cannot immediately rewrite production after a few trades. Candidate changes move through governed research/validation/promotion stages and cannot bypass risk/execution authority.
 
 ## Backups and laptop change
 
-Strategies, learning, autonomous candidates and research/promotion history should be recoverable from the project's backed-up state. Financial-authority credentials are configured separately and must not be committed publicly.
+Source, docs, strategies, learning/research state and recovery intelligence may be backed up publicly according to project policy. Financial-authority credentials/keys/tokens must remain outside public backups.
 
-After restore on another laptop, the bot must reconcile current broker positions/orders/deals before resuming new entries.
+After restore on another laptop, the bot must validate state, acquire controller ownership and reconcile current MT5 positions/orders/deals before new entries.
 
 ## Do not manually edit critical state
 
-Do not manually delete/edit order lifecycle, risk state, Strategy Registry, promotion history or learning databases to clear an error. Use documented recovery/reset tools when implemented.
+Do not delete/edit order lifecycle, risk state, Strategy Registry, promotion history or critical trade state merely to clear an error. Use governed recovery/reset workflows once implemented.
 
 ## Project status caveat
 
-This manual remains DRAFT during design. Exact commands, keys, launcher names and screenshots will be added only after the corresponding implementation exists and has been verified.
+This manual remains DRAFT until actual commands, launcher names, keyboard timing, screenshots and implemented dashboard behaviour exist and are verified.
