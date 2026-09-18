@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
-**Version:** 2.3-implementation-map  
+**Version:** 2.4-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -12,7 +12,7 @@ Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `6
 
 ## Current checkpoint — 2026-09-18
 
-Deterministic core implementation exists through current **Phase-10 research tooling including portable historical inputs, read-only MT5 acquisition, immutable evidence packages and verified historical PRE_CLOSE/session-policy replay integration**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+Deterministic core exists through Phase 10 plus the first **Phase-11 portable runtime checkpoint/fresh-database restore foundation**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
 
 ## Implemented phase map
 
@@ -65,61 +65,65 @@ research/invention.py
 research/promotion.py
 ```
 
-Current research data/evidence chain:
+Current research chain:
 
 ```text
-existing MT5Reader or verified offline dataset
-→ exact historical acquisition
-→ portable dataset bundle
-→ dataset_sha256
+verified history
+→ portable dataset identity
 → chronological production replay
 → optional verified historical session schedule
-→ ablation / outcomes / manager / PRE_CLOSE / stress / walk-forward
+→ outcomes / manager / PRE_CLOSE / stress / walk-forward
 → ResearchEvidenceManifest
 → immutable EvidencePackage
-→ metrics / learning / discovery / promotion evidence
+→ governed learning/discovery/promotion evidence
 ```
 
-### `research/datasets.py`
-Portable public-safe bundle with `dataset_manifest.json` + timeframe CSVs. Hash/tamper verified, optional M1 preserved, login/server excluded, destination never overwritten.
-
-### `research/acquisition.py`
-Reuses `MT5Reader`; no duplicate raw MetaTrader5 client. Requires exact declared H4/H1/M15/M5 history counts, supports optional M1, rejects partial samples, derives median positive historical M5 spread or requires explicit override, and can export directly to portable bundle.
-
-### `research/evidence.py`
-Owns content-addressed dataset identity, input fingerprint and complete evidence-manifest hash. Secret-shaped result/config keys are rejected.
-
-### `research/packages.py`
-Owns immutable evidence persistence without copying large historical datasets into every result package.
-
-Package:
+### Phase 11 — Backup / Recovery — foundation implemented
 
 ```text
-package_manifest.json
-evidence_manifest.json
+persistence/store.py
+persistence/checkpoint.py
+security/financial_secrets.py
 ```
 
-It binds `dataset_sha256`, optional verified dataset-bundle manifest hash, evidence input fingerprint, evidence manifest hash, evidence-file SHA and package SHA. Import recomputes/verifies all relevant identities. Existing destinations are never overwritten.
-
-Do not add dataset path or mutable filename as authority. A dataset is paired by content hash.
-
-### `research/session_history.py`
-Owns explicit historical broker-session facts for replay. It does **not** guess session times.
-
-Required inputs:
+Portable runtime checkpoint:
 
 ```text
-source_label
-source_version
-coverage_start_utc
-coverage_end_utc
-chronological non-overlapping tradeable intervals
-closure kind: DAILY or WEEKEND
+checkpoint_manifest.json
+records.jsonl
+events.jsonl
 ```
 
-`HistoricalSessionSchedule.market_permission_at()` delegates to production `risk.permissions.evaluate_market_permission()`, so frozen DAILY `T-20/T-10` and WEEKEND `T-60/T-30` rules stay single-source. Within verified coverage but outside an interval the market is CLOSED; outside verified coverage the module raises `HistoricalSessionCoverageError`.
+`StateStore` now exports deterministic integrity-checked `StoreSnapshot` objects containing both current records and append-only events. Record/event timestamps, checksums and event IDs are preserved. `integrity_check()` validates event history as well as current state.
 
-`research/management_replay.py` accepts an optional `session_schedule`. When supplied, each completed M5 event obtains production session permission and passes mandatory flatten into the real Trade Manager. A schedule saying CLOSED while replay contains a normal completed event is treated as an explicit research-data/schedule mismatch, not silently ignored.
+`persistence/checkpoint.py` owns portable checkpoint export/import/restore:
+
+```text
+source StateStore integrity
+→ StoreSnapshot
+→ structured financial-secret scan
+→ canonical JSONL records/events
+→ file hashes + checkpoint manifest hash
+→ immutable write-new checkpoint
+```
+
+Restore:
+
+```text
+verify checkpoint completely
+→ require NEW destination DB
+→ restore into temporary StateStore
+→ integrity-check + WAL checkpoint
+→ atomic move
+→ reopen + verify
+→ broker_reconciliation_required=True
+```
+
+Never merge a stale checkpoint into an existing live DB. Never treat restored OPEN/intent/trade state as broker truth.
+
+### Shared security owner
+
+`security/financial_secrets.py` owns reusable financial-authority secret detection. Repository source scanning remains fixture-safe text scanning; exported structured state receives stricter recursive key/value inspection. Checkpoint state containing passwords/tokens/private/recovery keys is blocked with `FINANCIAL_SECRET_DETECTED`.
 
 ### Discovery / promotion
 Eligible evidence must create a candidate or explicit suppression reason. Candidate recipes remain declarative, final holdout is one-shot, self-promotion/broker authority is prohibited.
@@ -139,12 +143,14 @@ tests/test_research_datasets.py
 tests/test_research_acquisition.py
 tests/test_research_packages.py
 tests/test_research_session_history.py
+tests/test_runtime_checkpoint.py
+tests/test_persistence_recovery.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Latest verified historical-session checkpoint: **189 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Latest verified Phase-11 checkpoint foundation: **195 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Feature ownership index
 
@@ -154,13 +160,14 @@ Latest verified historical-session checkpoint: **189 tests PASS**, Ruff PASS and
 | Technical/confluence | `10-market-intelligence/*` | `intelligence/` + `strategies/confluence.py` |
 | Strategy/decision/Trade Plan | `20-trading-decisions/*` | `strategies/`, `decisions/` |
 | Risk/session/news | `30-risk-execution/*` | `risk/` |
-| Runtime persistence | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/` |
+| Runtime persistence/backup | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/store.py`, `runtime_state.py`, `checkpoint.py` |
+| Financial-secret detection | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` + security policy | `security/financial_secrets.py` |
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/` |
-| Research validation/data/evidence/session | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `session_history.py`, `stress.py`, `validation.py`, `evidence.py`, `datasets.py`, `acquisition.py`, `packages.py`, `metrics.py` |
-| Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `episode_journal.py`, `discovery.py`, `invention.py` |
-| Promotion | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `promotion.py` |
+| Research validation/data/evidence/session | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/` |
+| Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `research/discovery.py`, `invention.py`, `episode_journal.py` |
+| Promotion | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `research/promotion.py` |
 
 ## Coding invariants
 
@@ -173,21 +180,22 @@ Latest verified historical-session checkpoint: **189 tests PASS**, Ruff PASS and
 - any positive day-start equity below `$300` is SMALL;
 - partial historical samples are not silently accepted;
 - missing historical spread is explicit, never hidden zero/live fallback;
-- historical broker session times are explicit/versioned; never inferred from convenience defaults;
-- session-aware replay reuses production session permission rather than duplicating thresholds;
+- historical broker session times are explicit/versioned;
 - mutable filenames/paths never replace content identity;
-- dataset/evidence packages are write-new and integrity checked;
-- evidence packaging does not grant trading or promotion authority;
-- financial-authority credentials never enter tracked/public state.
+- runtime checkpoints are canonical, write-new and integrity checked;
+- restore targets a new local DB; no stale-state merge into live DB;
+- restored state never grants broker authority before reconciliation;
+- financial-authority credentials never enter tracked/public checkpoint state.
 
 ## Current integration gaps / next work
 
-1. controlled Windows/MT5 real-history acquisition and source/version evidence;
-2. trustworthy versioned real broker-session history covering research periods;
-3. broad real-XAU walk-forward/independent-validation evidence using immutable evidence packages;
-4. dashboard runtime DTO including research/discovery health;
-5. Phase 11 runtime-state backup/checkpoint + fresh-machine recovery + shared cross-laptop controller proof;
-6. Phase 12 final persistent runtime orchestrator + controlled Windows/MT5 DEMO certification;
-7. final docs/release audit based on actual evidence.
+1. Phase 11 automatic checkpoint cadence/retention and public-safe publication/catalog policy;
+2. real fresh-machine restore + MT5 broker reconciliation drill;
+3. production shared cross-laptop atomic controller backend and failover proof;
+4. controlled Windows/MT5 real-history acquisition + real broker-session evidence;
+5. broad real-XAU walk-forward/holdout/DEMO evidence;
+6. dashboard runtime DTO including backup/recovery + research/discovery health;
+7. Phase 12 final persistent runtime orchestrator + controlled Windows/MT5 DEMO certification;
+8. final docs/release audit based on actual evidence.
 
 The current `app/main.py` remains a read-only readiness launcher until final runtime orchestration.
