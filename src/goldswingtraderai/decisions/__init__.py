@@ -1,4 +1,4 @@
-"""Analytical decision fusion, opportunity lifecycle and entry timing."""
+"""Analytical decision, opportunity, timing and structural Trade Plan contracts."""
 
 from goldswingtraderai.decisions.fusion import DecisionBoard, FusionConfig, ThesisReport, fuse_decision
 from goldswingtraderai.decisions.opportunity import (
@@ -19,6 +19,16 @@ from goldswingtraderai.decisions.timing import (
     TimingAction,
     evaluate_entry_timing,
 )
+from goldswingtraderai.decisions.trade_plan import (
+    PlanState,
+    PlanTarget,
+    RRClass,
+    StopQuality,
+    TargetRole,
+    TradePlan,
+    TradePlanConfig,
+    build_trade_plan,
+)
 
 __all__ = [
     "DecisionBoard",
@@ -29,9 +39,17 @@ __all__ = [
     "FusionConfig",
     "Opportunity",
     "OpportunityConfig",
+    "PlanState",
+    "PlanTarget",
+    "RRClass",
+    "StopQuality",
+    "TargetRole",
     "ThesisReport",
     "TimingAction",
+    "TradePlan",
+    "TradePlanConfig",
     "build_decision_snapshot",
+    "build_trade_plan",
     "evaluate_entry_timing",
     "fuse_decision",
     "rearm_missed_opportunity",
