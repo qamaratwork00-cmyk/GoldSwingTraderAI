@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Execution and Broker Safety
 
 **Status:** PROVISIONAL  
-**Version:** 0.3-design  
+**Version:** 0.4-design  
 **Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, ownership and reconciliation.  
 **Depends on:** `RISK_CONTRACT.md`, `SESSION_AND_RISK_STATE_MACHINE.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -31,9 +31,7 @@ No market score can bypass this path.
 
 All final permission to create, modify or close a bot-managed broker position must pass through **one centralized execution-permission boundary**.
 
-The individual facts and policies remain owned by their proper subsystems. For example, Risk owns monetary affordability, Session/Risk State owns loss-lock state, News Safety owns event permission, and Execution owns account/quote/order integrity. However, the final decision about whether an irreversible broker write may proceed must be collected in one place rather than scattered across strategies, dashboard code or random MT5 call sites.
-
-Conceptually:
+Individual facts/policies remain owned by their proper subsystems. Final irreversible-write permission is collected in one place rather than scattered across strategies, dashboard code or random MT5 call sites.
 
 ```text
 Account / environment policy  ─┐
@@ -45,98 +43,150 @@ Order/reconciliation state     ┤          └─ UNKNOWN → BLOCK
 Controller ownership           ┘
 ```
 
-The gate should expose at least:
-
-- final `ALLOW` / `BLOCK` / `UNKNOWN`;
-- primary blocker;
-- secondary blockers;
-- which authorities passed, blocked or were not reached;
-- whether the underlying trade would otherwise have been executable;
-- environment mode such as DEMO-safe or future explicitly approved REAL execution.
+The gate exposes final `ALLOW/BLOCK/UNKNOWN`, primary/secondary blockers, authority trace, `Would Otherwise Trade` where meaningful, and environment authorization.
 
 ### Centralization invariant
 
-There must not be multiple independent pieces of code that can each directly decide to call `order_send`, modify a stop or close a position. All such broker writes must route through the governed execution boundary.
+There must not be multiple independent pieces of code that can directly decide to call `order_send`, modify a stop or close a position. All broker writes route through this governed boundary.
 
-Likewise, DEMO/REAL policy must not be implemented as scattered checks such as `if demo:` in several strategy files. It is an explicit environment permission supplied to the centralized gate.
-
-This centralization is intended to make the safety model easy to audit, test, explain on the dashboard and demonstrate to another developer without searching the whole codebase.
+DEMO/REAL policy is also resolved here rather than through scattered `if demo` checks.
 
 ## Account identity pinning
 
-At startup the system should verify and pin intended broker identity facts such as:
+At startup verify/pin intended broker identity facts such as login/account identifier, server, account mode/type, currency and trade permissions.
 
-- login/account identifier;
-- server;
-- account mode/type;
-- currency;
-- trade permissions.
-
-Every irreversible write must verify the currently connected account still matches the intended/pinned identity.
-
-Runtime account change produces `ACCOUNT_IDENTITY_MISMATCH` and blocks new writes until safely resolved.
+Every irreversible write verifies that the currently connected account still matches intended identity. Runtime mismatch produces `ACCOUNT_IDENTITY_MISMATCH` and blocks writes until resolved.
 
 ## DEMO-first policy
 
-Initial implementation/release is intended for verified DEMO execution. A real account connection must not silently gain production broker-write authority unless a later explicit frozen release policy allows it.
+Initial release authorizes verified DEMO execution. A real account connection does not silently gain write authority unless a later explicit frozen release policy allows it.
 
-This is a development/release safeguard, **not a permanent architectural prohibition on future real-account execution**. A future approved REAL mode should use the same centralized permission gate and the same ordinary safety checks rather than a second execution path.
+This is a release safeguard, not a permanent architectural prohibition. Future approved REAL uses the same permission gate and ordinary safety checks.
 
 ## Symbol resolution and broker specs
 
-The adapter should resolve the intended Gold instrument and verify at least:
+Resolve intended Gold instrument and verify at least symbol existence/visibility, trade mode, digits/point/tick size, tick value/contract size, min/max/step volume, stops/freeze levels and supported filling modes.
 
-- symbol existence/visibility;
-- trade mode;
-- digits/point/tick size;
-- tick value/contract size;
-- min/max/step volume;
-- stops/freeze levels;
-- supported filling modes.
-
-Symbol specs are broker facts. Unexpected material spec changes require revalidation before new writes.
+Material broker-spec changes require revalidation before new writes.
 
 ## Fresh executable quote
 
-Immediately before a market order, the system must verify fresh Bid/Ask and correct executable side:
+Immediately before a market order verify fresh Bid/Ask and correct executable side:
 
 - BUY uses Ask-side execution context;
 - SELL uses Bid-side execution context.
 
-Stale/unknown quote blocks submission without invalidating the underlying opportunity automatically.
+Stale/unknown quote blocks submission without automatically invalidating the underlying opportunity.
 
-## Price drift and fresh plan revalidation
+## Dynamic spread policy — V1 frozen initial rule
 
-Before send, fresh quote must be checked against the approved plan for:
+Spread protection must be **dynamic**, not one hard-coded dollar/point number, because Gold spread differs by broker, session and market state.
 
-- price drift;
-- current monetary risk;
-- target room/RR;
-- extension/chase;
-- stop geometry;
-- spread.
+Maintain a `HealthySpreadBaseline` for the verified broker/symbol using recent fresh quote observations collected only from healthy/open conditions. News blackout spikes, reopen dislocation, stale quotes and known abnormal periods must not contaminate the baseline.
 
-If the plan materially degrades, return to WAIT/DEGRADED rather than chase.
+A persisted recent healthy baseline may bootstrap restart/reopen; otherwise the system remains in warmup until enough valid observations exist. Exact sampling window/count is an implementation detail, but baseline quality must be testable and visible.
 
-## Spread and execution quality
+Define:
 
-Analysis-time spread is descriptive. Immediate pre-send spread is execution authority. Excessive spread can block a submission while preserving the setup.
+```text
+SpreadRatio = CurrentExecutableSpread / HealthySpreadBaseline
+```
 
-Exact thresholds remain open/calibrated.
+Initial V1 classes:
+
+```text
+SpreadRatio <= 1.50
+→ NORMAL
+
+>1.50 and <=2.25
+→ ELEVATED
+→ not an automatic block
+→ full risk/target-room/entry revalidation required
+
+>2.25
+→ BLOCK current entry
+→ SPREAD_TOO_HIGH
+```
+
+Independent geometry guard:
+
+```text
+Current spread > 25% of approved entry-to-structural-SL price distance
+→ BLOCK current entry
+```
+
+This prevents an unusually tight setup from paying excessive friction even when a rolling baseline is itself elevated.
+
+An ELEVATED spread may still execute only if:
+
+- all-in monetary risk remains within the active Risk Contract band/ceiling;
+- structural SL remains valid;
+- target room/RR remains acceptable under the Trade Plan;
+- quote freshness and other execution checks pass.
+
+If spread blocks the current entry, the opportunity may remain `ARMED/WAIT` rather than being invalidated.
+
+Reason codes:
+
+```text
+SPREAD_ELEVATED
+SPREAD_TOO_HIGH
+SPREAD_CONTEXT_UNKNOWN
+```
+
+A quoted spread such as `$0.26` is treated as price distance and converted through broker symbol facts where monetary effect is required.
+
+## Price drift and fresh-plan revalidation — V1 frozen initial rule
+
+Price drift is measured from the `ApprovedEntryReference` to the fresh executable quote on the correct side immediately before send.
+
+Use the approved original entry-to-structural-SL **price distance** as the normalization base.
+
+For **adverse drift**:
+
+```text
+<= 10% of planned stop distance
+→ NORMAL REVALIDATION
+→ may execute if all checks still pass
+
+>10% to <=20%
+→ PRICE_DRIFT_ELEVATED
+→ full Trade Plan + Risk + target-room + chase revalidation
+→ may still execute if the plan remains genuinely valid
+
+>20%
+→ BLOCK current Execution Intent
+→ PRICE_DRIFT
+→ return opportunity to WAIT/rebuild from current market if thesis survives
+```
+
+This avoids both tiny-tick overblocking and uncontrolled chasing.
+
+A favorable price move is not automatically rejected, but the system must recalculate structural geometry, risk and target room from the fresh executable quote before send.
+
+Regardless of percentage band, block the current plan if fresh drift causes any of the following:
+
+- actual all-in risk exceeds the profile hard ceiling;
+- broker stop geometry becomes invalid;
+- target room/RR becomes unacceptable under Trade Plan authority;
+- Entry Timing classifies the fresh quote as chased/severely extended;
+- structural thesis/invalidation changes materially.
+
+Execution does not silently move the structural SL to compensate for drift.
 
 ## Stop/TP geometry
 
 Broker-normalized SL/TP must satisfy direction, tick/digit, minimum-stop and freeze constraints.
 
-Harmless rounding is allowed. A broker constraint that materially changes structural intent makes the plan unexecutable rather than silently moving the stop/target.
+Harmless rounding is allowed. A broker constraint that materially changes structural intent makes the plan unexecutable rather than silently moving stop/target.
 
 ## Volume and margin
 
-Execution revalidates the Risk-approved volume against current broker specs and fresh margin/account state. It may block due to changed facts but must not improvise a new volume or risk policy.
+Execution revalidates Risk-approved volume against current broker specs and fresh margin/account state. It may block due to changed facts but must not improvise new volume/risk policy.
 
 ## Persist intent before send
 
-Before the irreversible submit, durable state must contain at least:
+Before irreversible submit, durable state contains at least:
 
 - Execution Intent ID;
 - Decision/Opportunity/Episode IDs;
@@ -150,11 +200,7 @@ Before the irreversible submit, durable state must contain at least:
 - timestamp;
 - lifecycle state such as `SUBMITTING`.
 
-This allows safe crash recovery.
-
 ## Order lifecycle
-
-Provisional lifecycle:
 
 ```text
 CREATED
@@ -165,8 +211,6 @@ SUBMITTING
 └─ FAILED
 ```
 
-Verified accepted intent later maps into the managed open-position lifecycle.
-
 ## One-shot submission invariant
 
 For one approved Execution Intent ID, there is at most **one irreversible `order_send` attempt** until reconciliation proves the prior attempt did not create broker exposure and a fresh explicit intent is authorized.
@@ -175,7 +219,7 @@ Blind retry loops are prohibited.
 
 ## Ambiguous acknowledgement
 
-If the submit returns timeout/ambiguous acknowledgement, the correct response is:
+If submit returns timeout/ambiguous acknowledgement:
 
 ```text
 SUBMITTING
@@ -188,21 +232,13 @@ Do not automatically resubmit.
 
 ## Reconciliation
 
-Reconciliation may use:
-
-- positions;
-- pending orders;
-- deals/history;
-- symbol/direction/volume;
-- broker ticket/position IDs;
-- magic/comment identifiers where available;
-- execution-intent lineage and time window.
+Reconciliation may use positions, pending orders, deals/history, symbol/direction/volume, broker ticket/position IDs, magic/comment identifiers where available, and execution-intent lineage/time window.
 
 Only after reconciliation may an ambiguous lifecycle become verified/final.
 
 ## Ownership
 
-Positions should be classified as at least:
+Positions are classified as at least:
 
 ```text
 BOT_MANAGED
@@ -211,9 +247,7 @@ FOREIGN_EA
 UNKNOWN_OWNER
 ```
 
-Magic number alone is not sufficient ownership proof. Managed lineage should use persisted execution/trade identities plus broker facts.
-
-Manual/foreign/unknown positions must never be modified as if bot-owned.
+Magic number alone is not sufficient ownership proof. Manual/foreign/unknown positions are never modified as bot-owned.
 
 ## V1 Gold position-capacity policy
 
@@ -221,63 +255,29 @@ V1 allows **one independently risk-bearing Gold position at a time** on the mana
 
 ```text
 No Gold exposure / capacity 0/1 → new bot entry may qualify
-One verified BOT_MANAGED Gold position / capacity 1/1 → block second independent entry
+One BOT_MANAGED Gold position / capacity 1/1 → block second independent entry
 Unexpected MANUAL / FOREIGN_EA / UNKNOWN_OWNER Gold exposure → block new bot entry
 ```
 
-Reason codes may include:
+Opposite evidence routes first to Trade Manager. It does not authorize an automatic hedge/second position.
 
-```text
-POSITION_CAPACITY_FULL
-EXTERNAL_GOLD_EXPOSURE
-UNKNOWN_POSITION_OWNERSHIP
-```
-
-Analysis, research and opportunity tracking continue while capacity is occupied.
-
-### Opposite opportunity while a bot trade is open
-
-An opposite BUY/SELL opportunity is **not** permission to open an automatic hedge or second independent Gold position.
-
-The opposite evidence is routed first to the Trade Manager as reversal/exit/protection evidence. A new opposite trade may only be considered after the existing risk-bearing Gold position is closed and broker/local state is reconciled, followed by a fresh governed opportunity and Execution Intent.
-
-### External/manual Gold exposure
-
-If a manual or foreign EA Gold position is present, GoldSwingTraderAI:
-
-- does not alter/close/trail that position;
-- shows the ownership/exposure state;
-- blocks new bot Gold entries while the exposure remains;
-- continues analysis/research;
-- requires broker reconciliation after the external exposure disappears before returning to entry-ready state.
-
-This conservative V1 rule prevents accidental stacking/hedging against exposure the bot does not own.
-
-Future multi-position, add-on or coexistence policies require a later explicit design decision; they are not implicit.
+External Gold exposure is displayed, never managed as bot-owned, and new bot Gold entry remains blocked until exposure disappears and reconciliation passes.
 
 ## Modification and close safety
 
-SL/TP modification and close requests are also irreversible broker writes. They require:
+SL/TP modification and close requests are irreversible broker writes and require ownership verification, broker-valid geometry/volume, appropriate fresh facts, no blind retry after ambiguous result and reconciliation before another write when outcome is uncertain.
 
-- account/position ownership verification;
-- broker-valid geometry/volume;
-- appropriate fresh market facts;
-- no blind retry after ambiguous result;
-- reconciliation before another write when outcome is uncertain.
-
-These requests must pass through the same centralized broker-write permission boundary rather than using separate shortcut call paths.
+They pass through the same centralized permission boundary.
 
 ## Filling mode
 
-Supported filling mode must be discovered/validated before submission. The system must not try a sequence of alternative irreversible requests after failure in a way that could duplicate exposure.
+Supported filling mode must be discovered/validated before submission. Do not try a sequence of alternative irreversible requests after failure in a way that could duplicate exposure.
 
 ## `order_check`
 
-Broker pre-check may be used before submission. A successful `order_check` is not proof of execution. Durable intent must exist before the actual irreversible send.
+Broker pre-check may be used before submission. Successful `order_check` is not proof of execution. Durable intent must exist before actual send.
 
 ## Failure classes
-
-The execution layer should distinguish:
 
 ```text
 PRE_SUBMIT_BLOCK
@@ -287,11 +287,7 @@ ACCEPTED_VERIFIED
 RECONCILIATION_FAILED
 ```
 
-Reason codes must preserve operational meaning.
-
 ## Execution states
-
-Suggested subsystem states:
 
 ```text
 READY
@@ -304,13 +300,11 @@ BLOCKED
 
 ## Single active execution controller
 
-For one managed account/symbol, only one bot instance may hold active broker-write authority at a time.
+Only one bot instance may hold active broker-write authority for one managed account/symbol. Observer/Research/Shadow instances may not submit/modify/close positions.
 
-Other instances may run as Observer/Research/Shadow but must not submit/modify/close broker positions.
+Failover requires broker/state reconciliation before replacement becomes READY.
 
-A future execution-lease/controller mechanism must ensure failover performs broker/state reconciliation before a replacement instance becomes READY.
-
-Reason code example: `ANOTHER_ACTIVE_CONTROLLER`.
+Reason code: `ANOTHER_ACTIVE_CONTROLLER`.
 
 ## Broker truth
 
@@ -318,32 +312,43 @@ Broker positions/deals own actual exposure/P&L truth. Local state owns intent, s
 
 ## Market closure/reopen
 
-No write attempts should be spammed when broker tradeability/quotes show XAU unavailable. After reopen, fresh quotes/specs/data and safety readiness must be re-established before execution.
+No write attempts should be spammed while XAU unavailable. After reopen, session warmup, fresh quotes/specs/data and safety readiness must pass before execution.
 
 ## Outputs and diagnostics
 
-The desk should expose:
+Expose at least:
 
 - account/symbol verification;
 - quote freshness;
-- spread/price-drift state;
+- Current Spread, Healthy Spread Baseline and Spread Ratio;
+- spread state `NORMAL/ELEVATED/BLOCKED/UNKNOWN`;
+- approved entry reference, fresh executable quote and normalized Price Drift;
 - volume/margin/stop validation;
 - execution lifecycle state;
 - ownership/capacity state;
-- primary/secondary blocker reason codes;
-- full centralized permission trace;
+- primary/secondary blockers;
+- centralized permission trace;
 - reconciliation status;
 - controller/observer role.
 
 ## Tests required
 
-- centralized gate is the only route to irreversible broker writes;
-- no strategy/risk/dashboard module can call broker writes directly;
-- DEMO/REAL environment policy is resolved in one execution-permission path;
+- centralized gate is only route to irreversible broker writes;
+- no strategy/risk/dashboard module can broker-write directly;
+- DEMO/REAL environment policy resolved in one permission path;
 - account switch/mismatch blocks writes;
-- DEMO/real policy;
 - symbol-spec validation/change;
-- stale quote and drift rejection;
+- stale quote rejection;
+- healthy spread baseline excludes abnormal/news/reopen samples;
+- spread ratio `<=1.5` NORMAL;
+- spread ratio `>1.5–2.25` ELEVATED and revalidated rather than auto-blocked;
+- spread ratio `>2.25` blocks with `SPREAD_TOO_HIGH`;
+- spread >25% of structural stop distance blocks current entry;
+- adverse drift `<=10%` can pass revalidation;
+- adverse drift `>10–20%` is elevated and fully revalidated;
+- adverse drift `>20%` blocks current intent without killing surviving opportunity;
+- favorable drift still forces full geometry/risk/target recalculation;
+- drift that breaks risk/target/chase/stop validity blocks regardless of percentage;
 - stop/volume/margin checks;
 - exactly-one send per intent;
 - ambiguous acknowledgement reconciliation;
@@ -351,8 +356,8 @@ The desk should expose:
 - modify/close ambiguity reconciliation;
 - second independent Gold entry blocked at capacity 1/1;
 - opposite opportunity cannot create automatic hedge;
-- manual/foreign position is never modified and blocks new bot Gold entry;
-- unknown ownership fails closed for new Gold entries;
+- manual/foreign position never modified and blocks new bot Gold entry;
+- unknown ownership fails closed;
 - multi-instance controller/failover tests.
 
 ## Explicit non-goals
@@ -362,15 +367,18 @@ Execution must not:
 - decide strategy direction;
 - resize risk on its own;
 - redesign structural SL/targets;
+- use a single broker-independent hard-coded spread number as the sole spread rule;
+- chase price beyond drift policy;
 - blind-retry ambiguous writes;
 - assume unknown broker exposure is zero;
-- open a second independent Gold risk position/automatic hedge in V1;
-- modify manual/foreign Gold positions as bot-owned;
-- let multiple laptops independently write the same managed account/symbol;
-- allow alternate broker-write call paths to bypass the centralized permission gate.
+- open a second independent Gold position/automatic hedge in V1;
+- modify manual/foreign positions as bot-owned;
+- let multiple laptops independently write same managed account/symbol;
+- permit alternate broker-write paths around centralized gate.
 
 ## Open questions
 
 - exact DEMO-to-real future release policy;
-- exact price-drift/spread limits;
-- exact execution-lease implementation and timeout/failover mechanics.
+- exact healthy-spread sampling window/minimum-sample implementation;
+- exact execution-lease implementation and timeout/failover mechanics;
+- future research-backed changes to initial spread/drift bands.
