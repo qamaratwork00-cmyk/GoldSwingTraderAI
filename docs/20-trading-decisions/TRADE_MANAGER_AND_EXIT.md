@@ -1,12 +1,14 @@
 # GoldSwingTraderAI — Trade Manager and Exit
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-design  
 **Authority:** Post-entry position-management behaviour
 
 ## Core principle
 
-Open positions are managed by a second parallel decision floor. The system should not close a high-quality large move merely because a small profit threshold has been reached. Exit and protection decisions are driven primarily by structure, continuation, reversal evidence and remaining target opportunity.
+Open positions are managed by a second parallel decision floor. The system should not close a high-quality large move merely because a small profit threshold has been reached. Exit and protection decisions are driven primarily by structure, continuation, reversal evidence and remaining target opportunity while the market remains safely tradeable.
+
+V1 intentionally avoids carrying bot-managed Gold positions through a known scheduled XAU market closure. Large-move capture is therefore intraday/open-session capture, not scheduled-gap exposure.
 
 ## Core management outputs
 
@@ -19,6 +21,7 @@ The trade manager exposes at least:
 - Momentum / Expansion Health
 - Target Remaining / Liquidity Path
 - Protection Need
+- Session/Pre-Close Exit Requirement
 
 The final management action is one of:
 
@@ -31,6 +34,8 @@ The final management action is one of:
 ## HOLD
 
 Use when the original thesis remains healthy and no better protective structure has been earned. Small opposite candles or ordinary pullbacks are not sufficient reason to exit a swing/intraday expansion trade.
+
+`HOLD` is not permitted to override a mandatory PRE_CLOSE flatten requirement.
 
 ## PROTECT
 
@@ -56,7 +61,7 @@ The stop may tighten but must never intentionally widen beyond the original appr
 
 ## RUNNER
 
-A trade may continue beyond its initial structural target when:
+A trade may continue beyond its initial structural target while the market remains open and safely executable when:
 
 - the original target is being accepted/broken rather than strongly rejected;
 - directional structure remains intact;
@@ -72,9 +77,11 @@ The system should distinguish:
 
 TP must not be moved endlessly just because price moves in the trade's favour.
 
+A runner still must be flattened before the scheduled XAU closure according to the Session/Risk State Machine. The bot does not intentionally carry a runner through the daily market break or weekend in V1.
+
 ## EXIT
 
-Exit should require meaningful evidence that the original thesis has failed or that the intended move has reached a terminal condition.
+Exit should normally require meaningful evidence that the original thesis has failed or that the intended move has reached a terminal condition.
 
 Examples include combinations of:
 
@@ -87,9 +94,19 @@ Examples include combinations of:
 
 A single RSI reading or one opposite candle is not sufficient by itself.
 
+### Mandatory pre-close exit
+
+`PRE_CLOSE_FLATTEN` is an explicit session-safety exit and does not require reversal evidence. When the Session/Risk State Machine enters the frozen pre-close flatten window, any bot-managed Gold position must be closed through the normal governed execution path while the broker remains tradeable.
+
+This policy exists because the reopen price is not guaranteed to match the prior close and a market gap can jump beyond an intended SL.
+
+If close acknowledgement is ambiguous or the broker becomes unavailable before flatten completes, the system must preserve the unresolved exposure and reconcile it; it must not mark the position closed merely because the session ended.
+
 ## Original R and lifecycle
 
 Original risk distance and original R definition must remain immutable for analytics and restart recovery even after stops move. Trailing/protection cannot redefine historical risk to make performance appear better.
+
+A PRE_CLOSE exit is journaled as a session-policy exit so research can separately measure how much favorable movement, if any, was forgone by the no-carry policy.
 
 ## Partial profit
 
@@ -106,6 +123,7 @@ Post-trade research should measure at least:
 - profit given back after runner decisions;
 - structural trail quality;
 - 2R / 3R / 4R reach rates;
-- normalized 100/200/300+ pip move capture where meaningful.
+- normalized 100/200/300+ pip move capture where meaningful;
+- PRE_CLOSE exit frequency and foregone/avoided gap exposure where measurable without lookahead abuse.
 
-The aim is to improve both downside control and the system's ability to remain in large directional moves.
+The aim is to improve both downside control and the system's ability to remain in large directional moves during tradeable market hours.
