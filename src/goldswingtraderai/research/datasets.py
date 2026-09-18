@@ -26,7 +26,7 @@ from goldswingtraderai.research.replay import ReplayDataset, ReplayRealism
 
 DATASET_BUNDLE_SCHEMA_VERSION = 1
 _MANIFEST_NAME = "dataset_manifest.json"
-_REQUIRED_TIMEFRAMES = (Timeframe.H4, Timeframe.H1, Timeframe.M15, Timeframe.M5)
+_REQUIRED_TIMEFRAMES = frozenset({Timeframe.H4, Timeframe.H1, Timeframe.M15, Timeframe.M5})
 _CSV_HEADER = (
     "time_utc",
     "open",
@@ -138,8 +138,8 @@ def import_replay_dataset_bundle(source: str | Path) -> ImportedDatasetBundle:
 
     root = Path(source)
     manifest_path = root / _MANIFEST_NAME
-    if not root.is_dir() or not manifest_path.is_file():
-        raise DatasetBundleError("dataset bundle directory/manifest is missing")
+    if not root.is_dir() or not manifest_path.is_file() or manifest_path.is_symlink():
+        raise DatasetBundleError("dataset bundle directory/manifest is missing or unsafe")
 
     try:
         raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -186,19 +186,31 @@ def import_replay_dataset_bundle(source: str | Path) -> ImportedDatasetBundle:
     spread_price = _required_nonnegative_float(raw_manifest.get("spread_price"), "spread_price")
 
     files_payload = _required_dict(raw_manifest, "files")
+    parsed_files = _parse_file_entries(files_payload)
+    present_timeframes = frozenset(parsed_files)
+    if not _REQUIRED_TIMEFRAMES.issubset(present_timeframes):
+        missing = sorted(frame.value for frame in _REQUIRED_TIMEFRAMES - present_timeframes)
+        raise DatasetBundleIntegrityError(
+            f"dataset manifest missing required timeframe files: {','.join(missing)}"
+        )
+
     series: list[CandleSeries] = []
-    for timeframe in _REQUIRED_TIMEFRAMES:
-        item = files_payload.get(timeframe.value)
-        if not isinstance(item, dict):
-            raise DatasetBundleIntegrityError(
-                f"dataset manifest missing file entry for {timeframe.value}"
-            )
+    seen_filenames: set[str] = set()
+    for timeframe in sorted(parsed_files, key=lambda item: item.value):
+        item = parsed_files[timeframe]
         filename = _required_text(item.get("file"), f"files.{timeframe.value}.file")
-        if Path(filename).name != filename:
-            raise DatasetBundleIntegrityError("dataset CSV filename must not contain a path")
+        expected_filename = f"{timeframe.value}.csv"
+        if filename != expected_filename:
+            raise DatasetBundleIntegrityError(
+                f"dataset CSV filename must be canonical: {expected_filename}"
+            )
+        if filename in seen_filenames:
+            raise DatasetBundleIntegrityError("dataset manifest repeats a CSV filename")
+        seen_filenames.add(filename)
+
         filepath = root / filename
-        if not filepath.is_file():
-            raise DatasetBundleIntegrityError(f"dataset CSV missing: {filename}")
+        if not filepath.is_file() or filepath.is_symlink():
+            raise DatasetBundleIntegrityError(f"dataset CSV missing or unsafe: {filename}")
         claimed_file_hash = _required_sha256(
             item.get("sha256"),
             f"files.{timeframe.value}.sha256",
@@ -207,7 +219,7 @@ def import_replay_dataset_bundle(source: str | Path) -> ImportedDatasetBundle:
             raise DatasetBundleIntegrityError(f"dataset CSV checksum mismatch: {filename}")
         loaded = _read_series_csv(timeframe, filepath)
         claimed_bars = item.get("bars")
-        if not isinstance(claimed_bars, int) or claimed_bars <= 0:
+        if not isinstance(claimed_bars, int) or isinstance(claimed_bars, bool) or claimed_bars <= 0:
             raise DatasetBundleIntegrityError(f"invalid bar count for {timeframe.value}")
         if len(loaded.candles) != claimed_bars:
             raise DatasetBundleIntegrityError(
@@ -241,6 +253,25 @@ def import_replay_dataset_bundle(source: str | Path) -> ImportedDatasetBundle:
         dataset_sha256=identity.dataset_sha256,
         manifest_sha256=claimed_manifest_hash,
     )
+
+
+def _parse_file_entries(payload: dict[str, Any]) -> dict[Timeframe, dict[str, Any]]:
+    parsed: dict[Timeframe, dict[str, Any]] = {}
+    for raw_timeframe, raw_entry in payload.items():
+        if not isinstance(raw_timeframe, str):
+            raise DatasetBundleIntegrityError("dataset file timeframe key must be text")
+        try:
+            timeframe = Timeframe(raw_timeframe)
+        except ValueError as exc:
+            raise DatasetBundleIntegrityError(
+                f"unsupported dataset timeframe file: {raw_timeframe}"
+            ) from exc
+        if not isinstance(raw_entry, dict):
+            raise DatasetBundleIntegrityError(
+                f"dataset file entry must be object: {raw_timeframe}"
+            )
+        parsed[timeframe] = raw_entry
+    return parsed
 
 
 def _write_series_csv(series: CandleSeries, path: Path) -> None:
