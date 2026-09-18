@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Session and Risk State Machine
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-design  
+**Version:** 0.3-design  
 **Authority:** Hard market/session permission states, risk/system permission composition, news-safety states and state transitions.  
 **Depends on:** `RISK_CONTRACT.md`, `EXECUTION_AND_BROKER_SAFETY.md`, `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`, `../10-market-intelligence/SESSION_CONTEXT.md`
 
@@ -21,15 +21,22 @@ Broker/live market is functioning and new trades may be considered if risk, news
 
 Scheduled XAU closure is approaching.
 
-- New entries: blocked by default unless a later frozen policy explicitly allows otherwise.
-- Open-trade management: remains active where broker actions are available.
-- Flatten/holding policy: not yet frozen.
+V1 policy:
+
+- new entries are blocked;
+- existing bot-managed Gold positions must be flattened before the scheduled closure while the broker remains tradeable;
+- Trade Manager may protect/exit earlier for normal structural reasons, but it may not intentionally carry a bot-managed position through the scheduled daily XAU break or weekend closure;
+- the exact pre-close no-new-entry/mandatory-flatten lead time remains a broker/research calibration value.
+
+Reason codes should distinguish `SESSION_PRE_CLOSE` from `PRE_CLOSE_FLATTEN`.
 
 ### CLOSED
 
 Broker-confirmed XAU closure/weekend/scheduled break.
 
 - New entries: blocked.
+- V1 normally expects no bot-managed Gold position to remain open because PRE_CLOSE should have flattened it.
+- If a managed position remains because the broker became unavailable, a close acknowledgement was ambiguous, or another operational fault occurred, persist/reconcile the exposure as an exceptional state rather than pretending it is flat.
 - Reconciliation/state maintenance continues where possible.
 - Research/background analysis may continue.
 
@@ -43,10 +50,10 @@ Evidence may include:
 - symbol tradeability;
 - normalized spread;
 - candle continuity;
-- unexplained gap/dislocation assessment;
+- gap/dislocation assessment;
 - sufficient fresh data for required timeframe decisions.
 
-Warmup is intended to be evidence-driven rather than an unnecessarily long fixed delay. Exact requirements remain open.
+Warmup is evidence-driven rather than an unnecessarily long fixed delay. No fresh entry is allowed until required reopen evidence passes.
 
 ### HOLIDAY_CAUTION
 
@@ -136,6 +143,7 @@ Examples:
 
 ```text
 OPEN + NEWS_CLEAR + NORMAL + READY → entries may be evaluated
+PRE_CLOSE + any otherwise-valid state → no new entry; existing managed trade must flatten
 OPEN + NEWS_CLEAR + LOSS_LOCKED + READY → no new entries
 OPEN + NEWS_BLACKOUT + NORMAL + READY → no new entries; expected safety block
 OPEN + NEWS_SAFETY_UNKNOWN + NORMAL + READY → no new entries if verification required
@@ -157,9 +165,13 @@ Calendar says open + broker unavailable → not executable.
 
 Holiday says caution + broker/live market healthy → not automatically CLOSED.
 
+The configured close schedule is used to enter PRE_CLOSE early enough to flatten, but broker tradeability remains the final fact for whether a close can actually execute.
+
 ## Open-trade priority
 
 A hard new-entry block should not automatically stop safe management of an already-open managed position. Trade Manager/execution remain active where required and broker operations are safely available.
+
+`PRE_CLOSE` is a special case: it creates an explicit V1 requirement to close the bot-managed position before the known XAU closure rather than carry gap risk into reopen.
 
 ## Dashboard requirements
 
@@ -170,12 +182,17 @@ Operator should distinguish at a glance:
 - Risk State;
 - System/Execution State;
 - exact primary/secondary block reason;
+- PRE_CLOSE countdown/flatten status where knowable;
 - next expected transition where knowable;
 - manual-reset state as published by Risk Contract.
 
 ## Tests required
 
 - OPEN/PRE_CLOSE/CLOSED transitions;
+- PRE_CLOSE blocks new entries;
+- PRE_CLOSE requests governed flatten of any bot-managed Gold position;
+- no intentional managed-position carry through scheduled daily XAU break/weekend;
+- close ambiguity/unavailable broker is persisted and reconciled rather than treated as flat;
 - REOPEN_WARMUP evidence;
 - holiday caution not market closure;
 - NEWS_CLEAR/BLACKOUT/UNKNOWN/WARMUP transitions;
@@ -186,8 +203,7 @@ Operator should distinguish at a glance:
 
 ## Open questions
 
-- exact PRE_CLOSE no-new-entry window;
-- overnight/daily-break/weekend position-holding policy;
+- exact PRE_CLOSE no-new-entry and mandatory-flatten lead time;
 - exact REOPEN_WARMUP evidence/fresh-candle requirements;
 - exact event tiers/blackout windows;
 - exact POST_NEWS_WARMUP normalization rules;
