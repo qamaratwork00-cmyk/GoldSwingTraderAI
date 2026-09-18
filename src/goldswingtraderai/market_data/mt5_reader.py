@@ -1,7 +1,8 @@
 """Read-only MetaTrader 5 adapter.
 
-The module deliberately exposes market/account reads only. Irreversible broker
-writes belong to the later execution package and must never be added here.
+The module deliberately exposes market/account/broker-truth reads only.
+Irreversible broker writes belong to the execution package and must never be
+added here.
 """
 
 from __future__ import annotations
@@ -13,8 +14,15 @@ from types import ModuleType
 from typing import Any
 
 from goldswingtraderai.diagnostics.reasons import ReasonCode
-from goldswingtraderai.domain.enums import AccountMode, HardDecision, Timeframe
-from goldswingtraderai.domain.market import AccountFacts, Candle, CandleSeries, Quote, SymbolSpec
+from goldswingtraderai.domain.enums import AccountMode, Direction, HardDecision, Timeframe
+from goldswingtraderai.domain.market import (
+    AccountFacts,
+    Candle,
+    CandleSeries,
+    OpenPositionFacts,
+    Quote,
+    SymbolSpec,
+)
 from goldswingtraderai.domain.models import DemoGuardResult, Reason
 
 
@@ -37,6 +45,11 @@ def _field(row: Any, name: str, default: Any = None) -> Any:
 
 def _utc_from_epoch(seconds: float | int) -> datetime:
     return datetime.fromtimestamp(float(seconds), tz=timezone.utc)
+
+
+def _optional_positive_price(value: Any) -> float | None:
+    number = float(value or 0.0)
+    return None if number <= 0 else number
 
 
 class MT5Reader:
@@ -190,6 +203,72 @@ class MT5Reader:
             )
         except (AttributeError, TypeError, ValueError, OSError) as exc:
             raise MarketDataError(ReasonCode.DATA_CORRUPT, f"invalid quote for {symbol}") from exc
+
+    def open_positions(self, symbol: str) -> tuple[OpenPositionFacts, ...]:
+        """Return normalized current broker positions for one symbol.
+
+        Empty tuple is valid complete truth when MT5 positively returns no positions.
+        `None`/missing read capability is not converted into empty exposure.
+        """
+
+        mt5 = self._require_ready()
+        getter = getattr(mt5, "positions_get", None)
+        if not callable(getter):
+            raise MarketDataError(
+                ReasonCode.DATA_UNAVAILABLE,
+                "MT5 positions_get is unavailable in this runtime",
+            )
+        rows = getter(symbol=symbol)
+        if rows is None:
+            raise MarketDataError(
+                ReasonCode.DATA_UNAVAILABLE,
+                f"MT5 positions_get returned unknown truth for {symbol}",
+            )
+
+        buy_type = int(getattr(mt5, "POSITION_TYPE_BUY", 0))
+        sell_type = int(getattr(mt5, "POSITION_TYPE_SELL", 1))
+        positions: list[OpenPositionFacts] = []
+        try:
+            for row in rows:
+                row_symbol = str(_field(row, "symbol", "")).strip()
+                if row_symbol != symbol:
+                    raise ValueError("position symbol differs from requested symbol")
+                raw_type = int(_field(row, "type", -1))
+                if raw_type == buy_type:
+                    direction = Direction.BUY
+                elif raw_type == sell_type:
+                    direction = Direction.SELL
+                else:
+                    raise ValueError("unsupported MT5 position direction")
+
+                magic_raw = _field(row, "magic")
+                comment_raw = _field(row, "comment")
+                positions.append(
+                    OpenPositionFacts(
+                        ticket=int(_field(row, "ticket", 0)),
+                        symbol=row_symbol,
+                        direction=direction,
+                        volume=float(_field(row, "volume", 0.0)),
+                        price_open=float(_field(row, "price_open", 0.0)),
+                        stop_loss=_optional_positive_price(_field(row, "sl", 0.0)),
+                        take_profit=_optional_positive_price(_field(row, "tp", 0.0)),
+                        magic=None if magic_raw is None else int(magic_raw),
+                        comment=None if comment_raw is None else str(comment_raw),
+                    )
+                )
+        except (TypeError, ValueError) as exc:
+            raise MarketDataError(
+                ReasonCode.DATA_CORRUPT,
+                f"invalid open-position payload for {symbol}",
+            ) from exc
+
+        positions.sort(key=lambda position: position.ticket)
+        if len({position.ticket for position in positions}) != len(positions):
+            raise MarketDataError(
+                ReasonCode.DATA_CORRUPT,
+                f"duplicate open-position ticket returned for {symbol}",
+            )
+        return tuple(positions)
 
     def completed_candles(self, symbol: str, timeframe: Timeframe, count: int) -> CandleSeries:
         """Read completed candles only; MT5 bar position 0 is intentionally excluded."""
