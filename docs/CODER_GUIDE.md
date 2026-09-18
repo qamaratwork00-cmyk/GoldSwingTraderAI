@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
-**Version:** 1.7-implementation-map  
+**Version:** 1.8-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -12,7 +12,7 @@ Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `6
 
 ## Current checkpoint — 2026-09-18
 
-Deterministic core implementation exists through the current **Phase-10 research foundation plus chronological decision/Trade Plan/Trade Manager evidence and execution-stress tooling**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+Deterministic core implementation exists through the current **Phase-10 research foundation plus chronological decision/Trade Plan/Trade Manager, execution-stress and fixed-policy walk-forward evidence tooling**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
 
 ### Phase 1 — Foundation — implemented / deterministic CI
 
@@ -51,9 +51,7 @@ intelligence/confluence.py
 intelligence/snapshot.py
 ```
 
-One verified market snapshot feeds shared derived facts; duplicate indicator/ATR work is avoided.
-
-`intelligence/confluence.py` owns causal confirmed-swing Trendlines, Fibonacci geometry and broker-local Volume Profile/POC. Real volume is preferred when available; tick-volume fallback is explicit.
+One verified market snapshot feeds shared derived facts; duplicate indicator/ATR work is avoided. `intelligence/confluence.py` owns causal confirmed-swing Trendlines, Fibonacci geometry and broker-local Volume Profile/POC. Real volume is preferred when available; tick-volume fallback is explicit.
 
 ### Phase 4 — Strategies / Fusion / Opportunity / Timing — implemented / deterministic CI
 
@@ -145,6 +143,7 @@ research/ablation.py
 research/outcomes.py
 research/management_replay.py
 research/stress.py
+research/validation.py
 research/metrics.py
 research/learning.py
 research/episode_journal.py
@@ -163,13 +162,11 @@ chronological completed-candle replay
 → ambiguity-safe initial stop/target path labeling
 → chronological production Trade Manager replay
 → declared execution-friction stress scenarios
-→ managed-trade capture/giveback/action/modify metrics
-→ research metrics / durable episodes
-→ approved-primitive mapping
-→ recurring cluster detection
-→ candidate OR explicit suppression reason
-→ durable CandidateRegistry
-→ governed validation/promotion lifecycle
+→ fixed-policy chronological walk-forward validation
+→ managed-trade / validation evidence metrics
+→ research episodes / learning
+→ approved-primitive discovery / invention
+→ governed promotion lifecycle
 ```
 
 `research/ablation.py` runs identical event chronology under:
@@ -184,7 +181,7 @@ ALL                   # Trendline + Fibonacci + POC
 
 Decision-level ablation reports Opportunity/ENTER/WAIT/MISSED/frequency/score/conflict deltas and does not invent P/L.
 
-`research/outcomes.py` owns historical production Trade Plan reconstruction and initial bracket evidence. It inspects later M5 bars under explicit `BAR_HIGH_LOW` semantics:
+`research/outcomes.py` owns historical production Trade Plan reconstruction and initial bracket evidence under explicit `BAR_HIGH_LOW` semantics:
 
 ```text
 TARGET_FIRST
@@ -193,33 +190,13 @@ BOTH_TOUCHED_AMBIGUOUS
 HORIZON_UNRESOLVED
 ```
 
-Same-bar stop+target is never resolved favorably without intrabar evidence. Ambiguous/unresolved cases do not enter resolved bracket Net R. The summary exposes coverage, resolved initial-bracket Net/Avg R, Profit Factor, drawdown, MFE/MAE and 2R/3R/4R reach rates.
+Same-bar stop+target is never resolved favorably without intrabar evidence. Ambiguous/unresolved cases do not enter resolved bracket Net R.
 
-`research/management_replay.py` reuses the real production `evaluate_trade_manager()` and `apply_management_decision()` path. For each later M5 bar it first tests the **currently active** stop and broker TP. If the trade survives that bar, the completed bar builds fresh intelligence and the production manager emits HOLD/PROTECT/TRAIL/RUNNER/EXIT for the following bar.
+`research/management_replay.py` reuses production `evaluate_trade_manager()` and `apply_management_decision()`. Each M5 first tests the **currently active** stop/TP; surviving completed bars then feed fresh intelligence to HOLD/PROTECT/TRAIL/RUNNER/EXIT for the following bar.
 
-Current manager-replay outcomes:
+The default manager replay remains `BAR_CLOSE_IDEALIZED`. Optional `ManagementReplayAssumptions` support research-only adverse entry slippage, executable-side spread approximation, completed-M5 modify delay and deterministic every-Nth modify rejection. Structural stop/targets and immutable original R are not rewritten to hide adverse fills.
 
-```text
-PLAN_NOT_READY
-STOP_FILLED
-TARGET_FILLED
-MANAGER_EXIT
-BOTH_TOUCHED_AMBIGUOUS
-HORIZON_OPEN
-```
-
-The default manager replay remains `BAR_CLOSE_IDEALIZED`. Optional `ManagementReplayAssumptions` now support research-only:
-
-```text
-adverse entry slippage in immutable original-R units
-executable-side Bid/Ask barrier spread approximation
-completed-M5 modify delay
- deterministic every-Nth manager-modify rejection
-```
-
-An unresolved synthetic modify blocks later modify submissions until it resolves, matching the production reconciliation principle. Structural stop/targets are never moved merely to hide adverse fill slippage. Same-bar active stop+TP ambiguity remains unresolved.
-
-`research/stress.py` owns scenario orchestration. The analytical `ReplayRun` is held fixed while Trade Plan / fill / exit-side spread / manager-write assumptions change. Default transparent V1 research probes are:
+`research/stress.py` owns scenario orchestration around a **fixed analytical ReplayRun**. Default transparent V1 probes are:
 
 ```text
 BASE
@@ -230,7 +207,24 @@ MODIFY_REJECTION    every 2nd submitted modify rejected
 COMBINED            all four assumptions together
 ```
 
-Those values are **calibration baselines only**. They are not frozen broker assumptions, production risk thresholds or profitability claims. The stress report exposes signed deltas versus BASE for managed-plan count, plan rejection, resolved coverage, Net/Avg R, drawdown, Capture Efficiency and giveback, plus modify request/applied/rejected/pending counts from manager replay.
+These are calibration baselines only, not production thresholds or historical broker claims.
+
+`research/validation.py` owns `FIXED_POLICY_WALK_FORWARD` validation. Its rules are intentionally strict:
+
+```text
+DEVELOPMENT CONTEXT
+→ later non-overlapping VALIDATION SLICE
+```
+
+- development history may reconstruct production Opportunity state but is not scored as validation;
+- validation slices cannot overlap;
+- the production policy/config remains fixed; there is no optimizer or automatic parameter search;
+- outcome/management data is truncated at each validation-end boundary, so later-window candles cannot resolve an earlier validation trade;
+- validation trades near the boundary may honestly remain `HORIZON_OPEN`;
+- optional declared execution stress may be attached to the validation slice;
+- this path never consumes the one-shot final holdout owned by `research/promotion.py`.
+
+Exact development/validation window sizes remain evidence-calibratable. The current code supplies the chronology/scaffold, not a claim that the synthetic test windows prove edge.
 
 Other Phase-10 guarantees:
 
@@ -241,7 +235,6 @@ Other Phase-10 guarantees:
 - StrategyMemory influence is bounded/context-version isolated;
 - independent episode IDs prevent fake sample inflation;
 - candidate recipes use audited declarative primitives only;
-- durable candidates may be VARIANT / NEW_FAMILY / ENTRY_POLICY / EXIT_POLICY;
 - rejected/duplicate memory survives restart;
 - eligible discovery evidence must create a candidate or explicit governed suppression reason;
 - candidate stages cannot be skipped;
@@ -255,8 +248,6 @@ TRENDLINE
 FIBONACCI
 VOLUME_PROFILE_POC
 ```
-
-`episode_journal.py` maps corresponding durable evidence labels into these primitives so confluence genuinely participates in discovery/research rather than being only a production-score decoration.
 
 ## Deterministic test ownership
 
@@ -282,12 +273,13 @@ tests/test_dashboard.py
 tests/test_research_ablation.py
 tests/test_research_outcomes.py
 tests/test_research_stress.py
+tests/test_research_validation.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Latest verified stress-research checkpoint contained **159 passing tests** plus Ruff and financial-secret scan PASS. Deterministic CI is software evidence, not profitability proof or controlled DEMO certification.
+Latest verified walk-forward checkpoint: **163 tests PASS**, Ruff PASS and financial-secret scan PASS. Deterministic CI is software evidence, not profitability proof or controlled DEMO certification.
 
 ## Feature ownership index
 
@@ -308,7 +300,7 @@ Latest verified stress-research checkpoint contained **159 passing tests** plus 
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/dashboard.py` |
-| Replay/validation/stress | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `stress.py`, `metrics.py` |
+| Replay/validation/stress | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `stress.py`, `validation.py`, `metrics.py` |
 | StrategyMemory | `40-research-learning/LEARNING_AND_AI_BOUNDARIES.md` | `research/learning.py` |
 | Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `episode_journal.py`, `discovery.py`, `invention.py` |
 | Promotion | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `research/promotion.py` |
@@ -319,29 +311,28 @@ Latest verified stress-research checkpoint contained **159 passing tests** plus 
 - no lookahead;
 - shared verified facts instead of duplicate reads/calculations;
 - soft evidence must not become arbitrary hard-filter soup;
-- Trendline/Fibonacci/POC are optional bonus-only confluence unless governed evidence explicitly changes that design;
-- any positive balance below `$300` is SMALL; no arbitrary `$100` gate;
 - raw broker writes live only in `execution/mt5_writer.py`;
 - critical local state never pretends ambiguous broker action succeeded;
 - research outcome/replay layers must not favorably resolve unknown intrabar order;
 - stress assumptions must be explicit, reproducible and separate from frozen production safety thresholds;
 - adverse research fill does not rewrite structural stop/target or immutable original R;
-- pending manager modify stress cannot silently permit overlapping broker writes;
+- walk-forward development context cannot be counted as validation evidence;
+- later-window data cannot resolve an earlier validation slice;
+- walk-forward code cannot consume the final governed holdout;
 - dashboard/research/discovery have zero raw broker authority;
 - discovery must not be silently inert when eligible evidence exists;
-- no unnecessary frameworks/factories/service-manager layers;
 - financial-authority credentials never enter tracked project state.
 
 ## Current integration gaps / next engineering work
 
 Do **not** redesign the already-implemented core unnecessarily. Main remaining work is integration/evidence:
 
-1. calibrate execution-stress assumptions on broader historical/controlled DEMO evidence and add more realism only where evidence justifies it;
-2. add historical PRE_CLOSE/session-policy integration to management replay where verified schedules/data permit it;
-3. run broader real historical XAU datasets, walk-forward and independent validation rather than synthetic regression fixtures;
+1. add dataset identity/versioning and reproducible evidence manifests so broader XAU studies can be audited and reproduced;
+2. run sufficiently broad real historical XAU walk-forward/independent validation and calibrate stress assumptions from evidence;
+3. add historical PRE_CLOSE/session-policy integration where trustworthy schedule data exists;
 4. integrate authoritative research/discovery/confluence state into dashboard DTO/runtime status;
 5. Phase 11: portable backup/checkpoint + fresh-machine recovery drill + production shared cross-laptop coordination proof;
-6. Phase 12: build final persistent runtime orchestrator composing Market → Intelligence → Strategy/Decision → TradePlan → Risk/Permissions → Execution → Management → Journal/Research;
+6. Phase 12: final persistent runtime orchestrator composing Market → Intelligence → Strategy/Decision → TradePlan → Risk/Permissions → Execution → Management → Journal/Research;
 7. controlled Windows/MT5 DEMO integration/fault/restart/failover certification;
 8. final docs/release audit sync based on actual evidence.
 
@@ -359,7 +350,7 @@ MarketSnapshot
 → Execution / Reconciliation
 → ManagedTrade / Trade Manager
 → Dashboard
-→ Replay / Ablation / Initial Outcomes / Management Replay / Stress / Metrics
+→ Replay / Ablation / Outcomes / Management Replay / Stress / Walk-Forward / Metrics
 → Episode Journal
 → Discovery / Invention / Promotion
 ```
