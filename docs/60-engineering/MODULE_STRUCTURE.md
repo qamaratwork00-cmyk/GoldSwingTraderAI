@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 2.1-implementation-map  
+**Version:** 2.2-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -31,6 +31,7 @@ src/goldswingtraderai/
     ├── ablation.py
     ├── outcomes.py
     ├── management_replay.py
+    ├── session_history.py
     ├── stress.py
     ├── validation.py
     ├── evidence.py
@@ -61,7 +62,8 @@ config/domain
 read-only MT5 history or offline source
 → acquisition / portable dataset / dataset identity
 → replay / outcomes / management
-→ stress / walk-forward
+→ optional verified historical session schedule
+→ PRE_CLOSE-aware management / stress / walk-forward
 → evidence manifest
 → immutable evidence package
 → metrics / learning / discovery / promotion
@@ -119,24 +121,47 @@ Responsibilities:
 
 Package identity is content-based; filesystem path is not authority. Module has no trading/risk/promotion authority.
 
+### `research/session_history.py`
+Historical broker-session facts for replay only.
+
+```text
+named/versioned verified coverage
++ chronological tradeable intervals
++ DAILY/WEEKEND close kind
+→ production evaluate_market_permission()
+→ OPEN / PRE_CLOSE / CLOSED facts
+```
+
+Responsibilities:
+
+- require explicit source label/version and UTC coverage;
+- reject overlapping/out-of-coverage intervals;
+- never guess session times;
+- reuse production DAILY `T-20/T-10` and WEEKEND `T-60/T-30` policy through `risk.permissions`;
+- return CLOSED inside verified coverage when no interval is active;
+- fail outside verified coverage.
+
+`management_replay.py` optionally consumes this schedule and forwards mandatory PRE_CLOSE flatten into production `evaluate_trade_manager()`. A session-aware replay event that contradicts a verified CLOSED interval is a research data/schedule error, not a normal candle.
+
 ### Other research modules
 `replay.py` chronological decisions; `ablation.py` controlled variants; `outcomes.py` Trade Plan paths; `management_replay.py` production manager; `stress.py` declared friction; `validation.py` fixed-policy walk-forward; `metrics.py` actual/counterfactual metrics; learning/journal/discovery/invention/promotion own governed improvement lifecycle.
 
 ## Prohibited dependency directions
 
 ```text
-intelligence → order_send                    NO
-strategies   → order_send/risk reset         NO
-decisions    → raw order_send                NO
-management   → raw order_send                NO
-operator     → trading authority             NO
-research     → production broker write       NO
-acquisition  → duplicate raw MT5 client      NO
-packages     → trading/risk/promotion        NO
-invention    → arbitrary Python/eval/exec    NO
-candidate    → self-promotion                NO
-stress       → production safety mutation    NO
-validation   → hidden tuning/final holdout   NO
+intelligence      → order_send                    NO
+strategies        → order_send/risk reset         NO
+decisions         → raw order_send                NO
+management        → raw order_send                NO
+operator          → trading authority             NO
+research          → production broker write       NO
+acquisition       → duplicate raw MT5 client      NO
+session_history   → guessed/default broker clock  NO
+packages          → trading/risk/promotion        NO
+invention         → arbitrary Python/eval/exec    NO
+candidate         → self-promotion                NO
+stress            → production safety mutation    NO
+validation        → hidden tuning/final holdout   NO
 ```
 
 ## Current deterministic tests
@@ -153,21 +178,24 @@ tests/test_research_evidence.py
 tests/test_research_datasets.py
 tests/test_research_acquisition.py
 tests/test_research_packages.py
+tests/test_research_session_history.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Current verified checkpoint: **183 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current verified checkpoint: **189 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
-## Remaining Phase-10 work
+## Remaining Phase-10 evidence work
 
 - controlled Windows/MT5 real-history acquisition evidence;
+- trustworthy versioned historical broker-session schedule source/coverage;
 - broad regime-diverse real-XAU studies producing immutable evidence packages;
-- historical PRE_CLOSE/session-policy integration;
 - empirical execution-friction calibration;
 - final untouched holdout evidence;
 - replay-versus-DEMO attribution and operator visibility.
+
+The historical PRE_CLOSE/session-policy software integration itself is implemented; only trustworthy real schedule evidence remains external.
 
 ## Phase completion rule
 
