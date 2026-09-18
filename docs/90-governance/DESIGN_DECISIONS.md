@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.8-design
+**Version:** 2.0-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -303,43 +303,61 @@ This ledger records accepted/provisional architectural decisions so future imple
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
 **Reason:** Reject poor target economics without creating an ultra-rare high-RR-only bot.
 
-## DEC-059 — Primary target is a checkpoint; Expansion is the normal broker objective; Runner must be earned
+## DEC-059 — Primary target is a checkpoint; Expansion is normal broker objective; Runner must be earned
 
-**Decision:** V1 uses structural/liquidity objectives rather than fixed 100/200/300-pip TP. Primary Structural Target is normally a management checkpoint, not an automatic full exit. A valid Expansion Target is the default initial broker TP; if no valid Expansion Target exists, a valid Primary Target may be used. Runner extension requires fresh acceptance/continuation evidence plus a newly defined objective and may not occur merely because price is profitable. Only one current Runner Objective is active at a time; any further extension requires fresh evidence. PRE_CLOSE flatten overrides runner logic.  
+**Decision:** V1 uses structural/liquidity objectives rather than fixed 100/200/300-pip TP. Primary Structural Target is normally a management checkpoint, not automatic full exit. A valid Expansion Target is default initial broker TP; if no valid Expansion exists, a valid Primary may be used. Runner extension requires fresh acceptance/continuation evidence plus a newly defined objective and may not occur merely because price is profitable. Only one current Runner Objective is active at a time; further extension requires fresh evidence. PRE_CLOSE flatten overrides runner logic.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Preserve the ability to capture large Gold expansions while keeping every TP extension structurally anchored and auditable.
+**Reason:** Preserve large Gold expansion capture while keeping TP extension structurally anchored/auditable.
 
 ## DEC-060 — V1 core logic does not depend on partial closes
 
-**Decision:** V1 must remain fully correct for an indivisible broker-minimum `0.01` position. The baseline manager handles the full position through HOLD/PROTECT/TRAIL/RUNNER/EXIT and does not require partial profit taking. Partial-profit policies may be researched for a later version/larger executable volumes but are not an implicit V1 dependency.  
+**Decision:** V1 must remain fully correct for an indivisible broker-minimum `0.01` position. Baseline manager handles full position through HOLD/PROTECT/TRAIL/RUNNER/EXIT and does not require partial profit taking. Partial-profit policies may be researched later but are not V1 dependency.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Keep behaviour consistent across small accounts and avoid designing core exit logic around volume reductions that may not be executable.
+**Reason:** Keep behaviour consistent across small accounts and avoid core exit logic depending on unexecutable volume reductions.
 
 ## DEC-061 — Cross-machine execution ownership uses lease + monotonic fencing
 
-**Decision:** V1 permits one PRIMARY execution controller for a managed account/symbol. Controller ownership uses a shared coordination store with atomic acquisition, authoritative expiry semantics and a monotonic fencing epoch. Initial renewal target is `10s` and lease TTL is `30s`. Every irreversible broker write must freshly verify current holder, unexpired lease and matching current epoch. A second laptop remains Observer while another valid holder exists. Standby takeover is allowed only after authoritative lease expiry, must obtain a new epoch atomically and must complete durable-state + broker reconciliation before becoming PRIMARY READY. A stale old epoch can never regain write authority by local assumption.  
+**Decision:** V1 permits one PRIMARY execution controller for managed account/symbol. Controller ownership uses shared coordination store with atomic acquisition, authoritative expiry and monotonic fencing epoch. Initial renewal target `10s`, lease TTL `30s`. Every irreversible write verifies holder, unexpired lease and current epoch. Second laptop remains Observer while valid holder exists. Standby takeover only after expiry, must obtain new epoch atomically and complete durable-state + broker reconciliation before PRIMARY READY. Stale old epoch cannot write.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Prevent split-brain/duplicate broker writes while still allowing controlled recovery after laptop/process failure.
+**Reason:** Prevent split-brain/duplicate broker writes while allowing controlled recovery.
 
 ## DEC-062 — V1 defines only a positive DEMO guard
 
-**Decision:** V1 broker-write environment permission is granted only when the connected MT5 account is positively verified as DEMO: `DEMO_GUARD = PASS`. If DEMO status is not verified, broker-write permission is not granted. V1 intentionally does **not** define a separate REAL authorization workflow, REAL hard-block contract, LIVE override or alternate REAL execution path. A verified DEMO account is real-time broker execution on that DEMO account, not dry-run simulation.  
+**Decision:** V1 broker-write environment permission is granted only when connected MT5 account is positively verified DEMO: `DEMO_GUARD = PASS`. If DEMO is not verified, broker-write permission is not granted. V1 intentionally does **not** define a separate REAL authorization workflow, REAL hard-block contract, LIVE override or alternate REAL execution path. A verified DEMO account is real-time broker execution on that DEMO account, not dry-run simulation.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
 **Supersedes for V1:** DEC-031 environment-policy wording.  
-**Reason:** Keep the first implementation narrowly scoped to the user's requested DEMO guard without inventing unnecessary REAL-account policy.
+**Reason:** Keep first implementation narrowly scoped to requested DEMO guard without inventing unnecessary REAL policy.
 
 ## DEC-063 — V1 implementation follows a frozen lightweight production-code standard
 
-**Decision:** V1 source code must follow `docs/60-engineering/CODING_STANDARD.md`: Python 3.11+; standard-library-first/minimal runtime dependencies; official MetaTrader5 boundary; pure functions for deterministic calculations where practical; classes only for genuine state/resource/lifecycle ownership; typed dataclasses/enums/IDs where they protect semantics; one verified snapshot/shared derived facts rather than duplicate MT5 reads/calculations; no giant all-in-one file and no unnecessary micro-file/framework/factory/service-manager architecture; concise comments/docstrings that explain why/safety/chronology; explicit non-silent error handling; structured secret-safe logging; heavier research dependencies isolated from normal runtime; and a code-quality review as part of every phase exit gate.  
+**Decision:** V1 source must follow `docs/60-engineering/CODING_STANDARD.md`: Python 3.11+; standard-library-first/minimal runtime dependencies; official MetaTrader5 boundary; pure functions for deterministic calculations where practical; classes only for genuine state/resource/lifecycle ownership; typed dataclasses/enums/IDs where useful; one verified snapshot/shared derived facts rather than duplicate MT5 reads/calculations; no giant all-in-one file and no unnecessary micro-file/framework/factory/service-manager architecture; concise comments/docstrings explaining why/safety/chronology; explicit non-silent error handling; structured secret-safe logging; heavier research dependencies isolated; code-quality review at every phase exit.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Keep the bot expert-level, optimized, clean and maintainable without allowing unnecessary code bulk/architecture to become an operational risk.
+**Reason:** Keep bot expert-level, optimized, clean and maintainable without unnecessary code bulk becoming operational risk.
 
 ## DEC-064 — No arbitrary minimum-balance floor for positive SMALL accounts
 
-**Decision:** V1 `SMALL` covers **any positive DayStartEquity below `$300`**. A `$100` lower trading boundary is not permitted. Accounts at `$99`, `$50`, `$30` or any other positive amount below `$300` remain SMALL. Account size alone cannot become an extra hard filter. Whether a specific trade is permitted is decided by the already frozen actual-risk authorities: executable broker minimum/step volume, structural SL geometry, all-in monetary risk, SMALL `7%` new-entry ceiling, SMALL `12%` daily loss lock, verified margin/free margin, exposure/capacity and execution safety. If broker minimum volume makes the current plan exceed hard risk, that current plan may be blocked without invalidating the underlying opportunity and without tightening the structural SL.  
+**Decision:** V1 `SMALL` covers **any positive DayStartEquity below `$300`**. A `$100` lower trading boundary is not permitted. Accounts at `$99`, `$50`, `$30` or any other positive amount below `$300` remain SMALL. Account size alone cannot become extra hard filter. Whether a trade is permitted is decided by executable broker minimum/step volume, structural SL geometry, all-in monetary risk, SMALL `7%` new-entry ceiling, SMALL `12%` daily lock, verified margin/free margin, exposure/capacity and execution safety. If minimum volume makes current plan exceed hard risk, block that plan without invalidating underlying opportunity or tightening structural SL.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Supersedes:** DEC-042 only with respect to the `$100` lower boundary/range definition; hybrid sizing modes and DEC-046/047 risk percentages remain unchanged.  
-**Reason:** The risk system already measures actual affordability. Adding a separate `$100` eligibility floor would be redundant, unnecessarily restrictive and contrary to the small-account design objective.
+**Supersedes:** DEC-042 only with respect to `$100` lower boundary/range definition.  
+**Reason:** Risk system already measures actual affordability; separate `$100` eligibility floor is redundant/restrictive.
+
+## DEC-065 — Initial V1 local durable store uses standard-library SQLite
+
+**Decision:** Initial local durable persistence uses Python standard-library SQLite with canonical JSON payloads, SHA-256 record checksums, explicit schema versions, transactional updates and typed repository/recovery adapters. Critical corruption/version mismatch must fail explicitly rather than silently reset to empty/default. Broker remains authority for current positions/orders/deals.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Satisfies restart/recovery/audit needs with a lightweight local dependency-free store consistent with the frozen coding standard; avoids unnecessary ORM/database stack.
+
+## DEC-066 — Trendline, Fibonacci and POC are optional bonus-only confluence in initial production
+
+**Decision:** Causal Trendline geometry/events, Fibonacci geometry and broker-local Volume Profile/POC may improve strategy accuracy as bounded **soft confluence**. Supportive confluence may add a capped positive score bonus to an existing strategy hypothesis. Missing confluence does not reduce base strategy score. Opposed/unclear confluence may be recorded as context/conflict but does not automatically hard-block a trade. POC alone cannot create directional authority; real volume is preferred when available, otherwise tick-volume approximation is explicitly identified. These tools do not become a mandatory seventh strategy family; governed research may later propose a distinct family only if evidence supports it.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Use useful technical context to improve accuracy without recreating filter soup or destroying healthy trade frequency.
+
+## DEC-067 — Strategy discovery has an explicit liveness requirement
+
+**Decision:** Governed strategy discovery/invention is not considered healthy merely because modules/classes exist. Repeated eligible evidence must result in either `(a)` a real durable candidate or `(b)` an explicit governed suppression/rejection reason. Eligible evidence that silently disappears is a defect and must surface discovery health as degraded. Candidate/rejected/duplicate memory survives restart; candidates remain declarative, cannot self-promote and have no raw broker authority.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Prevent recurrence of a nominal discovery feature that exists in code/docs but is operationally inert.
 
 ## Change rule
 
