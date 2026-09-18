@@ -71,7 +71,7 @@ def _plan(direction: Direction = Direction.BUY) -> TradePlan:
 def _bar(index: int, *, high: float, low: float, close: float) -> Candle:
     return Candle(
         time_utc=NOW + timedelta(minutes=5 * index),
-        open=100.0,
+        open=close,
         high=high,
         low=low,
         close=close,
