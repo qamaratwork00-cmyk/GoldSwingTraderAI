@@ -85,9 +85,9 @@ A separate `OFFLINE_RESEARCH.md` is intentionally not used: offline methodology 
 
 | Document | Status | Purpose |
 |---|---|---|
-| [Dashboard and UX](50-operator/DASHBOARD_AND_UX.md) | PROVISIONAL | Compact terminal dashboard, restrained emojis, decision trace, health/backup visibility |
-| [User Manual](50-operator/USER_MANUAL.md) | PROVISIONAL | Normal operation, WAIT/BLOCKED handling, governed controls and safety guidance |
-| [Setup and Run Guide](50-operator/SETUP_AND_RUN_GUIDE.md) | PROVISIONAL | First setup, startup/shutdown, migration, restore and troubleshooting workflow |
+| [Dashboard and UX](50-operator/DASHBOARD_AND_UX.md) | PROVISIONAL | Compact terminal dashboard, restrained emojis, decision trace, execution permission, health/backup visibility |
+| [User Manual](50-operator/USER_MANUAL.md) | DRAFT | Normal operation, WAIT/BLOCKED handling, governed controls and safety guidance |
+| [Setup and Run Guide](50-operator/SETUP_AND_RUN_GUIDE.md) | DRAFT | First setup, startup/shutdown, migration, restore and troubleshooting workflow |
 
 ## 60 — Engineering
 
@@ -96,7 +96,7 @@ A separate `OFFLINE_RESEARCH.md` is intentionally not used: offline methodology 
 | [Coder Guide](60-engineering/CODER_GUIDE.md) | DRAFT | Feature-oriented ownership/change/debugging map; includes centralized broker-write permission feature |
 | [Module Structure](60-engineering/MODULE_STRUCTURE.md) | DRAFT | File/module-oriented planned ownership and dependency direction |
 | [System Health and Diagnostics](60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md) | PROVISIONAL | Fault severity, trading impact, recovery and overall-health aggregation |
-| [Testing and Verification](60-engineering/TESTING_AND_VERIFICATION.md) | PROVISIONAL | No-lookahead, execution, crash/restart, migration, learning and DEMO test architecture |
+| [Testing and Verification](60-engineering/TESTING_AND_VERIFICATION.md) | PROVISIONAL | No-lookahead, execution gate, crash/restart, migration, learning and DEMO test architecture |
 | [Release Checklist](60-engineering/RELEASE_CHECKLIST.md) | PROVISIONAL | DEMO release gates and sign-off checklist |
 | [Final Release Audit](60-engineering/FINAL_RELEASE_AUDIT.md) | DRAFT TEMPLATE | Evidence-backed release snapshot; PASS only after tests actually execute |
 
