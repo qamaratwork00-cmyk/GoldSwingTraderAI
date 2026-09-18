@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Persistence, Restart and Recovery
 
-**Status:** PROVISIONAL  
-**Version:** 0.2-implementation  
+**Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
+**Version:** 0.3-implementation  
 **Authority:** Durable lifecycle state, crash recovery, restart reconciliation, portable strategy/learning state, machine migration and backup/restore integrity.  
 **Depends on:** `EXECUTION_AND_BROKER_SAFETY.md`, `RISK_CONTRACT.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../40-research-learning/LEARNING_AND_AI_BOUNDARIES.md`
 
@@ -11,11 +11,11 @@ The bot must survive process restart, laptop loss/change and controlled migratio
 
 > **Restart is not a fresh trading day unless the actual risk/session rules say so. Machine replacement is not strategy amnesia.**
 
-## Phase 6 implementation checkpoint
+## Current implementation checkpoint
 
-V1 persistence foundation now uses the Python standard-library `sqlite3` module. No ORM/service/database framework is required.
+Initial V1 local persistence uses Python standard-library `sqlite3`. No ORM/service/database framework is required.
 
-Implemented owners:
+Core storage owners:
 
 ```text
 src/goldswingtraderai/persistence/store.py
@@ -23,24 +23,26 @@ src/goldswingtraderai/persistence/runtime_state.py
 src/goldswingtraderai/persistence/__init__.py
 ```
 
+Subsystem repositories/adapters now also persist their own typed state on top of the same `StateStore` durability model, including execution intents, managed-trade state, research episodes, candidate registry and promotion lifecycle.
+
 ### `store.py`
 
-Provides a small transactional `StateStore` with:
+Provides a transactional `StateStore` with:
 
 - SQLite durable records;
 - canonical JSON payloads;
 - SHA-256 checksums;
-- explicit database and record schema versions;
+- explicit database/record schema versions;
 - `PRAGMA quick_check` plus record-checksum integrity verification;
-- `WAL` journal mode and `synchronous=FULL`;
+- WAL journal mode and `synchronous=FULL`;
 - atomic transactional upsert/delete;
-- optional append-only event records written in the same transaction as the current state update.
+- optional append-only event records written in the same transaction as current-state update.
 
 Corrupt JSON/checksum/schema state raises an explicit persistence error. It is never converted into an empty safe-looking runtime state.
 
 ### `runtime_state.py`
 
-Provides typed round-trip adapters for the current critical V1 state:
+Typed round-trip adapters currently cover:
 
 - `RiskDayState`;
 - `CooldownState`;
@@ -48,286 +50,280 @@ Provides typed round-trip adapters for the current critical V1 state:
 - active `Opportunity`;
 - active `TradePlan`, including objective/original-R context.
 
-`RuntimeStateRepository` scopes records by managed account/symbol identity supplied by the caller. `load_recovery_bundle()` validates storage integrity and cross-checks Opportunity, Market Episode and Trade Plan lineage before returning restart context.
+`RuntimeStateRepository` scopes records by managed account/symbol identity supplied by caller. `load_recovery_bundle()` validates storage integrity and cross-checks Opportunity, Market Episode and Trade Plan lineage.
 
-Current deterministic tests prove process-restart round-trip, checksum-corruption failure, critical lineage recovery, identity-mismatch rejection and clearing active plan/opportunity without erasing durable risk-day history.
+### Later-phase typed persistence now implemented
 
-Execution Intent/order/trade lifecycle persistence is intentionally added with Phase 7 when those real types exist; it is not represented by speculative placeholder classes in Phase 6. Strategy Registry/learning/research persistence expands in their later implementation phases using the same durability principles.
+The Phase-6 foundation has since been extended by real later subsystem types rather than speculative placeholders:
+
+- durable `ExecutionIntent` lifecycle/history through execution intent storage;
+- managed open-trade state through management storage;
+- durable research episodes through `ResearchEpisodeRepository`;
+- durable candidate/rejected memory through `CandidateRegistry`;
+- durable promotion lifecycle/holdout/rollback state through `PromotionRegistry`.
+
+These states survive process restart in deterministic tests. They still require final whole-runtime startup orchestration and controlled broker/fresh-machine evidence before release verification.
 
 ## State categories
 
-Durable state should be logically separated rather than stored as one opaque mutable blob. Categories include:
+Durable state is logically separated rather than stored as one opaque mutable blob:
 
 - risk state;
 - runtime/system state;
-- order lifecycle;
-- trade lifecycle;
+- execution intent/order lifecycle;
+- managed trade lifecycle;
 - Trade Plan/original R context;
-- opportunity lifecycle;
+- Opportunity lifecycle;
 - Market Episode identity;
-- trade/opportunity journal;
-- performance ledger;
-- Strategy Registry;
-- StrategyMemory/entry-exit learning;
-- research/discovery/invention registry;
+- trade/opportunity/research journal;
+- performance/learning evidence;
+- Strategy/Candidate Registry;
+- StrategyMemory/entry-exit learning where persisted;
+- research/discovery/invention state;
 - promotion/rollback history;
 - diagnostics/fault history;
 - backup manifests/schema metadata.
 
-The initial V1 storage engine choice is SQLite. Logical categories remain distinct namespaces/records instead of one opaque serialized application object.
-
 ## Daily risk persistence
 
-Durable risk state must preserve at least:
+Durable risk state preserves at least:
 
 - risk-day identity;
 - day-start/cycle equity references and non-trading cash-flow adjustment;
 - manual-reset enabled/count state;
-- cooldown where applicable;
+- cooldown state;
 - Market Episode entry/loss/lock state.
 
-A restart must not silently erase a daily loss lock or churn protection.
+Restart must not silently erase a daily loss lock or churn protection.
 
-## Order lifecycle persistence
+## Execution Intent persistence
 
-Once Phase 7 introduces Execution Intents, they must survive crashes, especially `SUBMITTING` and `ACCEPTED_UNKNOWN` states. Startup must reconcile these with broker truth before new entries become possible.
+Execution intent persistence is now implemented. Critical one-shot states such as `SUBMITTING` and `ACCEPTED_UNKNOWN` survive restart.
 
-This is a Phase-7 extension of the implemented storage foundation, not a reason to invent order-state placeholders now.
+Startup/recovery rule:
 
-## Open trade context
+```text
+restored SUBMITTING / ACCEPTED_UNKNOWN
+→ DO NOT RESEND
+→ query broker truth
+→ reconcile positions/orders/deals/action state
+→ classify VERIFIED / FAILED / still UNKNOWN
+→ only then may a fresh governed Intent be considered
+```
 
-Broker position facts alone are insufficient to manage a trade intelligently after restart. Persist or deterministically recover:
+An already-consumed Intent ID can never be recreated in memory to obtain another irreversible send allowance.
+
+## Open-trade context
+
+Broker position facts alone are insufficient to manage a trade intelligently after restart. Durable/recoverable context includes, as applicable:
 
 - strategy/policy version;
-- Opportunity/Episode IDs;
+- Opportunity/Episode/Trade IDs;
 - signal/approved entry/actual fill identities;
 - original SL and immutable original R;
-- current broker SL/TP;
-- primary/expansion/runner objectives;
+- current verified broker SL/TP;
+- Primary/Expansion/Runner objectives;
 - Trade Manager phase/context;
 - relevant protected structure references.
 
-Phase 6 already persists the pre-execution Trade Plan/original-R/objective context. Actual fill/current broker position fields arrive with the execution/trade lifecycle types.
+Managed-trade persistence exists deterministically. Current broker SL/TP/position truth must still be reconciled fresh after restart.
 
 ## Opportunity and Market Episode state
 
-A stored opportunity may be restored by identity but must be revalidated against fresh market state after downtime. Stale opportunities must not trigger orders merely because they were READY/ARMED before shutdown.
+A stored opportunity may be restored by identity but must be revalidated against fresh market state after downtime. Stale READY/ARMED state cannot trigger an order merely because it was persisted.
 
-Market Episode identity survives restart to prevent duplicate entries and preserve legitimate re-entry lineage. Phase-6 persistence already preserves active Opportunity/Episode identity and Episode risk counters.
+Market Episode identity survives restart to prevent duplicate entries and preserve legitimate re-entry lineage.
+
+## Research / discovery / promotion persistence
+
+Phase-10 research state is now real rather than a future placeholder.
+
+Durable pieces include:
+
+- outcome-labelled research episodes;
+- Candidate IDs/recipes/fingerprints;
+- rejected/duplicate candidate memory;
+- promotion stage;
+- locked fingerprint;
+- final-holdout identity/consumed state;
+- rejection/rollback/promotion metadata.
+
+Discovery restart behaviour must preserve liveness semantics: eligible recurring evidence after restart must still be able to produce a candidate or explicit governed suppression reason rather than forgetting prior evidence.
 
 ## Rebuildable versus durable market state
 
-Rolling candles and much structural intelligence may be rebuilt from validated history. Rebuild must be deterministic and chronological.
+Rolling candles and structural/technical intelligence may be rebuilt from validated history. Rebuild must be deterministic and chronological.
 
-Durable lifecycle/financial/order/learning evidence should not depend on a replaceable candle cache.
+Durable financial/order/trade/learning evidence should not depend on a replaceable candle cache.
 
-## State integrity
+## State integrity and atomicity
 
 Persistent records use:
 
 - database schema version;
 - per-record schema version;
-- update timestamp;
 - canonical JSON;
 - SHA-256 checksum;
-- SQLite transactional durability;
-- append-only transition/event rows where requested by the owning subsystem.
+- SQLite transaction boundaries;
+- append-only transition/event rows where requested by owner.
 
-A corrupt critical state record must not silently fall back to safe-looking defaults.
-
-## Atomic writes
-
-SQLite transaction boundaries provide the V1 equivalent of the required atomic state update. Current record and requested audit event are committed together.
-
-The implementation does not perform ad-hoc in-place JSON-file mutation.
+A corrupt critical state record must not silently fall back to defaults.
 
 ## Schema versioning and migration
 
-Database and record schema versions are explicit. Unsupported versions raise `StateVersionError`; critical state is not silently interpreted under different semantics.
+Unsupported database/record versions raise explicit version errors. Critical state is not silently interpreted under changed semantics.
 
-Future migrations must be explicit and tested. Possible outcomes remain conceptually:
-
-```text
-MIGRATION_VERIFIED
-STATE_VERSION_INCOMPATIBLE
-MIGRATION_FAILED
-```
+Future schema migrations must be explicit and tested. Until schema v2+ exists, migration mechanics remain release-engineering work rather than speculative framework code.
 
 ## Broker versus local truth
 
-Broker owns actual positions/orders/deals/account P&L. Local state owns strategy intent/context and historical lifecycle.
+Broker owns current positions/orders/deals/account P&L. Local persistence owns intent, context and lifecycle history.
 
-Conflicts require reconciliation, for example:
+Example conflict:
 
 ```text
 local says OPEN
 broker says no open position
 → inspect deals/history/account identity
-→ resolve closure/manual action/data failure
+→ reconcile closure/manual action/data failure
+→ do not simply delete the local record
 ```
 
-Never simply delete the conflicting record.
+## Final startup/recovery sequence
 
-## Startup sequence
-
-Normal startup should conceptually perform:
+The target integrated startup is:
 
 ```text
-open/validate durable store
-→ load RecoveryBundle
-→ connect MT5
-→ verify intended account
-→ resolve symbol/specs
+open + integrity-check SQLite
+→ load critical recovery records
+→ connect intended MT5 DEMO account
+→ verify account/symbol
 → fetch positions/orders/deals
-→ reconcile unresolved broker lifecycle
-→ restore managed trades
+→ reconcile unresolved ExecutionIntents
+→ reconcile managed trades
 → restore/validate risk state
-→ rebuild market intelligence
+→ rebuild market intelligence chronologically
 → revalidate stored opportunities
-→ load Strategy Registry/learning
-→ acquire execution authority
+→ load research/candidate/promotion/learning state
+→ acquire current controller lease/epoch
+→ evaluate hard permissions
 → READY
 ```
 
-Open-position/order safety and reconciliation have priority over searching for new trades. Phase 6 implements durable loading/integrity; Phase 7 connects it to actual broker order/position reconciliation.
+The individual persistence/reconciliation components exist, but this complete persistent startup orchestration remains a final integration task.
 
 ## Fault/recovery ledger
 
-Persist meaningful incidents with:
+Meaningful incidents should preserve:
 
 - reason code;
 - subsystem;
 - severity;
 - first/last seen;
-- count;
+- occurrence count;
 - trading impact;
 - recovery state/time.
 
-The current generic event table is a durable foundation; richer diagnostic ownership may build on it without changing critical state semantics.
-
-## Portable Strategy Registry
-
-Strategy identity is machine-independent. The registry must preserve, where applicable:
-
-- Strategy/Candidate ID;
-- family/recipe/version;
-- parameters;
-- evidence/invalidation/timing/target semantics;
-- status (`CHAMPION`, `CHALLENGER`, `SHADOW`, `CANARY`, `REJECTED`, etc.);
-- genealogy/parent strategy;
-- validation/promotion references;
-- creation/promotion/rejection history.
-
-Autonomous and governed strategies must survive process restart and machine replacement. This registry is implemented in the later research/learning phase, not faked in Phase 6.
-
-## Learning portability
-
-Entry learning, exit learning, StrategyMemory, candidate research and rejected-hypothesis memory should be durable/versioned so a new laptop does not restart learning from zero.
-
-Production, shadow, canary and replay evidence must retain environment/version tags after migration.
+The generic event table provides a durable base; richer diagnostics can build on it without redefining critical state semantics.
 
 ## Public GitHub backup policy
 
-The project may use the public GitHub repository as a disaster-recovery/versioned backup for non-financial-authority project intelligence, including:
+The public repository may back up non-financial-authority project intelligence:
 
-- source code and docs;
-- strategy definitions and learned parameters;
-- Strategy Registry;
-- autonomous candidates and genealogy;
-- entry/exit learning summaries/state as implementation permits;
+- source/docs;
+- strategy definitions/learned parameters;
+- Candidate/Strategy Registry;
+- autonomous candidates/genealogy/rejected memory;
+- entry/exit learning summaries where export permits;
 - research/promotion/rollback history;
 - performance/evidence metadata;
-- restore manifests.
+- restore manifests/checkpoints.
 
-The privacy rule is intentionally narrow: **credentials, tokens, private keys or other authentication material that can enable unauthorized financial action or direct paid-service cost must never be committed.**
+Never publish authority-bearing credentials/tokens/keys capable of unauthorized financial action/authenticated account control/direct paid-service cost.
 
-Examples that must stay out of the public repository:
-
-- MT5 trading passwords/authentication secrets;
-- broker/private session tokens;
-- paid API secrets;
-- GitHub PAT/access tokens;
-- private/signing/encryption keys;
-- cloud/database credentials with financial/action authority.
-
-Strategies/learning are not automatically treated as secrets under this project policy.
-
-Live mutable SQLite database files are runtime state and should not be treated as mergeable source files. Portable checkpoint/export/manifest support can later publish the permitted recovery intelligence without exposing financial-authority secrets.
+Live mutable SQLite DB files are runtime state, not mergeable source artifacts. Phase-11 portable export/checkpoint work should package permitted recovery intelligence deliberately rather than treating the live DB as a Git merge target.
 
 ## Backup verification
 
-A backup is not considered valid merely because files exist. A backup/checkpoint should verify, as applicable:
+A backup is not valid merely because files exist. Verify as applicable:
 
-- required strategy/learning/research state is present;
-- manifest/schema versions are valid;
-- checksums/integrity checks pass;
+- required strategy/learning/research state exists;
+- manifest/schema versions valid;
+- checksums/integrity pass;
 - restore parsing succeeds;
-- financial-authority secret scan passes;
-- previous known-good backup is preserved on failure.
+- financial-secret scan passes;
+- previous known-good backup preserved on failure.
 
-Meaningful checkpoints may be created after strategy promotion, important learning/research milestones, safe shutdown, upgrades and scheduled intervals. Exact retention/frequency remain open.
+Exact backup cadence/retention remain Phase-11 implementation choices.
 
 ## Restore / machine migration
 
-Controlled migration should follow:
-
 ```text
 clone/install code
-→ restore portable state/checkpoint
+→ restore portable checkpoint
 → configure financial credentials separately
 → validate schema/integrity
-→ connect intended MT5 account
+→ connect intended MT5 DEMO
 → broker reconciliation
-→ rebuild market intelligence
-→ acquire execution-controller authority
-→ READY
+→ restore/rebuild runtime intelligence
+→ acquire fresh controller authority
+→ READY only after hard checks pass
 ```
 
-A restored backup is context, not broker truth. Current positions/orders/deals must always be reconciled fresh.
+A restored backup is context, not broker truth.
 
 ## Multi-machine safety
 
-Portable state does not grant multiple machines simultaneous broker-write authority. Execution controller ownership is governed by `EXECUTION_AND_BROKER_SAFETY.md`.
+Portable state does not grant multiple machines broker-write authority. Controller ownership remains governed by `EXECUTION_AND_BROKER_SAFETY.md`.
+
+The deterministic in-memory coordination backend is test-only; real shared atomic coordination is still required before cross-laptop failover certification.
 
 ## Learning degradation
 
-If optional learning state is unavailable/corrupt but the frozen baseline is independently valid, the system may operate in a documented degraded baseline mode while adaptive influence is disabled. Critical order/risk state cannot use this relaxed fallback.
+If genuinely optional learning/adaptive state is unavailable while frozen baseline semantics remain independently valid, the system may expose documented degraded baseline operation where its authority permits it.
+
+Critical risk/order/trade state cannot use that relaxed fallback.
 
 ## Dashboard visibility
 
-Dashboard should expose compact persistence/backup facts such as:
+Compact persistence/recovery facts should include, as available:
 
 ```text
-State Integrity     VERIFIED
-Risk State          RESTORED
-Opportunity/Plan    RESTORED / NONE
-Broker Reconcile    PENDING / COMPLETE
-Strategy Registry   RESTORED / NOT YET IMPLEMENTED
-Backup              VERIFIED / STALE / FAILED
+State Integrity       VERIFIED / FAILED
+Risk State            RESTORED / MISSING
+Execution Intents     CLEAR / RECONCILING
+Managed Trade         RESTORED / NONE / RECONCILING
+Opportunity/Plan      RESTORED / NONE
+Candidate Registry    RESTORED
+Promotion Registry    RESTORED
+Broker Reconcile      PENDING / COMPLETE
+Backup                VERIFIED / STALE / FAILED / PENDING
 ```
 
-## Tests required
+## Tests required / current evidence
 
-Implemented Phase-6 deterministic coverage:
+Deterministic coverage exists for:
 
-- risk-day state survives process restart;
-- cooldown and Episode risk state survive restart;
-- Opportunity identity/lifecycle survives restart;
-- Trade Plan/original-R/targets survive restart;
-- checksum corruption fails closed;
-- Opportunity/TradePlan identity mismatch fails closed;
-- active plan/opportunity may be cleared without erasing risk-day history;
-- SQLite integrity verification succeeds for healthy state.
+- risk-day/cooldown/Episode restart;
+- Opportunity/TradePlan lineage restart;
+- checksum corruption fail-closed;
+- active plan/opportunity clear without erasing risk history;
+- ExecutionIntent one-shot history/restart semantics;
+- unresolved intent reconciliation paths;
+- managed-trade state persistence;
+- research episode restart;
+- Candidate/rejected-memory restart;
+- promotion/holdout/rollback restart.
 
-Later required integration coverage:
+Still required before release verification:
 
-- `SUBMITTING/ACCEPTED_UNKNOWN` recovery after Phase-7 order lifecycle exists;
-- actual open-trade fill/current SL/TP recovery;
-- schema migration/rollback fixtures when schema v2 exists;
-- Strategy Registry/learning migration;
+- fully integrated startup/recovery path;
+- real broker open-position/SL/TP restart reconciliation;
+- schema migration/rollback fixtures once a second schema exists;
+- portable checkpoint/export integrity;
 - fresh-machine restore drill;
-- broker reconciliation after old backup restore;
-- portable backup integrity/secret scan.
+- old-backup + live-broker reconciliation drill;
+- production shared-controller failover recovery.
 
 ## Explicit non-goals
 
@@ -335,24 +331,24 @@ Persistence must not:
 
 - treat stale backup as current broker truth;
 - silently reset critical state after corruption;
-- embed financial credentials inside strategy/learning backups;
+- embed financial credentials in backups;
 - allow machine-specific IDs to redefine strategy identity;
 - permit two restored laptops to trade the same managed account independently;
-- add an ORM or service layer where SQLite + typed adapters already satisfy V1 requirements.
+- add an ORM/service layer where SQLite + typed adapters satisfy V1.
 
-## Open questions
+## Open / later implementation items
 
-Resolved for initial V1 implementation:
+Resolved for V1:
 
-- local durable runtime storage engine: **standard-library SQLite**;
-- current record format: **canonical JSON + SHA-256 checksum inside SQLite**;
-- current critical Phase-6 typed records: risk/cooldown/episode/opportunity/TradePlan.
+- local durable runtime engine: **standard-library SQLite**;
+- record shape: **canonical JSON + SHA-256 checksum in SQLite**;
+- typed repositories/adapters for current critical runtime/execution/management/research state.
 
-Still open/later-phase:
+Still pending:
 
-- backup/checkpoint cadence and retention;
-- exact Git-tracked portable state artifacts versus generated checkpoint/export artifacts;
-- migration/rollback compatibility policy once a second schema version exists;
-- execution-intent/order/trade persistence shape when Phase 7 real lifecycle types are implemented;
-- execution-lease persistence/coordinator implementation;
-- Strategy Registry/learning/research export shape.
+- backup/checkpoint cadence/retention;
+- portable export/manifest format;
+- migration/rollback compatibility when schema v2+ exists;
+- production shared execution-controller coordinator;
+- final integrated startup/shutdown/recovery orchestration;
+- fresh-machine restore certification.
