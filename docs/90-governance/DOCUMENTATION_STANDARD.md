@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Documentation Standard
 
 **Status:** PROVISIONAL  
-**Version:** 0.6-design  
+**Version:** 0.7-design  
 **Authority:** Documentation placement, ownership, status and change-control rules.
 
 ## 1. Purpose
@@ -46,10 +46,13 @@ Owns market observations/inference:
 - market data/history;
 - candle structure;
 - HTF technical structure/levels/location;
+- optional technical confluence such as causal Trendline/Fibonacci/broker-local POC;
 - liquidity/SMC primitives;
 - indicators/volatility;
 - macro/fundamental/event facts;
 - session context as market evidence.
+
+`TECHNICAL_STRUCTURE_AND_LEVELS.md` is the behavioural authority for generic technical zones/location and optional Trendline/Fibonacci/POC confluence even if implementation uses separate `technical.py` and `confluence.py` modules for clean code.
 
 Market-intelligence documents do not grant final broker authority.
 
@@ -169,6 +172,7 @@ Examples:
 - hard news permission → `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` from event facts supplied by `10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`;
 - entry-state semantics → `20-trading-decisions/ENTRY_TIMING.md`;
 - BOS/MSS/swing definitions → `10-market-intelligence/CANDLE_STRUCTURE.md`;
+- technical zones/location and Trendline/Fibonacci/POC confluence semantics → `10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md`;
 - initial entry/SL/targets/original R → `20-trading-decisions/TRADE_PLAN.md`;
 - post-entry management → `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`;
 - centralized broker-write permission/one-shot/controller semantics → `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`;
@@ -179,13 +183,13 @@ Examples:
 
 Compatibility redirect files contain only a pointer to the authoritative path.
 
-If two documents contain competing detailed versions of the same rule, that is a documentation defect and must be resolved before implementing the affected behaviour.
+If two documents contain competing detailed versions of the same rule, that is a documentation defect and must be resolved before implementing affected behaviour.
 
 ## 7. Cross-references
 
 Use relative repository links wherever possible. Supporting docs should link to authoritative sources instead of pasting a second independent version.
 
-Final Build Prompt, Coder Guide, Module Structure and Build/Recovery Guide may summarize Coding Standard requirements for execution clarity, but `CODING_STANDARD.md` remains the detailed authority and must win if wording diverges.
+Final Build Prompt, Coder Guide, Module Structure and Build/Recovery Guide may summarize Coding Standard requirements for execution clarity, but `CODING_STANDARD.md` remains detailed authority and wins if wording diverges.
 
 ## 8. Design decisions and freeze matrix
 
@@ -217,7 +221,7 @@ Synchronize as applicable:
 
 - authoritative topic doc;
 - `DESIGN_DECISIONS.md` / `OPEN_QUESTIONS.md`;
-- `60-engineering/CODING_STANDARD.md` only after an explicitly approved engineering-standard change;
+- `60-engineering/CODING_STANDARD.md` only after explicitly approved engineering-standard change;
 - `60-engineering/MODULE_STRUCTURE.md`;
 - `CODER_GUIDE.md`;
 - User/Setup/operator docs;
@@ -228,7 +232,7 @@ A phase is not complete while code and authoritative documentation knowingly dis
 
 ## 10. Final Build Prompt rule
 
-`docs/FINAL_BUILD_PROMPT.md` is a whole-project handoff summary. It may summarize frozen/current implementation direction, including the Coding Standard, but it must not override authoritative subsystem documents.
+`docs/FINAL_BUILD_PROMPT.md` is a whole-project handoff summary. It may summarize frozen/current implementation direction, including Coding Standard, but it must not override authoritative subsystem documents.
 
 Before it is marked `FROZEN`:
 
@@ -238,7 +242,7 @@ Before it is marked `FROZEN`:
 
 ## 11. ChatGPT Project Build and Recovery Guide rule
 
-`docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` is the persistent meta-guide for completing the project in large phases and resuming safely after interruption.
+`docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` is persistent meta-guide for completing the project in large phases and resuming safely after interruption.
 
 It defines:
 
