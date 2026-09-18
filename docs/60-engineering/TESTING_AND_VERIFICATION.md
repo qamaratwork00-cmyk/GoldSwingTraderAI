@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 0.7-design  
+**Version:** 0.8-design  
 **Authority:** Test taxonomy, executable proof requirements, replay/live parity, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
@@ -17,7 +17,7 @@ Testing must prove documented invariants. `VERIFIED` is reserved for behaviour t
 Unit / Contract Tests
 → Component Tests
 → Deterministic Replay Tests
-→ Research Ablation / Outcome / Management Replay Tests
+→ Research Ablation / Outcome / Management Replay / Stress Tests
 → Integration Tests
 → Fault / Crash Injection
 → Persistence / Migration Tests
@@ -53,6 +53,7 @@ Current realism labels must remain explicit:
 Decision replay          BAR_CLOSE
 Initial bracket outcomes BAR_HIGH_LOW
 Trade Manager replay     BAR_CLOSE_IDEALIZED + active bar-high/low barriers
+Execution stress         BAR_CLOSE_EXECUTION_STRESS + declared assumptions
 ```
 
 Do not claim tick/broker parity without sufficient historical/live evidence.
@@ -133,7 +134,7 @@ Initial post-hoc outcome modeling must prove:
 
 ## Research Trade Manager replay tests
 
-The idealized chronological manager layer must prove:
+The chronological manager layer must prove:
 
 - historical READY Trade Plan creates the research `ManagedTrade` without changing production code;
 - the **currently active** stop and broker TP are checked before a new management action on each M5;
@@ -147,14 +148,45 @@ The idealized chronological manager layer must prove:
 - `HORIZON_OPEN` and ambiguous outcomes remain outside resolved manager Net R/PF/drawdown;
 - Capture Efficiency and profit giveback are derived only from modeled path facts;
 - confluence management ablation uses identical decision chronology and correct signed deltas versus BASE;
-- `BAR_CLOSE_IDEALIZED` is visible in documentation/evidence and never described as broker-realized P/L.
+- default `BAR_CLOSE_IDEALIZED` is visible in documentation/evidence and never described as broker-realized P/L.
+
+## Research execution-stress tests
+
+`research/stress.py` and optional `ManagementReplayAssumptions` must prove:
+
+- analytical `ReplayRun` remains fixed while execution/Trade Plan assumptions are stressed;
+- stress scenarios always include exactly one clean BASE and unique variant names;
+- all stress assumptions are explicit/configurable rather than hidden optimistic defaults;
+- a positive spread uses executable-side approximation: BUY exits on Bid, SELL exits on Ask;
+- wider spread changes modeled Trade Plan/barrier economics without rewriting strategy history;
+- adverse entry slippage is measured in immutable original-R units;
+- adverse fill does **not** move the structural stop/target or rewrite `original_r_price` to disguise extra loss;
+- completed-M5 modify delay cannot affect the already-completed bar that generated the request;
+- while one synthetic manager modify is pending, later modify submissions are suppressed until resolution;
+- deterministic every-Nth modify rejection leaves broker-state geometry unchanged for that rejected request;
+- modify requested/applied/rejected/suppressed/pending counts remain auditable;
+- same-bar stop+TP ambiguity remains unresolved under stress;
+- open/ambiguous outcomes remain outside resolved stress Net R/PF/drawdown;
+- scenario reports compute signed deltas versus BASE for managed plans, plan rejection, coverage, Net/Avg R, drawdown, Capture Efficiency and giveback;
+- default V1 probe values are documented as research-calibration baselines, **not** production thresholds or historical broker truth.
+
+Current default probes are:
+
+```text
+WIDER_SPREAD        1.50x dataset spread
+ADVERSE_ENTRY       0.10R adverse fill
+MODIFY_DELAY        1 completed M5
+MODIFY_REJECTION    every 2nd submitted modify rejected
+COMBINED            all four together
+```
+
+These values require historical/DEMO calibration before any edge or broker-realism claim.
 
 Still required before broker-parity claims:
 
 - historical PRE_CLOSE/session-policy integration;
-- stop/TP modification delay/failure stress;
-- fill/slippage stress;
-- tick/intrabar comparison where needed;
+- variable intrabar spread/tick-order comparison where needed;
+- real broker modification/fill distribution comparison;
 - controlled DEMO replay-versus-broker evidence.
 
 ## Entry lifecycle tests
@@ -311,6 +343,7 @@ Confluence causality       PASS / count
 Confluence ablation        PASS / count
 Bracket outcome model      PASS / count / coverage
 Trade Manager replay       PASS / count / coverage / realism
+Execution stress           PASS / scenarios / declared assumptions
 Discovery liveness         PASS / count
 Execution gate             PASS / count
 Controller/failover        PASS / count
@@ -321,6 +354,8 @@ Long forward sample        PENDING/PASS
 ```
 
 Do not mark pending evidence as PASS. Do not convert ambiguous/unresolved/open replay outcomes into synthetic resolved P/L.
+
+Current deterministic CI checkpoint after the execution-stress foundation: **159 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Release-blocking failures
 
@@ -343,17 +378,20 @@ At minimum:
 - eligible discovery evidence silently disappearing;
 - optional confluence acting as undocumented hard gate;
 - research favorably resolving unknown same-bar stop/target ordering;
-- replay applying a management modification retroactively to the bar that generated it.
+- replay applying a management modification retroactively to the bar that generated it;
+- stress model silently rewriting structural stop/target or original R to improve adverse-fill results;
+- hidden/unreported stress assumptions presented as historical broker fact.
 
 ## Explicit non-goals
 
-Testing must not claim profitability from software correctness, mark docs VERIFIED because Markdown is complete, hide pending evidence, present idealized replay as broker-realized P/L, or replace required live DEMO proof with only mocks.
+Testing must not claim profitability from software correctness, mark docs VERIFIED because Markdown is complete, hide pending evidence, present idealized/stressed replay as broker-realized P/L, or replace required live DEMO proof with only mocks.
 
 ## Open questions
 
 - final CI coverage/static/security thresholds;
 - historical PRE_CLOSE/session integration into manager replay;
-- execution modification failure/latency/slippage stress assumptions;
+- empirical calibration of spread/slippage/modify-failure stress assumptions by broker/session/volatility;
+- variable-spread/tick-order stress where data supports it;
 - final controlled DEMO certification sample/steps;
 - long-duration forward-evidence requirement;
 - final historical/DEMO evidence threshold for retaining each optional confluence feature.
