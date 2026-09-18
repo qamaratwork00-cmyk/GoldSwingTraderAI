@@ -1,9 +1,9 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 1.8-design  
-**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research evidence integrity, portable recovery, backup/catalog integrity, controller fencing, governed startup recovery and release verification.  
-**Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
+**Version:** 1.9-design  
+**Authority:** Test taxonomy, executable proof requirements, replay/live parity, recovery/broker-read integrity, controller fencing and release verification.  
+**Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../10-market-intelligence/MARKET_DATA_AND_HISTORY.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
 ## Purpose
 
@@ -16,131 +16,99 @@ Testing must prove documented invariants. `VERIFIED` is reserved for behaviour t
 ```text
 Unit / Contract
 → Component
-→ Deterministic Replay
-→ Research / Historical Session / Stress / Walk-Forward
-→ Dataset / Acquisition / Evidence / Package Integrity
-→ Persistence / Checkpoint / Backup Catalog / Restore / Fault Injection
-→ Controller Contention / Fencing / Takeover Recovery
-→ Governed Startup Recovery
+→ Deterministic Replay / Research
+→ Dataset / Evidence Integrity
+→ Persistence / Checkpoint / Backup / Restore
+→ Controller Fencing / Startup Recovery
+→ Live-Read MT5 Recovery Adapter
 → Controlled Windows MT5 / Fresh Machine / Cross-Laptop / DEMO
 → End-to-End DEMO Certification
 ```
 
-## Core chronology / research invariants
+## Core deterministic invariants
 
-Future data cannot leak into structure, confluence, decisions, Trade Plans, Trade Manager actions or earlier validation windows. Historical PRE_CLOSE schedules must be explicit/versioned; synthetic schedules prove software semantics only.
+No future leakage; no hidden confluence hard gate; explicit historical session truth; checkpoint/catalog integrity; financial-secret blocking; one-shot execution; broker reconciliation; monotonic fencing; takeover recovery; restored state never equals broker truth.
 
-## Persistence / checkpoint / backup
+## Live MT5 recovery read tests
 
-Tests protect current-record + event integrity, schema enforcement, deterministic `StoreSnapshot`, immutable public-safe checkpoint export/import, fresh-DB-only restore, financial-secret blocking, automatic due/skip cadence, retention, hashed catalog integrity, latest-verified selection and previous-known-good preservation after failed backup.
+`MT5Reader.open_positions()` and `app/recovery_mt5.py` must prove:
 
-## Controller coordination / fencing
-
-Tests prove:
-
-- one winner under independent SQLite-store contention;
-- monotonic fencing epoch across expiry/release/reopen;
-- stale renew/release denial;
-- `shared_locking_verified` false by default;
-- valid holder blocks contenders;
-- expired-lease takeover obtains higher epoch but remains `CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED`;
-- renewal does not clear takeover block;
-- explicit completion requires fresh same-holder/same-epoch authority;
-- authority loss during recovery prevents completion;
-- `ExecutionService` checks controller ID + fencing epoch immediately before send.
-
-These prove software semantics on correctly locking SQLite storage, not arbitrary network filesystem safety.
+- current positions come through the existing `MT5Reader` boundary;
+- no duplicate raw MetaTrader5 recovery client exists;
+- BUY and SELL types normalize correctly;
+- result ordering is deterministic by broker ticket;
+- MT5 SL/TP `0` normalize to explicit `None`;
+- optional magic/comment are preserved as read facts;
+- a positive empty broker collection becomes complete empty exposure;
+- `positions_get() is None` is `DATA_UNAVAILABLE`, never empty exposure;
+- invalid direction/wrong symbol/invalid geometry fail `DATA_CORRUPT`;
+- duplicate broker position ticket fails closed;
+- recovery adapter resolves configured symbol aliases;
+- adapter includes current `AccountFacts` and verified `SymbolSpec`;
+- `BrokerRecoverySnapshot.positions_complete=True` is emitted only after successful position read;
+- recovery SL/TP comparison tolerance comes from verified `SymbolSpec.tick_size`;
+- no hard-coded XAU tick/price tolerance is hidden in recovery code.
 
 ## Governed startup recovery tests
 
-`app/recovery.py` must prove:
+Startup recovery tests prove persistent integrity first, current DEMO/account/server/symbol consistency, unresolved Intent reconciliation, ManagedTrade/current-position matching, required hard authorities and controller takeover completion only at the successful end.
 
-- StateStore integrity is checked before READY;
-- clean current DEMO recovery can reach READY;
-- non-DEMO broker context blocks;
-- persisted account/server/symbol mismatch blocks;
-- incomplete broker position truth remains RECONCILING;
-- `APPROVED` pre-submit Intent may be safely cancelled to FAILED with zero send attempts;
-- `CREATED` Intent does not become an implicit send;
-- `SUBMITTING` / `ACCEPTED_UNKNOWN` route through existing broker reconciler;
-- unresolved reconciliation stays RECONCILING and never blind-resends;
-- verified OPEN without durable ManagedTrade context cannot become READY;
-- ManagedTrade requires exact ticket/symbol/direction/volume identity;
-- missing broker position remains RECONCILING;
-- SL/TP mismatch outside explicit tolerance remains RECONCILING;
-- duplicate/identity/volume conflict blocks;
-- every supplied hard RecoveryAuthority must PASS;
-- UNKNOWN authority remains RECONCILING and BLOCK authority blocks;
-- a takeover controller remains fenced until the full recovery sequence passes;
-- only then may startup call `complete_takeover_reconciliation()`;
-- takeover completion is rechecked against the current holder/epoch;
-- recovery performs no raw broker write.
+## Persistence / backup / controller tests
 
-The caller-supplied price tolerance must come from verified broker geometry; tests must not hide a hard-coded Gold tolerance inside recovery logic.
+Checkpoint/backup tests protect canonical records/events, secret blocking, no-overwrite restore, due/skip cadence, retention/catalog integrity and last-known-good preservation.
 
-## Risk / execution / session tests
+Controller tests protect one-winner contention, monotonic epochs, stale-holder denial and reconciliation-gated takeover. Local deterministic SQLite tests do not certify arbitrary network filesystems.
 
-Risk tests cover frozen bands, min-lot actual risk, daily lock/reset/cooldown and 0/1 capacity. Execution tests cover positive DEMO guard, central gate, exactly-one-send, ambiguous ACK reconciliation and controller fencing. Runtime session/news tests cover frozen blackout/PRE_CLOSE/reopen rules.
+## Controlled evidence boundary
 
-## Fresh-machine / broker reconciliation
+Public CI can verify the read adapter with fake MT5 modules, but cannot prove the intended Windows terminal/broker actually returns equivalent account/symbol/open-position facts. That evidence remains controlled external work.
 
-Deterministic startup recovery is necessary but not sufficient. Controlled certification must combine a restored checkpoint with a real current MT5 account/symbol/positions/orders/deals snapshot, prove no stale order replay and verify current controller authority before broker writes.
-
-Cross-laptop certification additionally requires real shared-storage/network failure tests and stale-primary denial.
+Fresh-machine certification must use a real restored checkpoint plus current broker positions/orders/deals and prove no stale replay before READY.
 
 ## Evidence reporting
 
 ```text
 Deterministic CI                PASS / count
-StateStore/checkpoint integrity PASS
-Local backup catalog            PASS
-SQLite controller fencing       PASS
-Startup recovery coordinator    PASS
-Live MT5 recovery snapshot      PENDING/PASS
+Market read contracts           PASS
+Live-recovery adapter software  PASS
+State/checkpoint/backup         PASS
+Controller/startup recovery     PASS
+Real Windows MT5 recovery read  PENDING/PASS
 Fresh-machine broker reconcile  PENDING/PASS
 Cross-laptop coordination       PENDING/PASS
 Remote backup publication       PENDING/PASS
-Historical PRE_CLOSE software   PASS
-Research evidence packages      PASS
 DEMO execution                  PENDING/PASS
 ```
 
-Current deterministic checkpoint after startup recovery integration: **219 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic checkpoint after live MT5 recovery adapter: **226 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Release-blocking failures
 
 At minimum:
 
 - future-data leakage;
-- optional confluence becoming hidden hard gate;
-- favorable ambiguity guessing;
-- hidden walk-forward tuning/holdout bypass;
-- guessed historical session truth;
-- dataset/evidence/checkpoint/catalog tamper accepted;
-- secret included in public backup flow;
-- failed backup destroys previous known-good state;
-- stale checkpoint merged into live DB;
-- restored local state treated as broker truth;
+- unknown broker position read accepted as zero exposure;
+- corrupt/duplicate broker position accepted;
+- recovery hard-codes a guessed Gold tolerance instead of verified geometry;
+- duplicate raw MT5 recovery client bypasses read boundary;
+- checkpoint/catalog tamper or financial secret accepted;
+- stale restore treated as broker truth;
 - blind resend of unresolved Intent;
-- verified OPEN accepted without management context;
-- startup READY with account/symbol/ManagedTrade mismatch;
-- startup READY with any required hard authority UNKNOWN/BLOCK;
-- takeover completion before governed recovery passes;
-- non-monotonic fencing / split-brain write;
-- centralized execution/DEMO guard bypass;
-- autonomous self-promotion/broker bypass.
+- ManagedTrade mismatch accepted as READY;
+- hard recovery authority UNKNOWN/BLOCK accepted as READY;
+- takeover completion before recovery passes;
+- non-monotonic fencing/split-brain write;
+- centralized execution/DEMO guard bypass.
 
 ## Explicit non-goals
 
-Deterministic CI is not profitability proof, real broker proof, remote publication proof or cross-laptop filesystem certification. Checkpoints and recovery DTOs do not grant execution authority by themselves.
+Fake MT5 tests are software evidence, not real broker certification. Passing deterministic recovery does not prove profitability, broker behavior, cross-laptop filesystem safety or DEMO execution correctness.
 
-## Open questions / controlled evidence still required
+## Pending controlled matrix
 
-- live MT5 recovery-position adapter test matrix;
-- real fresh-machine + broker reconciliation certification matrix;
-- exact shared-storage/cross-laptop failover environment;
-- authenticated public-safe GitHub publication matrix;
-- controlled Windows/MT5 historical acquisition/session evidence;
-- real-data walk-forward/holdout requirements;
-- empirical execution-friction calibration;
-- final DEMO certification/forward-evidence requirement.
+- Windows MT5 account/symbol/open-position recovery read;
+- fresh-machine + broker reconciliation;
+- shared-storage/cross-laptop failover;
+- authenticated public backup publication;
+- real history/session evidence;
+- final DEMO forward/fault certification.
