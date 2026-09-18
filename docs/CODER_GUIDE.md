@@ -1,14 +1,14 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT  
-**Version:** 1.0-implementation-map  
+**Version:** 1.1-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
 
-> **Behaviour comes from the authoritative topic document. Code implements it. This guide tells you where the implementation lives and what is actually verified.**
+> **Behaviour comes from the authoritative topic document. Code implements it. This guide tells you where implementation lives and what has actually been verified.**
 
-Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `60-engineering/CODING_STANDARD.md` for frozen code-quality rules.
+Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `60-engineering/CODING_STANDARD.md` for frozen engineering rules.
 
 ## Current implementation checkpoint — 2026-09-18
 
@@ -34,7 +34,7 @@ market_data/mt5_reader.py
 market_data/snapshot.py
 ```
 
-Completed H4/H1/M15/M5 candles only; forming bars are excluded. Positive DEMO verification exists. Real terminal evidence is still required before external VERIFIED status.
+Completed H4/H1/M15/M5 candles only; forming bars are excluded. Positive DEMO verification exists.
 
 ### Phase 3 — Market intelligence — IMPLEMENTED + deterministic CI green
 
@@ -48,9 +48,9 @@ intelligence/news.py
 intelligence/snapshot.py
 ```
 
-One shared `MarketSnapshot` becomes one reusable `IntelligenceSnapshot`; ATR/indicators are reused rather than recalculated by every strategy.
+One verified market snapshot feeds one shared intelligence derivation; duplicate indicator/ATR reads are avoided.
 
-### Phase 4 — Strategies / BUY-SELL fusion / Opportunity / Timing — IMPLEMENTED + deterministic CI green
+### Phase 4 — Strategies + fusion + Opportunity + Entry Timing — IMPLEMENTED + deterministic CI green
 
 ```text
 strategies/floor.py
@@ -60,7 +60,7 @@ decisions/timing.py
 decisions/snapshot.py
 ```
 
-Six families evaluate in parallel. Missing optional evidence is omitted/reweighted, one strong family can lead, conflict remains visible, and poor timing normally creates WAIT instead of deleting a valid setup.
+Six families evaluate in parallel. Missing optional evidence is omitted/reweighted rather than zeroed. One strong family can lead. Poor timing normally yields WAIT rather than destroying a valid opportunity.
 
 ### Phase 5 — Trade Plan + Risk — IMPLEMENTED + deterministic CI green
 
@@ -70,17 +70,9 @@ risk/engine.py
 risk/state.py
 ```
 
-Important implementation invariants:
-- structural SL/objectives before monetary sizing;
-- no fake stop geometry;
-- frozen RR guard without becoming a high-RR-only bot;
-- score never increases monetary risk;
-- SMALL = any positive UTC day-start equity below `$300`; no `$100` floor;
-- broker minimum volume is evaluated by actual all-in risk;
-- exact broker margin is authoritative when available;
-- daily lock/cooldown/episode state is explicit and restart-ready.
+Structural geometry precedes monetary sizing. SMALL is any positive UTC day-start equity below `$300`; there is no `$100` floor. Minimum lot is evaluated by actual all-in risk. Score never increases risk. Exact broker margin is authoritative when available.
 
-### Phase 6 — Hard Session/News Permission + Persistence — IMPLEMENTED + deterministic CI green
+### Phase 6 — Session/News Permission + Persistence — IMPLEMENTED + deterministic CI green
 
 ```text
 risk/permissions.py
@@ -88,11 +80,9 @@ persistence/store.py
 persistence/runtime_state.py
 ```
 
-Hard permissions implement PRE_CLOSE/reopen and Tier-1/Tier-2 news policy without turning ordinary market evidence into extra filters.
+PRE_CLOSE/reopen/news safety are explicit hard authorities. Persistence uses standard-library SQLite + canonical JSON/checksum/schema/event records and restores risk/cooldown/episode/Opportunity/TradePlan state without silently defaulting corrupted critical data.
 
-Persistence uses standard-library SQLite with canonical JSON, checksums, schema versioning and transactional state/event rows. Risk day, cooldown, episode, Opportunity and TradePlan state round-trip with integrity validation.
-
-### Phase 7 — Centralized Execution + Reconciliation — IMPLEMENTED deterministic baseline + CI green
+### Phase 7 — Execution + Reconciliation — IMPLEMENTED deterministic baseline + CI green
 
 ```text
 execution/models.py
@@ -103,73 +93,51 @@ execution/controller.py
 execution/mt5_writer.py
 execution/service.py
 execution/reconcile.py
-execution/__init__.py
 ```
-
-Execution flow:
 
 ```text
 hard authorities
-→ Execution Permission Gate
+→ centralized gate
 → durable ExecutionIntent
 → broker pre-check
-→ fresh controller/fencing verification
+→ fresh lease/fencing verification
 → persist SUBMITTING
-→ exactly ONE order_send
-→ acknowledgement classification
-→ broker positions/orders/deals reconciliation
+→ exactly one order_send
+→ acknowledgement
+→ broker reconciliation
 ```
 
-Key guarantees:
-- one Intent ID can never be submitted twice;
-- pre-check failure consumes zero send attempts;
-- ambiguous acknowledgement blocks further writes and is never blindly retried;
-- even successful MT5 acknowledgement requires broker-truth verification before `ACCEPTED_VERIFIED`;
-- OPEN/MODIFY/CLOSE use the same narrow writer path;
-- elevated spread/drift may still pass after full revalidation; only frozen hard limits block;
-- stale fencing epoch cannot write.
+A success-like MT5 ACK is not treated as final truth until broker state verifies it. An Intent ID cannot be sent twice. Ambiguous acknowledgement is never blindly retried. Elevated spread/drift may pass after full revalidation; only frozen hard limits block.
 
-**Still pending before DEMO certification:** production shared cross-laptop coordination backend and real Windows/MT5 execution evidence. The in-memory coordination backend is deterministic test infrastructure only and is not sufficient cross-machine authority.
+Pending before failover/DEMO certification: production shared cross-laptop coordination backend and real Windows/MT5 execution evidence. In-memory coordination is test-only.
 
-### Phase 8 — Trade Manager / Runner / Exit — IMPLEMENTED deterministic baseline + CI green
+### Phase 8 — Trade Manager — IMPLEMENTED deterministic baseline + CI green
 
 ```text
 management/models.py
 management/manager.py
 management/store.py
 management/execution.py
-management/__init__.py
 ```
 
-Management flow:
+The manager owns HOLD / PROTECT / TRAIL / RUNNER / EXIT for verified bot-owned positions. Ordinary pullbacks do not force exit; small profit alone does not force breakeven; Primary is a checkpoint; runner needs fresh continuation + actual next objective; PRE_CLOSE overrides continuation. Durable trade state changes only after broker verification.
+
+Numeric management thresholds remain research-calibratable baselines.
+
+### Phase 9 — Dashboard / Operator presentation — IMPLEMENTED deterministic baseline + CI green
 
 ```text
-verified bot-owned ManagedTrade
-+ fresh MarketSnapshot / IntelligenceSnapshot
-→ continuation vs reversal evidence
-→ HOLD / PROTECT / TRAIL / RUNNER / EXIT
-→ optional governed ExecutionIntent
-→ broker verification
-→ only then update/clear durable ManagedTrade state
+operator/dashboard.py
+operator/__init__.py
 ```
 
-Implemented behaviour:
-- Primary target is a checkpoint, not automatic exit;
-- an ordinary pullback or one opposite M5 candle does not force exit;
-- no fixed small-profit/breakeven trigger;
-- protection/trailing requires a confirmed structural reference and positive progress;
-- stop can tighten but cannot widen beyond original approved risk;
-- Expansion-to-Runner needs strong continuation, limited reversal, adequate structure/path and a real next target;
-- profit alone cannot extend TP;
-- PRE_CLOSE flatten overrides a healthy runner;
-- local SL/TP/closed state changes only after broker result is verified;
-- original R and objectives persist through restart.
+Current terminal renderer is pure standard library and read-only. It displays already-authoritative facts and preserves requested GoldScalperAI visibility: symbol/account/DEMO/role, Bid/Ask/spread/M5 timer, structure, EMA20/50, RSI, ATR, decision/reason/scores, risk/lot/day P&L/limits, position/loss streak/cooldown, execution/controller/reconciliation, open-trade SL/TP/objectives/R/manager, Learning/Backup/Health summaries.
 
-Current management score/R thresholds are **explicit research-calibratable baselines**, not frozen profitability truth.
+It provides emoji + plain-text fallback and concise Roman-Urdu reason explanations. It does not call MetaTrader5, Risk Engine or Execution Gate. Runtime state-builder/in-place live refresh remain later integration work.
 
-## Current deterministic test ownership
+## Deterministic test ownership
 
-Important suites include:
+Major suites include:
 
 ```text
 tests/test_market_data.py
@@ -185,9 +153,10 @@ tests/test_persistence_recovery.py
 tests/test_execution_safety.py
 tests/test_trade_manager.py
 tests/test_management_execution.py
+tests/test_dashboard.py
 ```
 
-CI gates:
+CI gates remain:
 
 ```text
 ruff check .
@@ -195,56 +164,57 @@ pytest
 financial-secret scan
 ```
 
-Passing deterministic CI is software evidence, not live DEMO certification or profitability proof.
+Deterministic CI green is software evidence, not profitability proof or live DEMO certification.
 
 ## Feature ownership index
 
 | Feature | Authority | Current owner |
 |---|---|---|
 | Market data/history | `10-market-intelligence/MARKET_DATA_AND_HISTORY.md` | `market_data/` |
-| Candle/quant/technical/liquidity/session/news | `10-market-intelligence/*` | `intelligence/` |
-| Strategy families | `20-trading-decisions/STRATEGY_FLOOR.md` | `strategies/floor.py` |
-| Fusion + Opportunity + Timing | `20-trading-decisions/*` | `decisions/fusion.py`, `opportunity.py`, `timing.py` |
+| Full market intelligence | `10-market-intelligence/*` | `intelligence/` |
+| Strategy floor | `20-trading-decisions/STRATEGY_FLOOR.md` | `strategies/floor.py` |
+| Fusion/Opportunity/Timing | `20-trading-decisions/*` | `decisions/` |
 | Trade Plan | `20-trading-decisions/TRADE_PLAN.md` | `decisions/trade_plan.py` |
 | Risk | `30-risk-execution/RISK_CONTRACT.md` | `risk/engine.py`, `risk/state.py` |
 | Session/news hard permission | `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` | `risk/permissions.py` |
 | Persistence | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/` |
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
-| Dashboard | `50-operator/DASHBOARD_AND_UX.md` | Phase 9 next |
-| Replay/learning/research | `40-research-learning/*` | Phase 10 |
+| Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/dashboard.py` |
+| Replay/learning/research | `40-research-learning/*` | **Phase 10 next** |
 
 ## Coding invariants
 
-- Python 3.11+; standard library first;
-- shared verified facts instead of duplicate MT5 reads/calculations;
+- Python 3.11+; standard library first for production runtime;
 - no lookahead;
-- soft evidence is not multiplied into unnecessary hard filters;
-- positive balance alone is not a trade restriction;
-- raw broker writes exist only in the narrow execution boundary;
-- critical local state never pretends a broker write succeeded before reconciliation;
-- no decorative framework/service-manager/factory architecture;
-- financial-authority credentials never enter tracked config/logs/state exports.
+- shared verified facts instead of duplicate MT5/calculation work;
+- soft evidence must not become a pile of arbitrary hard filters;
+- positive balance alone is not an eligibility restriction;
+- raw broker writes live only in `execution/mt5_writer.py`;
+- critical local state never pretends ambiguous broker action succeeded;
+- dashboard/research have zero production broker authority;
+- no unnecessary frameworks/factories/service-manager layers;
+- financial-authority credentials never enter tracked project state.
 
-## Next implementation owner — Phase 9
+## Next implementation owner — Phase 10
 
-Build the compact operator/dashboard layer from authoritative state rather than duplicating decision logic. Preserve the useful GoldScalperAI facts the user requested and add Decision, Execution, Learning, Backup and Health visibility.
+Build chronological replay, journals/performance metrics, entry/exit learning, large-move recall and governed bounded strategy research/invention.
 
-Phase 9 must remain presentation/operation only: dashboard code cannot create trading authority or call raw MT5 writes.
+Phase 10 must optimize for **accuracy plus opportunity recall**, not win rate alone. It must measure missed valid moves and capture efficiency so research does not make the bot progressively over-restrictive.
+
+Research may create/evaluate declarative candidates but cannot change hard risk/execution rules, call the broker, use future data, execute generated Python or silently promote itself into production.
 
 ## Debugging order
 
 ```text
 MarketSnapshot
 → IntelligenceSnapshot
-→ StrategyFloorReport
-→ DecisionBoard
-→ Opportunity / EntryTiming
+→ StrategyFloor
+→ Decision / Opportunity / Timing
 → TradePlan
 → Risk + Session/News
-→ Execution Gate / Intent / Reconciliation
+→ Execution / Reconciliation
 → ManagedTrade / Trade Manager
 → Dashboard
+→ Replay / Research / Learning
 ```
-
-Do not weaken strategy/TradePlan rules when the actual problem belongs to broker data, state, risk or execution.
