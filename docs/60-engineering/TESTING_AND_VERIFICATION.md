@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-design  
 **Authority:** Test taxonomy, executable proof requirements, replay/live parity, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
@@ -106,11 +106,32 @@ Cover:
 - min-lot unaffordability;
 - aggregate risk/margin;
 - daily loss lock;
+- UTC risk-day rollover;
 - manual reset audit/reference;
 - cooldown/runaway protections;
 - unknown financial state fails closed.
 
 Manual reset must not bypass unrelated `BLOCKED` states.
+
+## Centralized Execution Permission Gate tests
+
+The final broker-write authorization boundary is an explicit tested feature, not an implementation detail.
+
+Tests must prove the primary gate consumes authoritative environment/account/data/news/risk/position/order/controller/fresh-execution results and returns deterministic `ALLOW / BLOCK / UNKNOWN` plus stable reasons.
+
+At minimum verify:
+
+- DEMO authorized + all hard authorities PASS can produce ALLOW;
+- current REAL account under DEMO-first policy produces BLOCK with explicit environment reason;
+- future REAL authorization can be represented through the same gate/path without a second trading engine;
+- any hard BLOCK input prevents broker write even when strategy/Trade Plan are excellent;
+- required UNKNOWN safety input cannot silently become ALLOW;
+- primary and secondary blocker reasons are preserved;
+- create, modify and close all require the same governed authorization boundary;
+- strategy, research, learning and dashboard code cannot directly invoke the irreversible MT5 write adapter;
+- raw broker-write call sites are statically/auditably confined to the intended execution adapter/path.
+
+A test or architectural check should fail if a new code path bypasses the centralized permission component.
 
 ## Execution tests
 
@@ -187,6 +208,7 @@ Test semantic rendering:
 - normal `WAIT` is not a system error;
 - hard block displays exact reason;
 - system fault displays subsystem/impact/recovery;
+- centralized Execution Permission status/reason is represented correctly;
 - backup/controller health shown correctly;
 - emoji fallback cannot affect logic.
 
@@ -218,7 +240,7 @@ Cover:
 - required stage ordering;
 - final-holdout one-shot/consumed state;
 - Shadow zero broker authority;
-- Canary still uses normal risk/execution path;
+- Canary still uses normal Risk + centralized Execution Permission Gate;
 - open-trade policy version retained;
 - rollback/history persistence;
 - unsafe schema migration blocks promotion.
@@ -237,7 +259,7 @@ Actual MT5 DEMO execution tests run in a controlled environment with credentials
 
 ## End-to-end DEMO certification
 
-Before DEMO verification, execute a real controlled lifecycle covering startup, data, opportunity, entry, risk, submit, position management, close, journal, restart/recovery and selected fault scenarios.
+Before DEMO verification, execute a real controlled lifecycle covering startup, data, opportunity, entry, Trade Plan, risk, centralized permission, submit, position management, close, journal, restart/recovery and selected fault scenarios.
 
 ## Evidence reporting
 
@@ -246,6 +268,7 @@ Release/audit output should state actual counts/results, for example:
 ```text
 Unit                 412/412 PASS
 Replay parity         38/38 PASS
+Execution gate        24/24 PASS
 Crash recovery        14/14 PASS
 Migration              8/8 PASS
 DEMO execution         6/6 PASS
@@ -259,6 +282,7 @@ Do not mark pending evidence as PASS.
 At minimum:
 
 - future-data leakage;
+- centralized execution-permission bypass;
 - duplicate broker submission risk;
 - wrong-account write possibility;
 - unknown exposure treated as zero;
