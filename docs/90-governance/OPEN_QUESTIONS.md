@@ -1,9 +1,9 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 2.0-design
+**Version:** 2.1-design
 
-This file separates remaining items into four classes so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
+This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
 ```text
 FIX BEFORE BUILD       = required architecture/safety decision still missing
@@ -18,7 +18,7 @@ A `CALIBRATE IN RESEARCH` item is **not permission to guess silently**. Initial 
 
 At behavioural-contract level there are currently **no known `FIX BEFORE BUILD` items**.
 
-Deterministic core implementation currently exists through the Phase-10 foundation:
+Deterministic core implementation currently exists through Phase 10, including research evidence tooling:
 
 ```text
 1  Foundation/config/domain/CI
@@ -30,10 +30,11 @@ Deterministic core implementation currently exists through the Phase-10 foundati
 7  Execution intent/gate/controller/writer/reconciliation
 8  Trade Manager + execution bridge
 9  Dashboard renderer
-10 Replay/metrics/learning + discovery/invention/promotion foundation
+10 Chronological replay + ablation + Trade Plan outcomes + idealized Trade Manager replay
+   + metrics/learning + discovery/invention/promotion
 ```
 
-This does **not** mean live DEMO release is complete. The normal launcher remains read-only readiness, and final persistent runtime orchestration, real shared cross-laptop coordination, backup/fresh-machine drill and controlled Windows/MT5 DEMO certification remain pending.
+This does **not** mean live DEMO release is complete. The normal launcher remains read-only readiness; final persistent runtime orchestration, production shared cross-laptop coordination, backup/fresh-machine drill and controlled Windows/MT5 DEMO certification remain pending.
 
 The frozen engineering style remains `../60-engineering/CODING_STANDARD.md`.
 
@@ -44,26 +45,25 @@ The frozen engineering style remains `../60-engineering/CODING_STANDARD.md`.
 - completed candles own structural confirmation;
 - lower-TF structure cannot silently overwrite higher-TF state;
 - optional market evidence does not become arbitrary hard safety;
-- Trendline/Fibonacci/POC are optional technical confluence, not mandatory entry conditions;
-- missing Trendline/Fibonacci/POC does not reduce base strategy score in the initial implementation;
+- Trendline/Fibonacci/POC are optional confluence, not mandatory entry conditions;
+- missing Trendline/Fibonacci/POC does not reduce base strategy score in initial production;
 - POC is broker-local context; real volume preferred where available, otherwise tick-volume approximation is labelled honestly.
 
 ### CALIBRATE IN RESEARCH
 
 - runtime candle-window sizes per timeframe;
-- swing prominence/excursion/reversal thresholds;
-- swing-significance weights/classes;
+- swing prominence/excursion/reversal/significance thresholds;
 - qualified-break and BOS/MSS acceptance/follow-through quality;
 - compression/expansion/exhaustion bands;
 - S/R zone width/strength/freshness/role-flip thresholds;
 - liquidity clustering and sweep/reclaim thresholds;
 - FVG/qualified-OB quality thresholds;
 - volatility/momentum/extension bands;
-- indicator parameter refinements beyond initial EMA20/EMA50/RSI/ATR;
+- indicator refinements beyond EMA20/EMA50/RSI14/ATR14;
 - trendline proximity/break-buffer values;
 - Fibonacci minimum-leg and retracement/extension weighting;
-- POC profile lookback/bin/proximity values;
-- whether each confluence feature materially improves outcomes after ablation.
+- POC lookback/bin/proximity values;
+- whether each optional confluence source materially improves outcomes after ablation.
 
 ## Strategy / scoring / entry
 
@@ -78,9 +78,7 @@ Initial production floor contains six parallel families:
 5. Failed Breakout Reversal
 6. Compression Expansion
 
-Opportunity and Entry Timing remain separate; BUY/SELL theses independent; safety outside weighted scoring.
-
-Technical confluence is **bonus-only** in the initial production path. It is not a seventh mandatory family and cannot become a hard block merely because it is absent/opposed.
+Opportunity and Entry Timing remain separate; BUY/SELL theses independent; safety remains outside weighted scoring. Technical confluence is bonus-only, not a seventh mandatory family or hard gate.
 
 ### CALIBRATE IN RESEARCH
 
@@ -91,14 +89,14 @@ Technical confluence is **bonus-only** in the initial production path. It is not
 - minimum Evidence Coverage;
 - chase/extension tolerance;
 - ideal-entry zone/setup expiry;
-- exact Market Episode duplicate/opportunity heuristics beyond frozen re-entry limit;
-- bounded technical-confluence bonus size/correlation cap;
-- whether a genuinely distinct Trendline/Fib/POC-led strategy family deserves research promotion.
+- Market Episode duplicate/opportunity heuristics beyond frozen re-entry limit;
+- bounded confluence bonus/correlation cap;
+- whether a genuinely distinct confluence-led family deserves governed promotion.
 
 ### DEFER LATER
 
 - independent FVG/OB-led production family unless research proves it;
-- any new confluence-led production family without governed validation/promotion.
+- new confluence-led production family without governed validation/promotion.
 
 ## Trade Plan / targets / exits
 
@@ -112,7 +110,13 @@ Credible target room <1.20R  → current plan rejected
 3R/4R+                       → runner potential
 ```
 
-Primary Structural Target is normally management checkpoint. Valid Expansion Target is default initial broker TP; valid Primary may be used when no Expansion exists. Fixed 100/200/300-pip TP logic is not used. Runner requires fresh continuation/acceptance + new objective. V1 core does not depend on partial closes.
+Primary Structural Target is normally a management checkpoint. Valid Expansion Target is default initial broker TP; valid Primary may be used if no Expansion exists. Fixed 100/200/300-pip TP logic is not used. Runner requires fresh continuation/acceptance plus a new objective. V1 core does not depend on partial closes.
+
+### IMPLEMENTED RESEARCH EVIDENCE BASELINE
+
+The production Trade Manager is now reused chronologically in `research/management_replay.py` at completed-M5 boundaries. It records HOLD/PROTECT/TRAIL/RUNNER/EXIT, current active stop/TP outcomes, Capture Efficiency and giveback under explicit `BAR_CLOSE_IDEALIZED` assumptions.
+
+This closes the former software gap of having no Trade Manager replay. It does **not** close broker-realism questions below.
 
 ### CALIBRATE IN RESEARCH
 
@@ -122,7 +126,8 @@ Primary Structural Target is normally management checkpoint. Valid Expansion Tar
 - exact M5/M15/H1 structural trail precedence thresholds;
 - continuation/reversal thresholds for HOLD/PROTECT/TRAIL/RUNNER/EXIT;
 - objective-quality thresholds for runner progression;
-- future family/regime refinements to RR guard.
+- family/regime RR refinements;
+- management replay versus DEMO outcome differences.
 
 ### DEFER LATER
 
@@ -139,9 +144,9 @@ MEDIUM   $300–$999.99            2.0–3.0%      >3.0–4.5%        5%        
 NORMAL   $1,000+                 1.0–2.0%      >2.0–3.5%        4%               7%
 ```
 
-There is **no V1 minimum-balance floor for positive SMALL accounts**. `$99`, `$50`, `$30`, etc. remain SMALL; actual minimum-lot all-in risk, ceiling, margin, daily lock and execution safety decide a specific plan.
+There is **no V1 minimum-balance floor for positive SMALL accounts**. Actual minimum-lot all-in risk, ceiling, margin, daily lock and execution safety decide a specific plan.
 
-Capacity is `0/1`. Account Safety P/L uses cash-flow-adjusted equity. Manual reset OFF by default/max one per UTC risk day if enabled. Three consecutive closed bot losses trigger minimum 30-minute cooldown + fresh M15 context; same Market Episode permits at most one genuinely fresh re-entry.
+Capacity is `0/1`. Account Safety P/L uses cash-flow-adjusted equity. Manual reset is OFF by default/max one per UTC risk day if enabled. Three consecutive closed bot losses trigger minimum 30-minute cooldown + fresh M15 context; same Market Episode permits at most one genuinely fresh re-entry.
 
 ### IMPLEMENTATION CHOICE
 
@@ -182,7 +187,8 @@ Deterministic permission logic is implemented in `risk/permissions.py`.
 ### IMPLEMENTATION CHOICE / INTEGRATION PENDING
 
 - production event-provider adapter, TTL and mapping preserving `NEWS_SAFETY_UNKNOWN`;
-- verified broker-session schedule adapter preserving `SESSION_SCHEDULE_UNKNOWN`.
+- verified broker-session schedule adapter preserving `SESSION_SCHEDULE_UNKNOWN`;
+- historical broker-session schedule source/representation needed to reproduce PRE_CLOSE inside research manager replay without guessed clock times.
 
 ### CALIBRATE IN RESEARCH
 
@@ -228,7 +234,7 @@ Verified connected MT5 DEMO → DEMO_GUARD PASS
 DEMO not verified           → broker-write permission not granted
 ```
 
-V1 defines no separate REAL authorization policy/hard-block workflow.
+V1 defines no separate REAL authorization workflow.
 
 ### IMPLEMENTED DETERMINISTIC BASELINE
 
@@ -236,30 +242,30 @@ V1 defines no separate REAL authorization policy/hard-block workflow.
 - centralized gate/checks;
 - one-shot send invariant;
 - raw MT5 writer boundary;
-- success-like ACK still requires broker-truth verification;
+- success-like ACK still requires broker verification;
 - ambiguous result becomes reconciliation-only;
 - OPEN/MODIFY/CLOSE reconciliation;
-- magic/comment used as reconciliation aids, durable intent/trade lineage remains authority;
+- durable lineage authority;
 - lease/fencing semantics with deterministic in-memory test backend.
 
 ### IMPLEMENTATION CHOICE / INTEGRATION PENDING
 
 - **production shared cross-laptop coordination backend** satisfying atomic lease/fencing contract;
-- final magic integer/comment shape if later adjustment needed;
+- final magic/comment shape if later adjustment needed;
 - bounded read-only/pre-submit retry/backoff;
-- exact production MT5 reconciliation details found only through controlled broker evidence;
+- broker-specific reconciliation refinements from controlled evidence;
 - healthy-spread-baseline persistence/sample implementation.
 
 ### CALIBRATE IN RESEARCH / DEMO OBSERVATION
 
 - spread baseline sample window/minimum count/expiry;
+- slippage/entry-delay assumptions;
+- manager stop/TP modification delay/failure assumptions;
 - evidence-backed spread/drift/lease timing refinements.
 
 ## Persistence / backup / migration
 
 ### IMPLEMENTED V1 FOUNDATION
-
-Initial local durable storage is fixed:
 
 ```text
 standard-library SQLite
@@ -271,9 +277,7 @@ standard-library SQLite
 + typed recovery adapters
 ```
 
-Current persistence covers risk-day/cooldown/episode state, active Opportunity/TradePlan, execution intent lifecycle, managed-trade state and research/candidate/promotion state through their repositories/adapters as implemented.
-
-Critical corruption/version mismatch fails explicitly. Broker remains authority for current positions/orders/deals.
+Current persistence covers risk/cooldown/episode state, Opportunity/TradePlan, ExecutionIntent, managed-trade state and research/candidate/promotion state. Critical corruption/version mismatch fails explicitly. Broker remains authority for current positions/orders/deals.
 
 ### IMPLEMENTATION CHOICE / PHASE 11–12
 
@@ -290,29 +294,44 @@ Live mutable SQLite DB is runtime state, not a mergeable source artifact. Public
 
 ### IMPLEMENTED DETERMINISTIC FOUNDATION
 
-- chronological bar-close replay adapter;
+- chronological bar-close Decision replay;
+- same-chronology confluence ablation with production sources default ON;
+- historical production Trade Plan reconstruction;
+- ambiguity-safe initial bracket outcome model;
+- chronological idealized production Trade Manager replay;
+- decision/bracket/management confluence ablation;
 - actual/counterfactual metric separation;
 - research episode journal;
 - bounded StrategyMemory;
 - approved declarative primitive registry;
 - durable candidate/rejected memory;
 - recurring-cluster invention cycle;
-- discovery `IDLE / HEALTHY / DEGRADED` liveness result;
+- discovery `IDLE / HEALTHY / DEGRADED` liveness;
 - governed promotion stages/locked fingerprint/one-shot holdout/self-promotion denial;
 - Trendline/Fibonacci/POC explicit audited discovery primitives.
+
+Research realism is explicitly scoped:
+
+```text
+Decision replay          BAR_CLOSE
+Initial bracket outcomes BAR_HIGH_LOW
+Trade Manager replay     BAR_CLOSE_IDEALIZED
+```
+
+Ambiguous/unresolved/open modeled outcomes are not forced into resolved P/L.
 
 ### FROZEN PRINCIPLES
 
 Research cannot self-promote production, bypass hard safety, generate/execute arbitrary Python or leak future data into replay.
 
-Eligible recurring discovery evidence must produce:
+Eligible recurring discovery evidence must produce a candidate or explicit governed suppression reason; silent eligible-evidence loss is a defect/degraded state.
 
-```text
-candidate created
-OR explicit governed suppression reason
-```
+### IMPLEMENTATION CHOICE / NEXT RESEARCH ENGINEERING
 
-Silent eligible-evidence loss is a defect/degraded state.
+- lightweight execution-friction/stress framework using declared assumptions rather than hidden optimistic defaults;
+- historical PRE_CLOSE integration once trustworthy schedule history is available;
+- dataset ingestion/identity/versioning for broader XAU history;
+- reproducible evidence-report packaging.
 
 ### CALIBRATE IN RESEARCH
 
@@ -325,7 +344,7 @@ Silent eligible-evidence loss is a defect/degraded state.
 - autonomous recipe ranges;
 - duplicate-variant classifier thresholds;
 - Monte Carlo/block/regime-aware methods;
-- Trendline/Fibonacci/POC value through ablation including Opportunity Recall/trade-frequency cost.
+- Trendline/Fibonacci/POC value through decision, bracket and management ablation including Opportunity Recall/trade-frequency cost.
 
 ### DEFER LATER
 
@@ -389,8 +408,8 @@ Silent eligible-evidence loss is a defect/degraded state.
 
 Behavioural design is complete enough to continue implementation/integration. No major subsystem or `FIX BEFORE BUILD` item is currently known.
 
-Closed issues include the former `$100` floor and local persistence-engine choice.
+Closed software gaps now include the former `$100` floor, local persistence-engine choice and absence of a chronological production Trade Manager research path.
 
-Current main work is **integration and evidence**, not redesign: finish runtime orchestration, provider/session wiring, real shared coordination, backup/recovery drill, broader replay/ablation and controlled DEMO certification.
+Current main work is **integration and evidence**, not redesign: add realistic stress layers and broader XAU evidence, then finish runtime/provider/shared-coordination/backup integration and controlled DEMO certification.
 
 Documents remain `DRAFT/PROVISIONAL` where live broker evidence does not yet exist. Do not relabel them VERIFIED until required evidence passes.
