@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Research and Validation
 
 **Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
-**Version:** 0.9-implementation  
-**Authority:** Chronological replay, no-lookahead validation, dataset/evidence identity, portable research datasets, holdouts, robustness/stress evidence, opportunity/entry/exit research metrics and evidence claims.  
+**Version:** 1.0-implementation  
+**Authority:** Chronological replay, no-lookahead validation, dataset/evidence identity, portable research datasets, historical acquisition, holdouts, robustness/stress evidence, opportunity/entry/exit research metrics and evidence claims.  
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../20-trading-decisions/ENTRY_TIMING.md`, `../20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`
 
 ## Purpose
@@ -24,6 +24,7 @@ research/stress.py
 research/validation.py
 research/evidence.py
 research/datasets.py
+research/acquisition.py
 research/metrics.py
 research/learning.py
 research/episode_journal.py
@@ -43,14 +44,12 @@ Current deterministic infrastructure supports:
 - declared execution-friction stress;
 - fixed-policy walk-forward validation with non-overlapping scored validation slices;
 - content-addressed replay-dataset identity;
-- per-timeframe content hashes and dataset-level SHA-256 identity;
-- reproducible research input fingerprints separated from result/time hashes;
-- canonical public-serializable evidence manifests;
-- rejection of financial-secret-shaped manifest fields;
+- reproducible evidence manifests and input fingerprints;
 - portable integrity-checked replay dataset bundles using canonical JSON + timeframe CSVs;
-- round-trip preservation of optional supported timeframe series such as M1;
-- broker endpoint login/server exclusion from portable research bundles;
-- manifest, per-file and recomputed dataset identity verification on import;
+- read-only MT5 historical acquisition through the existing production `MT5Reader`;
+- exact requested completed-candle counts, including optional supported timeframes such as M1;
+- explicit historical-spread provenance rather than hidden zero/live-spread assumptions;
+- direct acquisition → portable bundle export;
 - decision/bracket/management metrics, learning, discovery/invention and governed promotion state.
 
 This remains a **software/research foundation**, not completed market validation. Broad real XAU datasets, empirical stress calibration, sufficiently large validation, untouched holdout and DEMO forward evidence remain required before claiming edge.
@@ -105,31 +104,11 @@ Ambiguous/unresolved cases stay outside resolved bracket P/L.
 
 Each later M5 first checks the currently active stop/TP. If neither closes the modeled trade, the bar completes, fresh chronological intelligence is built and production HOLD/PROTECT/TRAIL/RUNNER/EXIT logic may affect the following bar.
 
-Manager outcomes:
-
-```text
-PLAN_NOT_READY
-STOP_FILLED
-TARGET_FILLED
-MANAGER_EXIT
-BOTH_TOUCHED_AMBIGUOUS
-HORIZON_OPEN
-```
-
 Default realism is `BAR_CLOSE_IDEALIZED`; this is not broker-certified P/L.
 
 ## Declared execution-stress model — implemented foundation
 
-Research-only `ManagementReplayAssumptions` support:
-
-```text
-adverse_entry_slippage_r
-barrier_spread_price
-modify_delay_bars
-reject_every_nth_modify
-```
-
-Adverse fill never moves structural stop/target or rewrites immutable original R. Positive barrier spread treats candle OHLC as a mid-price proxy with BUY exits on Bid and SELL exits on Ask. Pending synthetic modify state suppresses overlapping modify submissions. Same-bar stop+TP remains ambiguous.
+Research-only `ManagementReplayAssumptions` support adverse entry slippage, executable-side spread approximation, completed-M5 modify delay and deterministic modify rejection. Adverse fill never moves structural stop/target or rewrites immutable original R. Same-bar stop+TP remains ambiguous.
 
 Default transparent V1 calibration probes:
 
@@ -153,59 +132,23 @@ DEVELOPMENT CONTEXT
 → immediately later VALIDATION SLICE
 ```
 
-Rules:
-
-- development/validation event counts are explicit configuration;
-- validation slices cannot overlap;
-- development history may reconstruct production Opportunity state but is not scored;
-- production policy/config stays fixed; no automatic parameter search;
-- outcome/management dataset is truncated at validation end;
-- later-window candles therefore cannot resolve an earlier validation trade;
-- near-boundary trades may honestly remain `HORIZON_OPEN`;
-- declared execution stress may be attached to validation evidence;
-- walk-forward cannot consume or replace the governed one-shot final holdout.
+Development history may reconstruct Opportunity state but is not scored. Validation slices cannot overlap, policy/config stays fixed, outcome history is clipped at each validation end, later windows cannot resolve earlier trades, and walk-forward cannot consume the governed one-shot final holdout.
 
 Exact window sizes/sample requirements remain research-calibratable.
 
 ## Dataset identity and evidence manifests — implemented
 
-`research/evidence.py` makes serious research results content-addressable and reproducible.
+`research/evidence.py` creates deterministic content-addressed dataset/evidence identities.
 
-### Dataset identity
+`ReplayDatasetIdentity` includes source label/version, replay realism/spread, calculation-relevant symbol specification, economic replay account context and every candle OHLC/volume/spread field. Each timeframe records bar count, first/last open UTC and SHA-256 content hash. Series tuple order is normalized before hashing.
 
-`identify_replay_dataset()` creates deterministic `ReplayDatasetIdentity` from source label/version, replay realism/spread, calculation-relevant symbol specification, economic replay account context and every candle OHLC/volume/spread field.
+Broker endpoint `login/server` are deliberately excluded from replay-economic identity. Account mode/currency/balance/equity/margin/free-margin/leverage remain part of the hashed economic context.
 
-Each timeframe records bar count, first/last open UTC and SHA-256 content hash. The full dataset receives `dataset_sha256`. Series tuple order is normalized before hashing.
-
-Broker endpoint identifiers (`login`, `server`) are deliberately excluded because they identify an account endpoint rather than replay economics. Account mode/currency/balance/equity/margin/free-margin/leverage remain in the hashed economic context.
-
-### Evidence manifest
-
-`build_research_evidence_manifest()` records:
-
-```text
-schema version
-evidence kind
-generation UTC time
-code revision
-policy version
-ReplayDatasetIdentity
-normalized configuration
-normalized results
-explicit limitations
-input_fingerprint_sha256
-manifest_sha256
-```
-
-`input_fingerprint_sha256` excludes generation time/result values and answers whether the experiment inputs are the same. `manifest_sha256` identifies the complete evidence record except its own hash field.
-
-Configuration/result mappings reject authority-bearing secret-shaped keys with `FINANCIAL_SECRET_DETECTED`. This supplements, not replaces, repository secret scanning.
+`ResearchEvidenceManifest` records code revision, policy version, dataset identity, normalized configuration/results, limitations, experiment-input fingerprint and full manifest SHA-256. Financial-secret-shaped config/result keys are rejected with `FINANCIAL_SECRET_DETECTED`.
 
 ## Portable replay dataset bundles — implemented
 
-`research/datasets.py` owns the inspectable offline research bundle format.
-
-A V1 bundle is a directory containing:
+`research/datasets.py` owns the inspectable offline research bundle format:
 
 ```text
 dataset_manifest.json
@@ -216,38 +159,52 @@ M5.csv
 [optional supported timeframe CSVs, e.g. M1.csv]
 ```
 
-The manifest includes:
+Rules:
 
-- schema version;
-- source label/version;
-- `dataset_sha256`, symbol-spec hash and account-context hash;
-- replay realism and spread assumption;
-- calculation-relevant `SymbolSpec`;
-- non-secret economic replay account context;
-- one entry per exported timeframe containing canonical filename, bar count and file SHA-256;
-- manifest SHA-256.
+- destination is write-new/immutable; existing bundles are never silently overwritten;
+- all series present in the dataset are exported;
+- login/server are not exported;
+- manifest and each CSV have SHA-256 integrity evidence;
+- required H4/H1/M15/M5 must exist;
+- optional supported timeframes such as M1 survive round-trip;
+- canonical timeframe filenames are required and manifest/CSV symlinks are rejected;
+- declared bar counts must match parsed rows;
+- reconstructed dataset/symbol/account hashes must match before the dataset is exposed;
+- imported endpoint identity is neutral offline `login=1`, `server=RESEARCH_DATASET` context.
 
-Export rules:
+This bundle is public-safe research input, not a live account/credential backup and has zero broker authority.
 
-- destination must not already exist; an existing research bundle is never silently overwritten;
-- files are first written into a temporary sibling directory and renamed only after successful completion;
-- all dataset series are exported, not only the four minimum decision timeframes;
-- broker endpoint `login` and `server` are not exported;
-- UTF-8 CSV uses explicit chronological candle fields only.
+## Read-only MT5 historical acquisition — implemented software adapter
 
-Import rules:
+`research/acquisition.py` bridges the existing production `MT5Reader` into the portable replay-dataset contract without creating a second MT5 client or any broker-write path.
 
-- manifest checksum must match before dataset reconstruction;
-- only known `Timeframe` values are accepted;
-- required H4/H1/M15/M5 files must exist;
-- optional supported timeframes such as M1 are preserved through round-trip;
-- timeframe CSV filenames must be canonical and cannot contain paths;
-- manifest/CSV symlinks are rejected;
-- each CSV SHA-256 and declared bar count must match;
-- reconstructed `ReplayDatasetIdentity` must match dataset/symbol/account hashes in the manifest;
-- imported broker endpoint identity is neutral offline context (`login=1`, `server=RESEARCH_DATASET`) and is not treated as live account truth.
+Flow:
 
-This bundle is for reproducible offline research and backup of public-safe historical inputs. It is **not** a credential/account export and has zero broker authority.
+```text
+initialized MT5Reader
+→ resolve configured Gold symbol/alias
+→ read AccountFacts + SymbolSpec
+→ request exact completed-candle counts per declared timeframe
+→ verify actual count == requested count
+→ derive declared historical replay spread
+→ build ReplayDataset
+→ optionally export immediately through research/datasets.py
+```
+
+Rules:
+
+- H4/H1/M15/M5 counts are mandatory in `HistoricalAcquisitionRequest`;
+- optional supported timeframes such as M1 may be requested;
+- only `MT5Reader.completed_candles()` is reused, so bar position 0/forming candle remains excluded by the existing read boundary;
+- partial history is **not silently accepted**: if MT5 returns fewer bars than requested, acquisition fails with `HistoricalAcquisitionError`;
+- default constant replay spread is the median of positive historical M5 `spread_points × SymbolSpec.point` values;
+- if historical M5 spread points are unavailable, acquisition fails unless an explicit non-negative `spread_price_override` is supplied;
+- live current spread is not silently substituted for missing historical spread;
+- source label/version are explicit caller-provided research provenance;
+- `acquire_and_export_mt5_bundle()` composes acquisition with the integrity-checked portable bundle writer;
+- acquisition is read-only and has zero execution/promotion authority.
+
+The software adapter is implemented and deterministic-tested. **Controlled Windows/MT5 evidence using real broker history is still pending** and is required before claiming the external data source/version or available history depth is verified.
 
 ## Execution realism
 
@@ -279,15 +236,11 @@ Walk-forward is repeatable chronological validation evidence; it is not the fina
 
 ## Final holdout rule
 
-The final holdout is one-shot for the locked candidate. If it fails, alternate candidates must not repeatedly use the same data while still calling it untouched. Consumed holdout identity/status is durable under the promotion registry. Walk-forward/evidence/dataset utilities cannot consume it automatically.
+The final holdout is one-shot for the locked candidate. Walk-forward/evidence/dataset/acquisition utilities cannot consume it automatically.
 
 ## Ablation / stability / stress
 
-Confluence ablation compares identical chronology under BASE, TRENDLINE, FIBONACCI, DIRECTIONAL_COMBINED and ALL. Decision-only metrics do not invent P/L. Bracket and manager layers may add resolved modeled outcome evidence.
-
-Stress and confluence ablation are separate axes: confluence changes optional analytical evidence; stress holds analytical decisions fixed and changes declared execution friction.
-
-A feature that slightly improves headline accuracy by eliminating too many good opportunities is not automatically an improvement. Evaluate Opportunity Recall and trade-frequency cost alongside quality and modeled economics.
+Confluence ablation compares identical chronology under BASE, TRENDLINE, FIBONACCI, DIRECTIONAL_COMBINED and ALL. Stress and confluence ablation are separate axes. A feature that slightly improves headline accuracy by eliminating too many good opportunities is not automatically an improvement; Opportunity Recall and trade-frequency cost remain first-class evidence.
 
 ## Core performance metrics
 
@@ -295,24 +248,9 @@ When realism supports them, report modeled/resolved trades, Net/Average R, Profi
 
 Win rate alone is insufficient.
 
-## Counterfactuals and attribution
-
-Blocked/missed opportunities may receive post-hoc hypothetical MFE/MAE but remain counterfactual, never actual broker P/L. Outcome attribution should distinguish strategy quality, optional confluence, timing, Trade Plan, execution/slippage, management, news/shock, system fault and normal statistical loss.
-
 ## Versioning and reproducibility
 
-Every serious evidence package should identify:
-
-- code revision;
-- strategy/policy version;
-- configuration version/values;
-- dataset source/version and content hash;
-- portable bundle manifest hash when a bundle is used;
-- historical period/window identities;
-- replay/outcome/stress realism;
-- explicit stress assumptions;
-- random seed where relevant;
-- limitations.
+Every serious evidence package should identify code revision, strategy/policy version, configuration, dataset source/version/content hash, portable bundle manifest hash when used, historical window identities, replay/stress realism, explicit assumptions and limitations.
 
 A mutable filename such as `gold_2025.csv` is not sufficient evidence identity.
 
@@ -335,28 +273,27 @@ Do not claim `proven profitable` from historical results alone.
 Deterministic coverage includes:
 
 - chronological/no-lookahead replay;
-- confluence chronology and ablation;
-- ambiguity-safe bracket and manager outcomes;
+- confluence chronology/ablation;
+- ambiguity-safe bracket/manager outcomes;
 - immutable-R stress accounting;
-- fixed-policy walk-forward chronology and validation-boundary clipping;
-- stable content-addressed dataset/evidence identities;
-- canonical evidence serialization and secret-shaped-field rejection;
-- portable bundle round-trip identity;
-- optional M1 series preservation;
-- broker endpoint login/server exclusion from bundle manifest;
-- CSV tamper detection;
-- manifest tamper detection;
-- immutable/no-overwrite export destination;
+- fixed-policy walk-forward boundaries;
+- content-addressed dataset/evidence identities;
+- portable bundle round-trip/tamper detection and optional M1 preservation;
+- exact-count read-only historical acquisition;
+- historical M5 median-spread derivation;
+- explicit spread override when history lacks spread fields;
+- incomplete-history rejection;
+- acquisition → bundle → verified re-import;
 - actual/counterfactual isolation;
 - discovery/promotion governance.
 
-Current deterministic CI after portable-dataset bundle coverage: **173 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic CI after MT5 historical-acquisition coverage: **178 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 Still required for full research validation:
 
-- authoritative real historical XAU acquisition/ingestion into this bundle contract;
-- broad regime-diverse datasets;
-- persisted result/evidence-package directory conventions tied to code revisions;
+- controlled Windows/MT5 acquisition against real broker history and documented source/version convention;
+- broad regime-diverse XAU datasets;
+- persisted result/evidence-package directory convention tied to code revisions;
 - empirical stress calibration from broker/DEMO evidence;
 - historical PRE_CLOSE/session integration;
 - sufficiently large walk-forward/independent validation;
@@ -365,32 +302,18 @@ Still required for full research validation:
 
 ## Explicit non-goals
 
-Research must not:
-
-- directly send orders or silently mutate production;
-- use walk-forward as hidden auto-tuning or as the final holdout;
-- score development context as validation;
-- leak later-window data backward;
-- treat unresolved/counterfactual modeled results as broker P/L;
-- favorably guess same-bar ordering;
-- hide stress assumptions;
-- rewrite structural geometry/original R to improve stressed results;
-- identify datasets only by mutable filenames;
-- export broker endpoint credentials/login/server as research dataset authority;
-- silently overwrite an existing dataset bundle;
-- accept a bundle whose file/manifest/content identity fails verification;
-- overstate historical evidence.
+Research must not directly send orders, silently mutate production, use walk-forward as hidden auto-tuning/final holdout, leak later-window data backward, favorably guess same-bar ordering, rewrite original R under stress, silently accept partial MT5 history, silently invent zero/live spread when historical spread is unavailable, export broker endpoint identity as research authority, accept tampered bundles or overstate historical evidence.
 
 ## Open questions
 
-- exact authoritative real-data source(s), periods and acquisition workflow;
-- exact development/validation window sizes and stepping;
+- exact controlled Windows/MT5 source/version naming convention and maximum reliable history depth;
+- exact real-data periods/sample requirements;
+- development/validation window sizes and stepping;
 - evidence-package directory/naming/publication convention around dataset bundles;
-- exact Opportunity Recall labeling method;
 - historical PRE_CLOSE/session integration;
 - empirical spread/slippage/modify-failure distributions;
 - variable-spread/tick-order modeling where data supports it;
 - Monte Carlo/bootstrap method;
 - minimum robustness/stress/validation thresholds;
-- exact promotion evidence thresholds;
+- promotion evidence thresholds;
 - final optional-confluence retention threshold.
