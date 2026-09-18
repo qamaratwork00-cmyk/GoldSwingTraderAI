@@ -37,6 +37,15 @@ class AccountMode(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class DataQuality(StrEnum):
+    HEALTHY = "HEALTHY"
+    INSUFFICIENT = "INSUFFICIENT"
+    STALE = "STALE"
+    SPARSE = "SPARSE"
+    CORRUPT = "CORRUPT"
+    UNKNOWN = "UNKNOWN"
+
+
 class MarketState(StrEnum):
     OPEN = "OPEN"
     PRE_CLOSE = "PRE_CLOSE"
