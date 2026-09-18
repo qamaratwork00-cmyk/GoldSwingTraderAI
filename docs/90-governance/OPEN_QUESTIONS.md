@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.8-design
+**Version:** 0.9-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -80,8 +80,11 @@ Remaining risk questions:
 
 ## Session / news / position holding
 
-- Exact pre-close no-new-entry window.
-- Whether V1 permits holding managed positions over the scheduled XAU daily break and/or weekend.
+**Resolved V1 holding policy:** bot-managed Gold positions are flattened before the scheduled daily XAU market break and before weekend closure. V1 does not intentionally carry managed Gold exposure across known market closure/reopen gap risk.
+
+Remaining session/news questions:
+
+- Exact PRE_CLOSE no-new-entry and mandatory-flatten lead time.
 - Exact REOPEN_WARMUP evidence/fresh-candle requirements.
 - Final event severity tiers and scheduled blackout windows.
 - Exact POST_NEWS_WARMUP normalization criteria.
