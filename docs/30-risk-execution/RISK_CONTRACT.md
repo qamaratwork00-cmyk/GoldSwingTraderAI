@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Risk Contract
 
 **Status:** PROVISIONAL  
-**Version:** 0.6-design  
+**Version:** 0.7-design  
 **Authority:** Monetary risk, account-size risk profiles, dynamic/hybrid lot sizing, aggregate exposure, daily-loss/manual-reset semantics and risk-policy invariants.  
 **Depends on:** `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -90,11 +90,9 @@ Default sizing behaviour:
 
 ## Risk concepts
 
-Keep distinct:
-
 ### Target Risk Band
 
-The preferred effective all-in risk range for ordinary entries after broker normalization and execution-friction accounting:
+Preferred effective all-in risk after broker normalization and friction accounting:
 
 ```text
 SMALL   3.0%–4.5%
@@ -102,11 +100,9 @@ MEDIUM  2.0%–3.0%
 NORMAL  1.0%–2.0%
 ```
 
-The system should normally size toward this band where broker granularity allows it.
-
 ### Acceptable Gold Risk Band
 
-A bounded elevated range used where Gold minimum-lot/volume-step granularity or valid structural geometry prevents exact preferred sizing:
+Bounded elevated tolerance when Gold volume granularity/valid structural geometry prevents preferred sizing:
 
 ```text
 SMALL   >4.5%–6.5%
@@ -114,11 +110,9 @@ MEDIUM  >3.0%–4.5%
 NORMAL  >2.0%–3.5%
 ```
 
-Elevated risk is a tolerance, not a target. It may never exceed the profile New-Entry Hard Ceiling.
+Elevated risk is tolerance, not target sizing.
 
 ### New-Entry Hard Ceiling
-
-The maximum allowed actual all-in risk for a new entry:
 
 ```text
 SMALL   7%
@@ -126,7 +120,7 @@ MEDIUM  5%
 NORMAL  4%
 ```
 
-A current plan above its profile ceiling is not permitted at that entry/SL geometry.
+A plan above its profile ceiling is not permitted at that entry/SL geometry.
 
 ### Emergency Safety Ceiling
 
@@ -134,17 +128,7 @@ A catastrophic invariant/circuit limit, **not** permission to size normal trades
 
 ## Broker-aware all-in monetary risk
 
-Risk must use broker facts rather than a naive `lot × pip` assumption. Relevant facts include:
-
-- tick size/value;
-- contract size;
-- account currency;
-- executable entry side and structural SL distance;
-- min/max/step volume;
-- current equity/free margin;
-- spread;
-- expected slippage reserve where policy requires it;
-- commission/fees where applicable.
+Risk must use broker facts rather than a naive `lot × pip` assumption. Relevant facts include tick size/value, contract size, account currency, executable entry side, structural SL distance, min/max/step volume, equity/free margin, spread, expected slippage reserve and commission/fees where applicable.
 
 The question is:
 
@@ -154,27 +138,23 @@ The question is:
 
 A quoted Gold spread such as `$0.26` is a price-distance observation, not automatically a `$0.26` account cost. The bot converts spread through verified broker symbol/contract/tick facts.
 
-Execution friction must never be double-counted. If the fresh Ask/Bid executable entry already embeds spread in entry-to-SL monetary loss, spread may be itemized for diagnostics but must not be added again as a second loss. Slippage reserve and commission are added only according to their actual accounting semantics.
+Execution friction must never be double-counted. If fresh Ask/Bid entry already embeds spread in entry-to-SL monetary loss, spread may be itemized diagnostically but is not added again.
 
 ## Hybrid dynamic lot sizing
-
-Conceptual flow:
 
 ```text
 Resolve account profile
 → build structural Trade Plan
-→ target the profile Normal Risk Band
+→ target profile Normal Risk Band
 → calculate raw volume
 → normalize to broker volume step/minimum
-→ calculate realistic all-in risk for normalized volume
+→ calculate realistic all-in risk
 → classify NORMAL / ELEVATED / EXCESSIVE
 → verify hard ceiling, margin, exposure and daily-risk state
-→ PASS or BLOCK current plan
+→ PASS or BLOCK
 ```
 
 For SMALL accounts, the practical path may begin with broker minimum `0.01` and evaluate its real risk directly rather than pretending a non-executable fractional lot is available.
-
-Volume rounding must not silently increase risk beyond the profile hard ceiling.
 
 ## Minimum-lot handling
 
@@ -195,21 +175,15 @@ raw lot < broker minimum
 → above hard ceiling: BLOCK current plan
 ```
 
-`MIN_LOT_UNAFFORDABLE` is reserved for cases where broker minimum volume itself creates all-in risk beyond the configured new-entry hard ceiling (or another hard financial constraint).
+`MIN_LOT_UNAFFORDABLE` is reserved for cases where broker minimum volume itself creates all-in risk beyond the configured new-entry hard ceiling or another hard financial constraint.
 
-If the current plan is blocked only because entry geometry makes `0.01` too expensive, the market opportunity may remain valid/ARMED and wait for a genuinely better structural entry. Risk does not force a tighter stop.
+If blocked only because current entry geometry makes `0.01` too expensive, the opportunity may remain ARMED and wait for a naturally better structural entry. Risk does not force a tighter stop.
 
 ## Drawdown-aware preference
 
-Dynamic sizing should not become more aggressive as the account approaches its daily loss lock.
-
-Within a valid profile policy, the sizing engine should prefer the lower/safer side of its normal band when verified daily drawdown is already material. Exact drawdown-to-risk reduction curve remains an implementation/calibration question.
-
-This preference must never be used to increase the hard ceiling.
+Dynamic sizing should not become more aggressive as the account approaches its daily loss lock. Within a valid profile policy, the sizing engine should prefer the lower/safer side of its normal band when verified daily drawdown is already material. Exact drawdown-to-risk reduction curve remains an implementation/calibration question.
 
 ## Dynamic does not mean score-leveraged risk
-
-Lot/risk adaptation may depend on account profile, equity, structural SL distance, broker lot granularity, volatility/execution friction, exposure, margin and daily-risk state.
 
 A higher Opportunity/Final Trade Score does not automatically multiply monetary risk. Strategy quality decides whether an opportunity is worth pursuing; Risk independently decides affordable size.
 
@@ -218,31 +192,27 @@ A higher Opportunity/Final Trade Score does not automatically multiply monetary 
 Keep separate:
 
 - Original Approved Risk / immutable original R basis;
-- Current Open Risk to the active broker stop;
-- Locked Profit where the stop has moved beyond entry.
+- Current Open Risk to active broker stop;
+- Locked Profit where stop has moved beyond entry.
 
 Stop movement never redefines historical original R.
 
 ## Aggregate exposure
 
-Track worst-case remaining open risk across all managed exposure. Unknown open exposure is not treated as zero.
+Track worst-case remaining open risk across all managed exposure. Unknown exposure is not treated as zero.
 
 ## Position capacity — V1 frozen policy
 
 V1 allows **one independently risk-bearing Gold position at a time** for the managed account/symbol.
 
 ```text
-Capacity 0/1 → a new independent Gold entry may be considered
-Capacity 1/1 → new independent Gold entries are blocked
+Capacity 0/1 → new independent Gold entry may be considered
+Capacity 1/1 → new independent Gold entries blocked
 ```
 
 This is not a daily trade quota. Analysis, setup tracking, opposite-thesis analysis, missed-opportunity logging and research continue while capacity is full.
 
-An opposite opportunity does not automatically open a hedge or second independent position. It is first handed to the Trade Manager as reversal/exit evidence for the existing managed trade. A new opposite trade requires the existing independently risk-bearing position to be closed/reconciled and a fresh opportunity/Execution Intent to qualify.
-
-Reason code: `POSITION_CAPACITY_FULL`.
-
-Future multi-position/add-on support requires an explicit later design change plus aggregate-risk policy; it is not implicit in V1.
+An opposite opportunity is first handed to Trade Manager as reversal/exit evidence. It cannot automatically create a hedge or second independent Gold position.
 
 ## Margin guard
 
@@ -250,13 +220,7 @@ Even when monetary SL risk passes, required margin/free margin/margin-level poli
 
 ## Daily loss lock
 
-GoldSwingTraderAI retains a hard daily-loss lock.
-
-The current provisional risk-day direction is:
-
-> **UTC calendar risk day (`00:00 UTC` boundary), independent of XAU reopen/holiday labels.**
-
-Initial profile daily-loss limits are:
+GoldSwingTraderAI retains a hard daily-loss lock on the UTC calendar risk day (`00:00 UTC` boundary).
 
 ```text
 SMALL   12%
@@ -270,105 +234,125 @@ When the applicable daily limit is reached:
 - no new entries/re-entry/add-ons are permitted;
 - open-trade management remains active where safely possible;
 - broker P/L/history is not erased;
-- the dashboard shows verified daily P/L, profile daily limit and remaining/reset state.
+- dashboard shows verified daily P/L, profile daily limit and remaining/reset state.
 
-The exact realized/floating P/L accounting formula must still be frozen before implementation; broker truth is authoritative where available.
+The exact realized/floating P/L accounting formula remains an implementation-freeze item; broker truth is authoritative where available.
 
-## Governed manual loss reset
+## Governed manual loss reset — V1 frozen policy
 
-Manual reset is retained as an operator-governed feature. It does **not** erase or rewrite broker P/L.
+Manual daily-loss reset is retained but is **disabled by default**.
 
-It should include:
+If explicitly enabled by operator configuration:
 
-- deliberate multi-step/double-confirm action (for example `R,R` if that control is later frozen);
-- bounded reset count per UTC risk day/cycle;
-- verified current broker P/L as the new risk reference according to the final accounting formula;
-- durable audit record;
-- clear dashboard visibility.
+- only `LOSS_LOCKED` may be reset; unrelated `BLOCKED`, reconciliation, account, data, news or execution faults remain blocked;
+- maximum **one manual loss reset per UTC risk day**;
+- operator action is deliberate double-confirm `R,R` (exact key timing may be an implementation detail, but accidental single-key reset is prohibited);
+- reset uses the verified current broker/account risk reference under the final daily-P/L accounting formula;
+- original cumulative broker/day P/L remains visible and is never rewritten or erased;
+- reset creates a new audited risk cycle from the verified current reference rather than pretending earlier loss did not occur;
+- reset count, timestamp, equity/reference, operator action and policy version persist across restart;
+- after the one permitted reset is consumed, another `LOSS_LOCKED` state remains locked until the next UTC risk day.
 
-Manual reset may affect `LOSS_LOCKED`; it must never bypass unrelated `BLOCKED` states such as account mismatch, unknown order outcome, corrupt state or unknown financial truth.
+Dashboard example:
 
-Exact reset count/confirmation timing remain open.
+```text
+Manual Reset     OFF / AVAILABLE / USED
+Reset Count      0/1
+```
 
-## Cooldown
+Reason codes may include `LOSS_LOCKED`, `MANUAL_RESET_AVAILABLE`, `MANUAL_RESET_USED` and `MANUAL_RESET_LIMIT_REACHED`.
 
-Cooldown is intended as churn/runaway protection, not punishment after every loss.
+## Cooldown — V1 frozen policy
 
-Potential triggers may include:
+Cooldown protects against churn; it is **not punishment after every loss**.
 
-- rapid repeated losses;
-- repeated failures in the same Market Episode;
-- abnormal execution/slippage;
-- post-shock conditions;
-- repeated invalidated re-entries.
+### One ordinary loss
 
-A fresh structural/episode event may be required in addition to time before release. Exact rules remain open.
+One normally executed losing trade does **not** create a global cooldown by itself.
+
+### Same Market Episode re-entry
+
+A stopped/failed setup may re-enter only after a genuinely fresh structural/timing event while the thesis and target/risk geometry remain valid.
+
+V1 allows at most **one fresh re-entry within the same Market Episode**. If that re-entry also closes as a loss, that Market Episode is locked from further entries. A new market episode is required.
+
+Reason code: `EPISODE_REENTRY_LIMIT`.
+
+### Consecutive-loss cooldown
+
+After **3 consecutive closed bot-trade losses**, enter global `COOLDOWN` for at least **30 minutes**.
+
+Time alone is insufficient for release. Before new entries resume, require:
+
+- cooldown minimum elapsed;
+- no unresolved execution/reconciliation fault;
+- a fresh completed M15 market update/structure context after cooldown trigger;
+- proposed setup belongs to a fresh valid opportunity/episode rather than immediate replay of the failed setup.
+
+A winning closed trade resets the consecutive-loss counter. Breakeven/scratch handling is recorded separately and does not count as a loss unless final implementation accounting classifies it negative after costs.
+
+### Execution/shock cooldown
+
+Abnormal slippage, spread explosion, feed dislocation or execution shock may create a condition-based cooldown independent of loss count. Release requires the responsible execution/market conditions to normalize; a fixed timer must not force release while conditions remain unsafe.
 
 ## Loss streak and trade frequency
 
-Track consecutive losses and episode/family/day context for diagnostics/research.
+Track consecutive losses and episode/family/day context for dashboard and research.
 
 There is no required minimum or normal maximum trade count per day. Opportunity frequency comes from valid market episodes.
 
-A generous emergency trade-count circuit breaker may exist solely to catch software/re-entry loops. Its exact value remains open and must not become a normal trading quota.
+A generous emergency trade-count circuit breaker may exist solely to catch software/re-entry loops; its exact value remains open and must not become a normal quota.
 
 ## Re-entry
 
-Re-entry requires a genuinely fresh market event/structure with the thesis and target/risk geometry still valid. Repeating the unchanged setup after a loss is not valid re-entry.
-
-Market Episode identity helps distinguish fresh opportunity from stale repetition.
+Re-entry requires a genuinely fresh market event/structure with thesis and target/risk geometry still valid. Repeating an unchanged setup after a loss is not valid re-entry.
 
 ## External/manual exposure
 
-Broker positions must distinguish bot-managed versus manual/foreign/unknown ownership. External exposure may affect aggregate account safety even when the bot does not own/manage that position.
-
-Under the frozen V1 capacity policy, unexpected manual/foreign/unknown Gold exposure consumes safety capacity for new bot entries until Execution/Reconciliation establishes a safe state. The bot does not manage that external position as if it were bot-owned.
+Broker positions must distinguish bot-managed versus manual/foreign/unknown ownership. Unexpected external Gold exposure blocks new bot Gold entries until Execution/Reconciliation establishes a safe state; the bot never manages external exposure as if bot-owned.
 
 ## Risk output contract
 
-Every risk evaluation should expose, as applicable:
+Every evaluation should expose as applicable:
 
-- Account Profile (`SMALL`, `MEDIUM`, `NORMAL`);
-- sizing mode (`BASE_MIN_LOT`, `STEPPED_DYNAMIC`, `FULL_DYNAMIC` or equivalent);
-- Risk Decision and reason code;
+- Account Profile;
+- sizing mode;
+- Risk Decision/reason;
 - Target Risk Band;
-- risk classification (`NORMAL`, `ELEVATED`, `EXCESSIVE`);
-- profile New-Entry Hard Ceiling;
+- risk classification;
+- New-Entry Hard Ceiling;
 - Actual Proposed All-in Risk;
 - structural SL monetary risk;
 - spread/execution-friction diagnostics;
 - proposed normalized volume;
-- minimum-lot risk;
-- aggregate open risk;
 - margin result;
-- daily P/L;
-- profile Daily Loss Lock and budget remaining;
-- risk state;
-- position capacity (`0/1` or `1/1`).
+- daily P/L / Daily Loss Lock / remaining budget;
+- manual reset state/count;
+- loss streak;
+- cooldown state/release conditions;
+- position capacity.
 
 ## Prohibited risk behaviour
 
 - martingale;
 - averaging down to rescue a losing thesis;
 - silent risk-limit expansion by strategy/research/AI;
-- multiplying risk merely because a strategy score is high or recent trades won;
+- multiplying risk merely because strategy score is high or recent trades won;
 - moving structural SL merely to fit risk budget;
-- treating elevated band or emergency ceiling as preferred target sizing;
+- treating elevated band/emergency ceiling as preferred sizing;
 - assuming unknown exposure/P&L is zero;
-- double-counting spread/execution friction;
-- opening a second independent Gold risk position or automatic hedge in V1;
+- double-counting execution friction;
+- opening a second independent Gold risk position/automatic hedge in V1;
+- unlimited same-episode re-entry;
+- resetting consecutive losses without a qualifying outcome;
 - redefining original R after stop movement;
-- bypassing hard lock through manual reset.
+- using manual reset to bypass non-loss hard blocks.
 
 ## Persistence / replay
 
-Daily lock/reset/cooldown and relevant risk references are durable. Restart/laptop migration must not silently reset them. Replay/research must reconstruct risk-day chronology without future leakage.
-
-Account-profile policy/config version must be journaled so research knows which sizing rules produced each historical decision.
+Daily lock/reset/cooldown/loss-streak/episode-reentry state and relevant risk references are durable. Restart/laptop migration must not silently reset them. Replay/research must reconstruct chronology without future leakage.
 
 ## Dashboard visibility
-
-Compact example:
 
 ```text
 🛡 RISK
@@ -378,49 +362,43 @@ Target Band      3.0–4.5%
 All-in Risk      5.2%
 Entry Ceiling    7%
 Risk Band        ELEVATED
-Spread Impact    ...
-Lot              0.01
 Daily P/L        ...
 Daily Lock       12%
-Daily Remaining  ...
+Manual Reset     OFF / 0/1 / USED
+Loss Streak      0
+Cooldown         CLEAR
 Position         0/1
 Decision         PASS / BLOCK
 ```
 
-If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY_TOO_LARGE`, `POSITION_CAPACITY_FULL` or `DAILY_LOSS_LIMIT_REACHED`.
-
 ## Tests required
 
-- account-profile boundary tests: SMALL `$100–299`, MEDIUM `$300–999`, NORMAL `$1,000+`;
-- normal/elevated band boundary tests for all profiles;
-- hard-ceiling tests: SMALL `7%`, MEDIUM `5%`, NORMAL `4%`;
-- daily-loss lock tests: SMALL `12%`, MEDIUM `9%`, NORMAL `7%`;
-- broker-aware all-in monetary risk calculation;
-- spread price-distance to account-currency conversion;
-- execution friction included exactly once;
+- profile/risk-band/ceiling/daily-lock boundaries;
+- broker-aware all-in risk and execution-friction accounting exactly once;
 - raw lot below broker minimum does not auto-block;
-- minimum-lot PASS inside allowed profile band/ceiling;
-- minimum-lot hard-ceiling block without SL manipulation;
-- stepped/full dynamic volume normalization/recalculated risk;
-- valid opportunity may remain ARMED after current risk geometry blocks entry;
-- one managed Gold position allows capacity `1/1` and blocks a second independent entry;
-- opposite opportunity routes to Trade Manager rather than creating an automatic hedge;
-- external/manual/unknown Gold exposure blocks new bot entry without being managed as bot-owned;
-- aggregate exposure/unknown exposure handling;
-- margin policy;
-- UTC risk-day rollover;
-- daily lock persists across restart;
-- manual reset preserves broker history/reference audit;
-- manual reset cannot bypass unrelated hard block;
-- cooldown/re-entry/circuit-breaker semantics once frozen.
+- one managed Gold position blocks second independent entry;
+- opposite opportunity routes to Trade Manager;
+- external Gold exposure blocks new bot entry without ownership confusion;
+- UTC risk-day rollover and restart persistence;
+- manual reset default OFF;
+- only one enabled reset per UTC risk day;
+- `R,R` double-confirm semantics;
+- reset preserves cumulative broker/day P/L and audit trail;
+- reset cannot bypass unrelated hard block;
+- one ordinary loss does not trigger global cooldown;
+- one fresh same-episode re-entry maximum;
+- second same-episode loss locks that episode;
+- 3 consecutive losses trigger minimum 30-minute cooldown;
+- cooldown release requires fresh M15 context, not timer only;
+- win resets consecutive-loss counter;
+- execution/shock cooldown remains blocked while conditions unsafe.
 
 ## Open questions
 
-- emergency/aggregate risk ceilings for any future multi-position design;
+- emergency/aggregate risk ceilings for future multi-position design;
 - policy for account balances below `$100`;
 - exact slippage-reserve model and commission treatment by broker/account type;
 - exact realized/floating daily-loss accounting formula;
-- bounded manual-reset count/confirmation window;
-- exact cooldown trigger/release rules;
+- exact keyboard confirmation timing for `R,R`;
 - exact drawdown-aware target-band reduction curve;
 - emergency trade-count circuit-breaker value.
