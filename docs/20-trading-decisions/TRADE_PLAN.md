@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Trade Plan
 
 **Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.3-implementation  
+**Version:** 0.4-implementation  
 **Authority:** Pre-entry structural entry reference, invalidation, initial SL geometry, target hierarchy, original R, RR and plan quality.  
 **Depends on:** `STRATEGY_FLOOR.md`, `ENTRY_TIMING.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md`, `../10-market-intelligence/LIQUIDITY_AND_SMC.md`
 
@@ -13,10 +13,11 @@ The Trade Plan converts a valid market opportunity into an executable market-str
 
 ## Current implementation checkpoint
 
-Phase 5 implements this authority in:
+Implemented in:
 
 ```text
 src/goldswingtraderai/decisions/trade_plan.py
+src/goldswingtraderai/persistence/runtime_state.py
 ```
 
 Implemented deterministic flow:
@@ -32,7 +33,7 @@ READY Opportunity
 → READY / DEGRADED / INVALID TradePlan
 ```
 
-Current implementation/calibration baselines are explicit, not frozen profitability truth:
+Current calibration baselines are explicit, not frozen profitability truth:
 
 ```text
 ATR stop buffer            0.12 ATR, minimum 4 ticks
@@ -51,24 +52,24 @@ A nearby low-quality internal objective may be retained as **Immediate Obstacle*
 
 If structural invalidation or required ATR geometry cannot be defined, an `INVALID` plan carries missing stop geometry explicitly as `None`; it never fabricates placeholder SL/R values. Risk/execution cannot treat such a plan as ready.
 
-The implementation contains no monetary sizing or broker-write call.
+The Trade Plan contains no monetary sizing or raw broker-write authority.
 
 ## Price identities
 
-The system must distinguish:
+The system distinguishes:
 
 - Signal Price;
 - Approved Entry Reference;
 - Executable Quote;
 - Actual Fill Price.
 
-Execution/broker documents own the last two; they must not overwrite historical signal/plan fields.
+Execution/broker components own the last two; they do not rewrite historical signal/plan fields.
 
-The current Phase-5 implementation uses snapshot Ask for a BUY planning reference and snapshot Bid for a SELL planning reference. This is **not** the final executable quote; Phase 7 must freshly revalidate quote, drift, risk and broker geometry before any irreversible submit.
+The planning baseline uses snapshot Ask for BUY and snapshot Bid for SELL as the Approved Entry Reference. The centralized execution path then freshly revalidates executable quote, price drift, risk, target room and broker geometry immediately before any irreversible submit.
 
 ## Structural invalidation first
 
-The initial stop starts from the market question:
+The initial stop starts from:
 
 > **What price behaviour would prove this trade thesis no longer valid?**
 
@@ -87,7 +88,7 @@ Current baseline gives reversal families finer M5-first invalidation preference,
 
 ## Initial SL
 
-The initial broker SL should be based on:
+The initial broker SL is based on:
 
 ```text
 structural invalidation
@@ -120,7 +121,7 @@ The Trade Plan must not tighten/widen its structural SL to make the account's de
 
 ## Original R
 
-At plan/fill establishment, the approved original risk distance defines `1R` for lifecycle and research accounting.
+At plan/fill establishment, approved original risk distance defines `1R` for lifecycle and research accounting.
 
 Once established, **original R is immutable** even if the stop later moves into profit.
 
@@ -134,28 +135,28 @@ The plan distinguishes:
 
 - **Immediate Obstacle** — nearby opposing structure/liquidity that may affect path quality;
 - **Primary Structural Target** — first meaningful structural objective and management checkpoint;
-- **Expansion Target** — the normal larger move objective when the path remains credible;
-- **Runner Objective** — a further objectively defined structural/liquidity objective used only when continuation earns extension.
+- **Expansion Target** — normal larger move objective when the path remains credible;
+- **Runner Objective** — further objectively defined structural/liquidity objective used only when continuation earns extension.
 
 The existence of multiple objectives does not require multiple broker TP orders or partial closes.
 
-### Primary target is a checkpoint, not an automatic full exit
+### Primary target is a checkpoint
 
-Reaching the Primary Structural Target does not by itself require the whole position to close. Trade Manager evaluates acceptance/rejection, continuation, reversal evidence and remaining target room.
+Reaching Primary Structural Target does not by itself require full exit. Trade Manager evaluates acceptance/rejection, continuation, reversal evidence and remaining target room.
 
 ### Initial broker TP policy
 
 V1 does not use a fixed-pip broker TP.
 
-Where a valid Expansion Target exists, it is the default initial broker TP objective. If no valid Expansion Target exists but the Primary Structural Target itself passes the frozen RR/path-quality policy, the Primary Target may be used as the initial broker TP.
+Where a valid Expansion Target exists, it is the default initial broker TP objective. If no valid Expansion Target exists but Primary itself passes the frozen RR/path-quality policy, Primary may be used.
 
-A broker TP is a market-objective protection mechanism; it does not prevent Trade Manager from moving the objective to a validated Runner Objective before price reaches it when fresh continuation evidence justifies extension.
+A broker TP is a market-objective protection mechanism. Trade Manager may move the objective to a validated Runner Objective through the governed execution path when fresh continuation evidence justifies extension.
 
-The manager may not remove/extend a TP merely because price is profitable. Any extension requires a fresh objectively defined next target and the post-entry rules in `TRADE_MANAGER_AND_EXIT.md`.
+Profit alone cannot justify extension. Any extension requires a fresh objectively defined target and the rules in `TRADE_MANAGER_AND_EXIT.md`.
 
 ## Target quality and path quality
 
-A target should expose quality context based on factors such as:
+A target may expose quality context based on:
 
 - structural significance;
 - freshness;
@@ -165,17 +166,11 @@ A target should expose quality context based on factors such as:
 - intervening opposing structure;
 - clean/crowded path.
 
-Target/path quality supports plan evaluation and trade management.
+Target/path quality supports plan evaluation and post-entry management.
 
 ## Structural RR — V1 frozen initial guard
 
-The plan calculates at least:
-
-- Primary RR;
-- Expansion RR;
-- Runner RR where a runner objective exists.
-
-Initial V1 target-room classification is:
+The plan calculates at least Primary RR, Expansion RR and Runner RR where available.
 
 ```text
 Credible structural target room < 1.20R   → POOR / no new entry
@@ -187,31 +182,29 @@ Credible structural target room < 1.20R   → POOR / no new entry
 
 ### Conditional `1.20R–<1.50R` plans
 
-A marginal plan may proceed only when the normal opportunity/timing requirements pass **and** there is a credible larger expansion path rather than merely a nearby small target. Initial V1 expects the Expansion Target to provide at least about `2.0R` room with acceptable path quality for this exception.
+A marginal plan may proceed only when normal opportunity/timing requirements pass **and** there is a credible larger expansion path. Initial V1 expects roughly `2.0R+` Expansion Target room with acceptable path quality for this exception.
 
-A plan with credible target room below `1.20R` is rejected/degraded for the current entry geometry rather than accepted merely because strategy score is high.
+A plan below `1.20R` is rejected/degraded for the current entry geometry rather than rescued by a high strategy score.
 
-RR is still evaluated with Stop Quality, Target Quality, Path Quality, entry location and freshness. High theoretical RR cannot rescue a fragile stop or unrealistic path.
+RR is evaluated together with Stop Quality, Target Quality, Path Quality, entry location and freshness. High theoretical RR cannot rescue fragile stop geometry or an unrealistic path.
 
-A larger RR/strategy score does **not** authorize higher monetary risk; monetary sizing remains independently owned by Risk Contract.
+Higher RR/strategy score does **not** authorize higher monetary risk.
 
 ## Price drift and deterioration
 
 A previously valid plan may degrade before submission.
 
-Before execution, fresh price may materially reduce target room or increase risk. Possible state transition:
+Fresh executable price can reduce target room or increase risk:
 
 ```text
 VALID → READY → DEGRADED
 ```
 
-A degraded entry may return to `WAIT` while the opportunity remains ARMED.
+A degraded entry may return to `WAIT` while the Opportunity remains ARMED.
 
-Execution must revalidate fresh quote, RR, target room, stop geometry and chase state before sending.
+The implemented execution checks revalidate fresh quote, drift, risk, stop geometry and hard execution constraints. The decision/trade-plan path retains the original approved reference for attribution.
 
 ## Plan lifecycle
-
-States:
 
 ```text
 DRAFT
@@ -264,13 +257,27 @@ A TradePlan retains as applicable:
 - created time/freshness/expiry;
 - reason and invalidation reason.
 
-Execution later appends executable quote/fill/slippage without rewriting the original plan.
+Execution records executable quote/fill/slippage separately without rewriting the original plan.
 
 ## Partial profit — V1 baseline
 
-V1 core trading logic does **not depend on partial closes**. This is essential for minimum-lot accounts where `0.01` may be indivisible.
+V1 core trading logic does **not** depend on partial closes. This is essential for minimum-lot accounts where `0.01` may be indivisible.
 
-The baseline position is managed as one risk-bearing position using HOLD/PROTECT/TRAIL/RUNNER/EXIT. Future research/version work may add partial-profit behaviour for larger executable volumes, but it is not required for V1 correctness and may not be assumed by strategy/exit logic.
+The full position is managed through HOLD/PROTECT/TRAIL/RUNNER/EXIT. Partial-profit policies may be researched later for larger divisible volumes but are not required for V1 correctness.
+
+## Persistence and restart
+
+`RuntimeStateRepository` persists the active TradePlan, objectives, original-R basis and Opportunity/Episode lineage. Recovery cross-validates those identities rather than silently accepting mismatched state.
+
+For an actual open managed trade, `ManagedTradeRepository` carries forward broker position lineage, original/current SL/TP and objective stage. Broker positions/orders/deals remain current exposure truth.
+
+A restored plan must be revalidated against fresh market/broker facts before it can produce a new execution.
+
+## Trade Manager integration
+
+The implemented Trade Manager consumes the structural objectives/original-R context from the plan and manages HOLD/PROTECT/TRAIL/RUNNER/EXIT. Primary is a checkpoint, Expansion is the normal initial objective, and runner extension requires fresh evidence plus a real next objective.
+
+Management modifications/close actions still pass through the centralized one-shot execution and broker-verification path.
 
 ## Dashboard visibility
 
@@ -286,32 +293,33 @@ Broker TP       EXPANSION
 Plan Quality    88
 ```
 
-If degraded or rejected, show the exact reason such as `PRICE_DRIFT`, `STOP_FRAGILE_WAIT_FOR_BETTER_GEOMETRY` or `TARGET_ROOM_POOR`.
+If degraded/rejected, show the exact reason such as `PRICE_DRIFT`, `STOP_FRAGILE_WAIT_FOR_BETTER_GEOMETRY` or `TARGET_ROOM_POOR`.
 
-## Replay and persistence
+## Replay/research
 
-Plan creation, degradation, objective extension and invalidation must be chronological. Active/open-trade plan context, original R and objective identities must survive restart through the persistence contract.
+Plan creation, degradation, objective progression and invalidation must remain chronological. Phase-10 replay/research can evaluate RR bands, stop quality, target path, missed opportunities and management capture without future leakage.
 
-Phase 6 adds durable persistence; Phase 5 currently provides the immutable typed plan contract/state only.
+Calibration must optimize Net R/drawdown/capture/opportunity recall together rather than improving headline win rate by eliminating too many valid trades.
 
-## Tests required / current evidence
+## Tests / current evidence
 
-Current deterministic tests cover:
+Deterministic coverage includes:
 
 - structural BUY/SELL stop geometry;
 - volatility-aware buffer baseline;
-- broker stop constraint cannot silently redesign the thesis;
+- broker stop constraint cannot silently redesign thesis;
 - invalid plans expose missing geometry explicitly;
-- Immediate Obstacle does not automatically become Primary target;
-- immutable plan R basis;
-- target room `<1.20R` degraded/rejected for current entry;
+- Immediate Obstacle does not automatically become Primary;
+- immutable original-R basis;
+- `<1.20R` rejection/degradation;
 - `1.20R–<1.50R` requires credible `~2R+` expansion path;
 - `1.50R+` GOOD and `2R+` STRONG classification;
 - Expansion Target selected as initial broker objective when valid;
-- structural stop remains unchanged when risk/min-lot cannot afford the plan;
-- V1 logic does not require partial closes.
-
-Later phases still must test fresh price-drift revalidation, persistence/restart and Trade Manager objective extension.
+- structural stop unchanged when risk/min-lot cannot afford plan;
+- V1 logic does not require partial closes;
+- TradePlan persistence/recovery lineage;
+- fresh execution checks preserve the approved structural plan;
+- Trade Manager objective progression and broker-verified modifications.
 
 ## Explicit non-goals
 
@@ -319,9 +327,9 @@ Trade Plan must not:
 
 - size the account lot;
 - move SL to fit desired risk;
-- place orders;
+- place raw orders;
 - use fixed pip targets as market truth;
-- force full exit merely because Primary Target was touched;
+- force full exit merely because Primary was touched;
 - endlessly extend targets without new structural evidence;
 - redefine original R after trailing;
 - turn every nearby internal level into a hard trade veto.
