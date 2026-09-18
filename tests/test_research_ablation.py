@@ -116,10 +116,16 @@ def test_ablation_replays_same_chronology_and_reports_frequency_deltas() -> None
 
     assert base.metrics.events > 0
     assert all(row.metrics.events == base.metrics.events for row in report.rows)
-    # Positive-only confluence cannot lower the underlying family evidence. Final
-    # opportunity frequency may remain equal or change through thresholds, so the
-    # report exposes the delta instead of assuming improvement.
-    assert all_sources.metrics.average_opportunity_score >= base.metrics.average_opportunity_score
+
+    # Confluence is positive-only at the family-evidence layer, but it can support
+    # both BUY and SELL theses at the same event. That can increase conflict and
+    # therefore legitimately reduce the fused Opportunity Score. The ablation
+    # report must measure the signed final effect rather than assuming monotonic
+    # improvement.
+    assert all_sources.average_opportunity_score_delta_vs_base == (
+        all_sources.metrics.average_opportunity_score
+        - base.metrics.average_opportunity_score
+    )
     assert all_sources.opportunity_event_delta_vs_base == (
         all_sources.metrics.opportunity_events - base.metrics.opportunity_events
     )
@@ -128,6 +134,10 @@ def test_ablation_replays_same_chronology_and_reports_frequency_deltas() -> None
     )
     assert report.poc_marginal_opportunity_event_delta == (
         all_sources.metrics.opportunity_events - directional.metrics.opportunity_events
+    )
+    assert report.poc_marginal_average_opportunity_score_delta == (
+        all_sources.metrics.average_opportunity_score
+        - directional.metrics.average_opportunity_score
     )
 
 
