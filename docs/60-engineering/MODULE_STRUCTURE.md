@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 1.1-implementation-map  
+**Version:** 1.2-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -9,71 +9,35 @@
 
 > **One primary owner per responsibility; facts flow forward; irreversible broker authority stays narrow and last.**
 
-## Current package shape — implemented through Phase 9
+## Current package shape — implemented through Phase 10 foundation
 
 ```text
 src/goldswingtraderai/
 ├── app/
-│   └── main.py
 ├── config/
-│   └── settings.py
 ├── diagnostics/
-│   ├── logging.py
-│   └── reasons.py
 ├── domain/
-│   ├── enums.py
-│   ├── ids.py
-│   ├── market.py
-│   └── models.py
 ├── market_data/
-│   ├── mt5_reader.py
-│   └── snapshot.py
 ├── intelligence/
-│   ├── indicators.py
-│   ├── candle_structure.py
-│   ├── technical.py
-│   ├── liquidity.py
-│   ├── session.py
-│   ├── news.py
-│   └── snapshot.py
 ├── strategies/
-│   └── floor.py
 ├── decisions/
-│   ├── fusion.py
-│   ├── opportunity.py
-│   ├── timing.py
-│   ├── snapshot.py
-│   └── trade_plan.py
 ├── risk/
-│   ├── engine.py
-│   ├── state.py
-│   └── permissions.py
 ├── persistence/
-│   ├── store.py
-│   └── runtime_state.py
 ├── execution/
-│   ├── models.py
-│   ├── intent_store.py
-│   ├── gate.py
-│   ├── checks.py
-│   ├── controller.py
-│   ├── mt5_writer.py
-│   ├── service.py
-│   └── reconcile.py
 ├── management/
-│   ├── models.py
-│   ├── manager.py
-│   ├── store.py
-│   └── execution.py
-└── operator/
-    └── dashboard.py
+├── operator/
+│   └── dashboard.py
+└── research/
+    ├── replay.py
+    ├── metrics.py
+    ├── learning.py
+    ├── episode_journal.py
+    ├── discovery.py
+    ├── invention.py
+    └── promotion.py
 ```
 
-Planned package:
-
-```text
-research/       Phase 10
-```
+Detailed pre-Phase-10 file ownership remains in `docs/CODER_GUIDE.md`; this document focuses on dependency boundaries.
 
 ## Dependency direction
 
@@ -88,10 +52,14 @@ config/domain
 → execution → gate / intent / broker write / reconciliation
 → management → open-trade decision floor
 → operator → read-only presentation
-→ research next → offline/replay evidence only
+
+production/replay facts + outcomes
+→ research metrics/episode journal
+→ discovery/invention candidates
+→ governed promotion evidence
 ```
 
-The execution package is the only package allowed to contain irreversible raw MT5 writes.
+The execution package remains the only package allowed to contain irreversible raw MT5 writes.
 
 ## Ownership highlights
 
@@ -102,7 +70,7 @@ Read-only broker/account/symbol/quote/completed-candle boundary.
 Shared causal structure/quant/technical/liquidity/session/news facts. No broker authority.
 
 ### `strategies/` + `decisions/`
-Parallel strategy families, BUY/SELL fusion, Opportunity/Entry Timing, structural Trade Plan. Soft evidence remains separate from hard safety.
+Parallel strategy families, BUY/SELL fusion, Opportunity/Entry Timing and structural Trade Plan. Soft evidence remains separate from hard safety.
 
 ### `risk/`
 Monetary sizing/profile/min-lot/capacity plus daily/cooldown/episode state and hard session/news permission. SMALL includes any positive day-start equity below `$300`.
@@ -127,12 +95,47 @@ hard authorities
 A success-like ACK still requires broker-truth verification. The in-memory coordination backend is tests only; production cross-laptop shared coordination remains required before failover certification.
 
 ### `management/`
-Second decision floor for verified bot-owned open trades. HOLD/PROTECT/TRAIL/RUNNER/EXIT. Structural protection/trailing, immutable original R, Primary checkpoint, earned runner, PRE_CLOSE override. Management produces governed ExecutionIntents but cannot call raw MT5.
+Second decision floor for verified bot-owned open trades. HOLD/PROTECT/TRAIL/RUNNER/EXIT. Management can create governed ExecutionIntents but cannot call raw MT5.
 
 ### `operator/`
-`dashboard.py` is a pure read-only stdlib renderer over flattened authoritative facts. It preserves requested market/decision/risk/execution/open-trade visibility plus Learning/Backup/Health placeholders. It contains no MetaTrader5, Risk Engine or Execution Gate invocation.
+Read-only stdlib presentation over flattened authoritative facts. UI must not recompute strategy/risk/execution permission.
 
-## Runtime efficiency rule
+### `research/replay.py`
+Chronological prefix-only bar-close replay. It reuses production Intelligence + Decision semantics and explicitly declares `BAR_CLOSE` realism instead of pretending tick-perfect execution.
+
+### `research/metrics.py`
+Owns actual trade/outcome metrics and Opportunity Recall. Counterfactual blocked/missed MFE is isolated from actual broker P/L.
+
+### `research/learning.py`
+Owns interpretable StrategyMemory summaries and bounded score nudges. Evidence is isolated by family/direction/regime/session/environment/policy version.
+
+### `research/episode_journal.py`
+Durable automatic feed from outcome-labelled episodes into discovery observations. It maps existing audited strategy-evidence labels to the approved primitive registry and infers research triggers such as missed move, false entry or premature exit.
+
+### `research/discovery.py`
+Owns approved primitives, declarative candidate recipes, independent-episode requirements, variant/new-family classification, fingerprints/similarity, duplicate/rejected memory and durable CandidateRegistry.
+
+It has no arbitrary-code or broker authority.
+
+### `research/invention.py`
+Owns the automatic recurring-cluster cycle and `IDLE / HEALTHY / DEGRADED` discovery-health result.
+
+Engineering liveness invariant:
+
+```text
+eligible evidence
+→ candidate created
+OR explicit governed suppression reason
+```
+
+Silent eligible-evidence loss is a defect.
+
+### `research/promotion.py`
+Owns the durable post-discovery challenger lifecycle. It enforces stage order, locked fingerprint, one-shot final holdout, Shadow/Canary chronology, explicit promotion approval and rollback history.
+
+The registry's `broker_authority` remains false even at DEMO Canary/Promoted state; actual execution authority can only come from the normal runtime gate.
+
+## Runtime / research efficiency rule
 
 ```text
 one verified broker snapshot
@@ -142,47 +145,58 @@ one verified broker snapshot
 → one TradePlan
 → one RiskEvaluation + hard permission set
 → one centralized execution path if needed
-→ one Trade Manager cycle for open trade
+→ one Trade Manager cycle
 → one presentation frame
+
+then asynchronously/offline as appropriate:
+outcomes
+→ one durable research episode
+→ bounded discovery cycle
 ```
 
-Do not reread MT5 or recompute already-verified facts except fresh pre-write checks that are deliberately required for safety.
+Research should not rerun expensive analysis merely to reconstruct facts already durably captured unless chronological replay specifically requires it.
 
 ## Prohibited dependency directions
 
 ```text
-intelligence → order_send                  NO
-strategies   → order_send/risk reset       NO
-decisions    → raw order_send              NO
-risk         → raw order_send              NO
-persistence  → trading decision            NO
-management   → raw order_send              NO
-operator     → MT5/risk/gate authority     NO
-research     → production broker write     NO
+intelligence → order_send                       NO
+strategies   → order_send/risk reset            NO
+decisions    → raw order_send                   NO
+risk         → raw order_send                   NO
+persistence  → trading decision                 NO
+management   → raw order_send                   NO
+operator     → MT5/risk/gate authority          NO
+research     → production broker write          NO
+invention    → arbitrary Python/eval/exec        NO
+candidate    → hard-risk/safety mutation         NO
+candidate    → self-promotion                    NO
 ```
 
 ## Current deterministic tests
 
-Later-phase suites:
+Later-phase coverage includes:
 
 ```text
-tests/test_session_news_permissions.py
-tests/test_persistence_recovery.py
 tests/test_execution_safety.py
 tests/test_trade_manager.py
 tests/test_management_execution.py
 tests/test_dashboard.py
+tests/test_discovery_invention.py
+tests/test_discovery_journal.py
+tests/test_promotion_governance.py
 ```
 
-Together with earlier suites they protect no-lookahead, non-restrictive strategy fusion, structural RR/risk, no minimum-balance floor, hard session/news state, restart integrity, one-shot execution, reconciliation, structural trade management and read-only dashboard rendering.
+Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, risk/session/execution safety, restart integrity, one-shot broker writes, structural management, dashboard isolation and working discovery/invention liveness.
 
-CI gates remain Ruff, Pytest and financial-secret scan. Phase-9 deterministic checkpoint passes all three; this is not live DEMO certification or profitability proof.
+CI gates remain Ruff, Pytest and financial-secret scan. Deterministic CI is software evidence, not live DEMO certification or proof of strategy edge.
 
-## Next package — `research/`
+## Remaining Phase-10 work
 
-Phase 10 should own replay, trade/opportunity outcome measurement, Entry/Exit Learning, large-move recall and bounded declarative strategy experiments.
-
-It must remain downstream/offline from broker-write authority. Research may consume production decisions/events but cannot directly change hard risk/execution policy or send orders.
+- broader replay and live/replay parity tests;
+- stress/fault/ablation evidence utilities;
+- richer entry/exit attribution and research reports;
+- operator visibility for Discovery Health/candidate stage;
+- calibration of research thresholds on real historical/DEMO evidence.
 
 ## Phase completion rule
 
