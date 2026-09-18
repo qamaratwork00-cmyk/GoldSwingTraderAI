@@ -21,13 +21,15 @@ from uuid import uuid4
 
 from goldswingtraderai.persistence.store import (
     DATABASE_SCHEMA_VERSION,
-    StateIntegrityError,
     StateStore,
     StoreSnapshot,
     StoredEvent,
     StoredRecord,
 )
-from goldswingtraderai.security.financial_secrets import scan_text_for_financial_secrets
+from goldswingtraderai.security.financial_secrets import (
+    scan_payload_for_financial_secrets,
+    scan_text_for_financial_secrets,
+)
 
 
 RUNTIME_CHECKPOINT_SCHEMA_VERSION = 1
@@ -102,6 +104,7 @@ def export_runtime_checkpoint(
     destination_path.parent.mkdir(parents=True, exist_ok=True)
 
     snapshot = store.export_snapshot()
+    _reject_snapshot_secrets(snapshot)
     records_text = _jsonl(_record_payload(record) for record in snapshot.records)
     events_text = _jsonl(_event_payload(event) for event in snapshot.events)
 
@@ -199,6 +202,7 @@ def import_runtime_checkpoint(path: str | Path) -> ImportedRuntimeCheckpoint:
         events=events,
     )
     _validate_snapshot_payloads(snapshot)
+    _reject_snapshot_secrets(snapshot)
     return ImportedRuntimeCheckpoint(path=root, manifest=manifest, snapshot=snapshot)
 
 
@@ -263,7 +267,7 @@ def _event_payload(event: StoredEvent) -> dict[str, Any]:
 
 def _parse_record(payload: dict[str, Any]) -> StoredRecord:
     try:
-        record = StoredRecord(
+        return StoredRecord(
             namespace=_required_text(str(payload["namespace"]), "record namespace"),
             key=_required_text(str(payload["key"]), "record key"),
             schema_version=int(payload["schema_version"]),
@@ -273,12 +277,11 @@ def _parse_record(payload: dict[str, Any]) -> StoredRecord:
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeCheckpointError("invalid runtime checkpoint record") from exc
-    return record
 
 
 def _parse_event(payload: dict[str, Any]) -> StoredEvent:
     try:
-        event = StoredEvent(
+        return StoredEvent(
             event_id=int(payload["event_id"]),
             namespace=_required_text(str(payload["namespace"]), "event namespace"),
             key=_required_text(str(payload["key"]), "event key"),
@@ -289,7 +292,6 @@ def _parse_event(payload: dict[str, Any]) -> StoredEvent:
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeCheckpointError("invalid runtime checkpoint event") from exc
-    return event
 
 
 def _parse_manifest(payload: dict[str, Any]) -> RuntimeCheckpointManifest:
@@ -346,6 +348,27 @@ def _validate_snapshot_payloads(snapshot: StoreSnapshot) -> None:
         previous_event_id = event.event_id
         if _hash_text(_canonical_json(event.payload)) != event.checksum:
             raise RuntimeCheckpointError("runtime checkpoint event checksum mismatch")
+
+
+def _reject_snapshot_secrets(snapshot: StoreSnapshot) -> None:
+    for record in snapshot.records:
+        findings = scan_payload_for_financial_secrets(
+            record.payload,
+            path=f"record[{record.namespace}/{record.key}]",
+        )
+        if findings:
+            raise RuntimeCheckpointError(
+                "FINANCIAL_SECRET_DETECTED in runtime checkpoint record payload"
+            )
+    for event in snapshot.events:
+        findings = scan_payload_for_financial_secrets(
+            event.payload,
+            path=f"event[{event.namespace}/{event.key}#{event.event_id}]",
+        )
+        if findings:
+            raise RuntimeCheckpointError(
+                "FINANCIAL_SECRET_DETECTED in runtime checkpoint event payload"
+            )
 
 
 def _parse_jsonl(text: str, label: str) -> tuple[dict[str, Any], ...]:
