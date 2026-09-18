@@ -27,8 +27,6 @@ jobs:
         run: ruff check .
 
       - name: Pytest
-        id: pytest
-        continue-on-error: true
         run: pytest --junitxml=pytest-report.xml
 
       - name: Upload pytest report
@@ -37,11 +35,8 @@ jobs:
         with:
           name: pytest-report
           path: pytest-report.xml
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Financial-secret scan
+        if: always()
         run: python scripts/scan_financial_secrets.py .
-
-      - name: Enforce pytest success
-        if: steps.pytest.outcome != 'success'
-        run: exit 1
