@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.6-design
+**Version:** 0.7-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -52,27 +52,26 @@ NORMAL  $1,000+
 
 **Resolved sizing direction:** SMALL uses practical base/minimum-lot hybrid sizing with all-in risk validation; MEDIUM uses stepped dynamic lots; NORMAL uses fully dynamic percentage sizing. `raw lot < broker minimum` is not an automatic trade blocker.
 
-**Resolved initial hard limits:**
+**Resolved initial risk policy:**
 
 ```text
-Profile  New-Entry Hard Ceiling  Daily Loss Lock
-SMALL            7%                   12%
-MEDIUM           5%                    9%
-NORMAL           4%                    7%
+Profile  Normal Risk   Elevated Risk    Entry Ceiling   Daily Lock
+SMALL    3.0–4.5%      >4.5–6.5%        7%              12%
+MEDIUM   2.0–3.0%      >3.0–4.5%        5%               9%
+NORMAL   1.0–2.0%      >2.0–3.5%        4%               7%
 ```
 
-These hard limits are not Target Risk values. Preferred/normal risk remains separately calibrated below them.
+Elevated risk is tolerance, not target sizing.
 
 Remaining risk questions:
 
-- Exact Target Risk percentage/range per SMALL, MEDIUM and NORMAL profile.
-- Exact Acceptable Gold Risk Band per profile.
 - Emergency safety ceiling and aggregate open-risk ceiling.
 - Policy for accounts below `$100`.
 - Exact slippage-reserve model and commission treatment by broker/account type.
 - Exact realized/floating P/L accounting formula for applying the frozen daily lock percentages.
 - Bounded manual-reset count and confirmation timing per UTC risk day.
 - Exact cooldown trigger/release rules.
+- Exact drawdown-aware target-band reduction curve.
 - Final V1 confirmation of one independently risk-bearing Gold position at a time.
 - Emergency maximum-trade/runaway circuit-breaker value.
 
