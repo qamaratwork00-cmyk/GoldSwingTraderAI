@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Release Checklist
 
 **Status:** PROVISIONAL  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** DEMO release gates and sign-off checklist.  
 **Depends on:** `TESTING_AND_VERIFICATION.md`, `../90-governance/OPEN_QUESTIONS.md`, `../90-governance/DOCUMENTATION_STANDARD.md`
 
@@ -31,86 +31,105 @@ V1 release scope ends at controlled DEMO verification. It does not define a sepa
 - [ ] Code behaviour, authoritative docs and tests agree.
 - [ ] `DESIGN_DECISIONS.md` and `OPEN_QUESTIONS.md` are current.
 - [ ] `docs/CODER_GUIDE.md` and `60-engineering/MODULE_STRUCTURE.md` map the real implementation.
-- [ ] User/Setup/operator docs match actual controls/startup/recovery.
-- [ ] `FINAL_BUILD_PROMPT.md` matches implementation requirements/sequence.
+- [ ] User/Setup/operator docs match actual launcher/runtime/recovery state.
+- [ ] `FINAL_BUILD_PROMPT.md` matches current architecture and safety rules.
 - [ ] `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` phase status matches reality.
+- [ ] Root `README.md` does not advertise an obsolete implementation phase.
 
 ## Market data / no-lookahead gates
 
 - [ ] H4/H1/M15/M5 synchronization verified.
 - [ ] Duplicate/stale/gap detection verified.
 - [ ] No-lookahead swing/BOS/MSS/liquidity tests pass.
+- [ ] Trendline anchors use only confirmed swings available at that time.
+- [ ] Fibonacci anchors/levels use only confirmed structural swings available at that time.
+- [ ] POC/volume profile uses only historical volume/candle information available at that time.
 - [ ] Replay does not expose future-confirmed pivots/events.
-- [ ] Intrabar limitations are documented.
+- [ ] Intrabar limitations documented honestly.
 
 ## Strategy / scoring gates
 
 - [ ] Six initial families have positive/negative scenario tests.
-- [ ] BUY/SELL theses are independent.
-- [ ] Conflict/Red Team visible and tested.
+- [ ] BUY/SELL theses independent.
+- [ ] Conflict/Red Team visible/tested.
 - [ ] Missing optional evidence is not score zero.
 - [ ] Correlated-evidence double-count protection passes.
 - [ ] Opportunity/Entry remain separate.
-- [ ] WAIT/MISSED/INVALID/BLOCKED reasons are stable/explainable.
+- [ ] WAIT/MISSED/INVALID/BLOCKED reasons stable/explainable.
+- [ ] One strong coherent family may lead without all-family/all-indicator consensus.
+
+## Trendline / Fibonacci / POC confluence gates
+
+- [ ] Technical confluence module is chronological/no-lookahead.
+- [ ] Support/resistance trendline touch/break/reclaim tests pass.
+- [ ] Fibonacci retracement/extension geometry tests pass.
+- [ ] POC prefers real volume when available and otherwise labels tick-volume approximation.
+- [ ] POC alone cannot create directional trade authority.
+- [ ] Missing Trendline/Fibonacci/POC leaves base family score unchanged.
+- [ ] Supportive confluence bonus is bounded/capped.
+- [ ] Opposed/unclear confluence cannot silently hard-block a trade.
+- [ ] Research ablation evaluates Net R/drawdown/Opportunity Recall/large-move capture/trade frequency, not win rate alone.
 
 ## Entry / Trade Plan gates
 
-- [ ] Setup persistence/re-entry rules verified.
+- [ ] Setup persistence/re-entry verified.
 - [ ] Chase/price-drift protections verified.
 - [ ] Structural invalidation/SL/targets verified.
 - [ ] Initial RR guard verified.
-- [ ] Primary/Expansion/Runner objective roles verified.
+- [ ] Primary/Expansion/Runner roles verified.
 - [ ] Original R immutability verified.
-- [ ] Plan degradation can WAIT without deleting a valid opportunity.
-- [ ] Core exit/manager logic works without requiring partial close.
+- [ ] Plan degradation can WAIT without deleting valid opportunity.
+- [ ] Core manager works without requiring partial close.
 
 ## Risk gates
 
 - [ ] SMALL/MEDIUM/NORMAL profile boundaries pass.
-- [ ] Normal/elevated risk bands and hard entry ceilings pass.
+- [ ] Any positive DayStartEquity below `$300` resolves SMALL.
+- [ ] No arbitrary `$100` minimum account gate remains in code/docs/tests.
+- [ ] Normal/elevated risk bands and hard ceilings pass.
 - [ ] Broker-aware monetary risk/volume normalization passes.
 - [ ] Minimum-lot handling evaluates executable lot rather than changing SL.
 - [ ] Position capacity `0/1` passes.
-- [ ] Manual/foreign/unknown Gold exposure ownership rule passes.
+- [ ] Manual/foreign/unknown Gold ownership rule passes.
 - [ ] Margin handling passes.
 - [ ] UTC risk-day rollover verified.
 - [ ] Cash-flow-adjusted Account Safety P/L verified.
 - [ ] Floating drawdown affects daily safety immediately.
-- [ ] Daily loss lock persists across restart.
-- [ ] Manual reset default OFF and max-one enabled reset semantics pass.
+- [ ] Daily loss lock persists restart.
+- [ ] Manual reset default OFF/max-one semantics pass.
 - [ ] Manual reset cannot bypass unrelated hard blocks.
 - [ ] Same-episode re-entry and 3-loss cooldown rules pass.
 - [ ] Unknown financial truth fails closed.
 
 ## News/session gates
 
-- [ ] Macro opinion and event-safety facts are separated.
-- [ ] Tier 1 `-15/+15`, Tier 2 `-5/+5`, Tier 3 no-hard-blackout semantics pass.
+- [ ] Macro opinion/event-safety facts separated.
+- [ ] Tier 1 `-15/+15`, Tier 2 `-5/+5`, Tier 3 no-hard-blackout pass.
 - [ ] Required news-safety unknown fails closed.
-- [ ] Scheduled news alone does not force-close an existing managed trade.
+- [ ] Scheduled news alone does not force-close managed trade.
 - [ ] Severe post-news warmup follows evidence rules.
 - [ ] Daily T-20 no-entry / T-10 flatten passes from verified broker schedule.
 - [ ] Weekend T-60 no-entry / T-30 flatten passes.
-- [ ] Daily reopen requires normalized conditions + at least 1 clean M5.
-- [ ] Weekend reopen requires gap assessment + normalized conditions + at least 2 clean M5.
-- [ ] Ambiguous close state persists/reconciles rather than falsely reporting flat.
+- [ ] Daily reopen normalized + ≥1 clean M5.
+- [ ] Weekend reopen gap assessment + normalized + ≥2 clean M5.
+- [ ] Ambiguous close persists/reconciles rather than falsely flat.
 
 ## Positive DEMO guard gate
 
-- [ ] Connected account DEMO status is positively verified by account/environment authority.
+- [ ] Connected account DEMO status positively verified by environment authority.
 - [ ] Verified DEMO produces `DEMO_GUARD = PASS`.
 - [ ] Unverified DEMO status cannot grant broker-write permission.
-- [ ] DEMO guard is one centralized input, not scattered strategy/UI checks.
-- [ ] V1 does not depend on or invent a separate REAL authorization/hard-block workflow.
-- [ ] A verified DEMO account can perform real-time create/modify/close when all ordinary checks pass.
+- [ ] DEMO guard centralized, not scattered strategy/UI checks.
+- [ ] V1 does not depend on separate REAL authorization/hard-block workflow.
+- [ ] Verified DEMO can perform governed real-time create/modify/close when all ordinary checks pass.
 
 ## Centralized broker-write permission gate
 
-- [ ] One primary `ExecutionPermissionGate`/equivalent exists.
+- [ ] One primary Execution Permission Gate exists.
 - [ ] DEMO/account/data/news/risk/position/order/controller/fresh-execution results feed it.
-- [ ] Gate returns ALLOW/BLOCK/UNKNOWN plus primary/secondary reasons.
-- [ ] Strategy, scoring, Entry Timing, Trade Plan, dashboard, research and learning cannot directly reach irreversible MT5 writes.
-- [ ] Create/modify/close all use the same governed boundary.
+- [ ] Gate returns ALLOW/BLOCK/UNKNOWN plus reasons.
+- [ ] Strategy/timing/Trade Plan/dashboard/research/learning cannot reach raw irreversible MT5 writes.
+- [ ] Create/modify/close use governed boundary.
 
 Any bypass is release-blocking.
 
@@ -120,25 +139,28 @@ Any bypass is release-blocking.
 - [ ] Gold symbol/specs validated.
 - [ ] Fresh quote/spread/drift/SL/TP/volume/margin revalidated pre-send.
 - [ ] Healthy spread baseline excludes abnormal periods.
-- [ ] Intent is durably persisted before irreversible send.
-- [ ] Exactly one `order_send` per Execution Intent is proven.
+- [ ] Intent durably persisted before irreversible send.
+- [ ] Same Intent ID cannot send twice for its lifetime.
+- [ ] Pre-check failure makes zero irreversible send attempts.
+- [ ] Success-like ACK is not accepted as verified exposure without broker truth.
 - [ ] Ambiguous acknowledgement never blind-retries.
 - [ ] Reconciliation restores accepted/unknown state safely.
-- [ ] Manual/foreign positions are never managed as bot-owned.
+- [ ] Manual/foreign positions never managed as bot-owned.
 - [ ] Modify/close ambiguity uses reconciliation.
 
 ## Controller / multi-instance gates
 
-- [ ] Shared lease backend satisfies atomic acquisition + monotonic fencing contract.
-- [ ] Only one active PRIMARY can write the managed account/symbol.
-- [ ] Renewal target/TTL configured to current V1 values (`10s`/`30s`) unless an explicitly governed later change exists.
-- [ ] Every irreversible write freshly verifies holder + unexpired matching epoch.
-- [ ] Observer/Standby/Research instances cannot broker-write.
+- [ ] Shared coordination backend satisfies atomic acquisition + monotonic fencing.
+- [ ] Only one active PRIMARY can write managed account/symbol.
+- [ ] Renewal target/TTL current V1 (`10s`/`30s`) unless governed later change.
+- [ ] Every write verifies holder + unexpired matching epoch.
+- [ ] Observer/Standby/Research cannot broker-write.
 - [ ] Coordination uncertainty stops irreversible writes.
-- [ ] Standby takeover occurs only after authoritative expiry.
-- [ ] Takeover gets a new epoch and completes broker/state reconciliation before PRIMARY READY.
-- [ ] Old primary returning with stale epoch cannot write.
+- [ ] Standby takeover only after authoritative expiry.
+- [ ] Takeover gets new epoch + broker/state reconciliation before PRIMARY READY.
+- [ ] Old primary with stale epoch cannot write.
 - [ ] Planned handoff avoids duplicate exposure.
+- [ ] Cross-laptop certification uses real shared atomic backend, not only in-memory test backend.
 
 ## Crash / persistence gates
 
@@ -147,8 +169,8 @@ Any bypass is release-blocking.
 - [ ] Risk-day/reset/cooldown/Episode lineage survives restart.
 - [ ] `SUBMITTING/ACCEPTED_UNKNOWN` survives/reconciles.
 - [ ] Critical corrupt/incompatible state fails safely.
-- [ ] Atomic-write interruption preserves known-good state.
-- [ ] Stored opportunities are revalidated after downtime.
+- [ ] SQLite checksum/schema/transaction behaviour tested.
+- [ ] Stored opportunities revalidated after downtime.
 
 ## Migration / backup gates
 
@@ -157,59 +179,70 @@ Any bypass is release-blocking.
 - [ ] Entry/Exit Learning survives migration.
 - [ ] Promotion/rejection/rollback history survives migration.
 - [ ] Fresh-machine disaster-recovery drill completed.
-- [ ] Restored state reconciles current broker truth before trading.
+- [ ] Restored state reconciles broker truth before trading.
 - [ ] Public backup contains required project intelligence.
 - [ ] Financial-secret scanner passes.
-- [ ] Public backup/repository contains no financial-authority credentials/tokens/keys.
-- [ ] Backup/restore integrity is actually tested.
-- [ ] Any publicly exposed authority-bearing credential is revoked/rotated.
+- [ ] Public backup contains no financial-authority credentials/tokens/keys.
+- [ ] Backup/restore integrity actually tested.
+- [ ] Any exposed authority-bearing credential revoked/rotated.
 
 ## Trade Manager / exit gates
 
 - [ ] HOLD/PROTECT/TRAIL/RUNNER/EXIT semantics tested.
+- [ ] Small profit alone does not force breakeven/full exit.
 - [ ] Structural trailing never intentionally widens approved risk.
 - [ ] Runner extension requires fresh objective/continuation evidence.
-- [ ] PRE_CLOSE flatten overrides HOLD/RUNNER as required.
+- [ ] PRE_CLOSE flatten overrides HOLD/RUNNER.
 - [ ] Exit research reports MFE/MAE/Capture/Premature Exit metrics.
 
-## Learning / autonomous gates
+## Learning / discovery / autonomous gates
 
 - [ ] StrategyMemory small-sample/bounded influence tested.
 - [ ] Entry/Exit Learning creates candidates rather than silent live mutation.
 - [ ] Optional learning outage degrades safely where permitted.
 - [ ] Autonomous invention uses approved declarative primitives only.
-- [ ] Arbitrary generated executable trading code is rejected.
+- [ ] Trendline/Fibonacci/POC map to explicit audited discovery primitives.
+- [ ] Arbitrary generated executable trading code rejected.
+- [ ] Independent episode IDs prevent fake sample inflation.
+- [ ] Eligible recurring evidence creates candidate OR explicit governed suppression reason.
+- [ ] Silent eligible-evidence loss reports `DISCOVERY_DEGRADED`/equivalent.
+- [ ] Duplicate/rejected candidate memory survives restart.
 - [ ] Autonomous candidates cannot change risk/call broker/self-promote.
 
 ## Research / promotion gates
 
 - [ ] Research chronology/no-lookahead verified.
-- [ ] Final holdout use is one-shot for locked candidate.
+- [ ] Actual P/L and counterfactual missed/blocked outcomes remain separate.
+- [ ] Opportunity Recall and meaningful missed moves reported.
+- [ ] Final holdout is one-shot for locked candidate.
 - [ ] Stress/regime/direction evidence exists as required.
 - [ ] Shadow has zero broker authority.
-- [ ] DEMO Canary uses normal Risk + centralized Execution Permission Gate.
-- [ ] Promotion/rollback/version history is auditable.
+- [ ] DEMO Canary uses normal Risk + Execution Gate.
+- [ ] Promotion/rollback/version history auditable.
 - [ ] Claims do not exceed actual evidence.
 
 ## Dashboard / system-health gates
 
 - [ ] Operator can identify Market/Decision/Risk/Execution/System states separately.
 - [ ] Every non-trade/block has reason + explanation.
-- [ ] DEMO guard state visible.
-- [ ] Central Execution Permission state/reason visible.
-- [ ] Controller role/lease/reconcile state visible.
-- [ ] PRE_CLOSE/reopen/news state visible.
-- [ ] `WAIT` is not shown as a system failure.
+- [ ] DEMO guard visible.
+- [ ] Execution Permission visible.
+- [ ] Controller role/lease/reconcile visible.
+- [ ] PRE_CLOSE/reopen/news visible.
+- [ ] WAIT not shown as system failure.
 - [ ] Critical faults show subsystem/impact/recovery.
 - [ ] Backup/learning health visible.
+- [ ] Discovery Health/candidate/suppression state visible once final runtime DTO wiring exists.
+- [ ] Optional Trendline/Fib/POC display does not imply mandatory gating.
 - [ ] Emoji markers have text fallback and do not affect logic.
 
 ## Controlled MT5 DEMO gate
 
+- [ ] Final persistent runtime orchestration exists.
 - [ ] Startup-to-close lifecycle tested on intended DEMO environment.
-- [ ] Broker fills/slippage/stop modification/close behaviour recorded.
+- [ ] Broker fills/slippage/stop modification/close recorded.
 - [ ] Restart/reconciliation tested against real DEMO broker state.
-- [ ] Selected disconnect/market-closed/spread-block scenarios verified.
+- [ ] Disconnect/market-closed/spread-block scenarios verified.
 - [ ] Scheduled PRE_CLOSE flatten tested on DEMO where feasible.
 - [ ] Controller handoff/failover tested safely where feasible.
 
@@ -231,8 +264,10 @@ Do not sign off DEMO VERIFIED if any remain:
 - required recovery restore failure;
 - public financial credential leakage;
 - autonomous self-promotion/broker bypass;
+- eligible discovery evidence silently lost without candidate/suppression reason;
+- optional confluence acting as undocumented hard filter;
 - critical BLOCK state with no explainable reason/recovery path.
 
 ## Final sign-off
 
-Release decision must reference evidence-backed `FINAL_RELEASE_AUDIT.md`. Pending evidence remains pending; it must never be converted to PASS for convenience.
+Release decision must reference evidence-backed `FINAL_RELEASE_AUDIT.md`. Pending evidence remains pending; never convert it to PASS for convenience.
