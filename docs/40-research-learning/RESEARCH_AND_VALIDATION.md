@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Research and Validation
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-implementation  
 **Authority:** Chronological replay, no-lookahead validation, holdouts, robustness/stress evidence, opportunity/entry/exit research metrics and evidence claims.  
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../20-trading-decisions/ENTRY_TIMING.md`, `../20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`
 
@@ -19,19 +19,20 @@ The system should avoid maintaining a simplified `backtest strategy` whose rules
 
 ## Chronology and no-lookahead
 
-Every event becomes available only when its required information existed historically. Examples:
+Every event becomes available only when required information existed historically. Examples:
 
 - confirmed swing at `confirmed_at`, not pivot time;
 - BOS/MSS only after required completed-candle evidence;
-- FVG/OB/sweep only after their defining evidence exists;
+- FVG/OB/sweep only after defining evidence exists;
+- trendline only from swings already confirmed at that replay point;
+- Fibonacci anchor pair only from already-confirmed structural swings;
+- Volume Profile/POC only from volume/candle history available up to that replay point;
 - session high/low only as developed up to that time;
 - news/macro facts only according to historical information availability.
 
 Future candles may be used later to label outcomes for research, but never to improve the original decision.
 
 ## Event-driven replay
-
-Preferred replay is chronological/event-driven:
 
 ```text
 new completed candle/event
@@ -41,11 +42,11 @@ new completed candle/event
 → advance time
 ```
 
-If forming-candle/intrabar features are later authorized, replay must use suitable lower-resolution/tick data or explicitly declare that parity is not available for that feature.
+If forming-candle/intrabar features are later authorized, replay must use suitable lower-resolution/tick data or explicitly declare that parity is unavailable for that feature.
 
 ## Execution realism
 
-Research should state the realism level used. Depending on available data, simulation may model:
+Research should state realism level used. Depending on available data, simulation may model:
 
 - Bid/Ask/spread;
 - price drift;
@@ -59,8 +60,6 @@ Bar-level simulation must not be described as tick-perfect execution.
 
 ## Evidence chronology
 
-Candidate research should conceptually separate:
-
 ```text
 DEVELOPMENT / SELECTION DATA
 → INDEPENDENT VALIDATION
@@ -71,7 +70,7 @@ DEVELOPMENT / SELECTION DATA
 → DEMO CANARY
 ```
 
-Exact sample sizes remain open.
+Exact sample sizes remain research-calibratable.
 
 ## Final holdout rule
 
@@ -85,18 +84,48 @@ Research should test multiple chronological periods/regimes rather than depend o
 
 ## Ablation testing
 
-Research should test whether evidence primitives genuinely add value. Examples:
+Research should prove whether optional evidence actually adds value.
+
+Examples:
 
 - remove FVG support;
 - remove RSI support;
 - remove liquidity evidence;
+- remove Trendline bonus;
+- remove Fibonacci bonus;
+- remove POC/volume-profile bonus;
+- remove all three technical-confluence bonuses together;
 - reduce duplicated/correlated features.
+
+For Trendline/Fibonacci/POC specifically, compare at least:
+
+```text
+base strategy only
+vs
+base + individual confluence
+vs
+base + bounded combined confluence
+```
+
+Evaluate not only headline win rate but also:
+
+- Net R;
+- Profit Factor;
+- drawdown;
+- average R;
+- Opportunity Recall;
+- missed meaningful moves;
+- large-move capture;
+- trade frequency;
+- Capture Efficiency.
+
+A feature that slightly raises accuracy by eliminating a large share of good opportunities is not automatically an improvement. Optional confluence exists to improve quality, not to recreate filter soup.
 
 A primitive that does not improve relevant outcomes should not be retained merely because it is popular terminology.
 
 ## Core performance metrics
 
-At minimum research should be able to report:
+At minimum research should report:
 
 - trades;
 - Net R;
@@ -107,12 +136,13 @@ At minimum research should be able to report:
 - hold time;
 - Capture Efficiency;
 - 2R/3R/4R+ reach rates;
-- normalized 100/200/300+ pip-move reach/capture where meaningful;
+- normalized 100/200/300+ move reach/capture where meaningful;
 - Opportunity Recall;
 - missed-opportunity rate;
 - Entry Efficiency / late-entry cost;
 - Premature Exit Cost;
-- runner capture.
+- runner capture;
+- trade-frequency change versus baseline when a new filter/confluence rule is tested.
 
 Win rate is not sufficient by itself.
 
@@ -176,6 +206,7 @@ A winning trade may still be a poor exit if capture is consistently weak; a losi
 Poor outcomes should be attributed among at least:
 
 - opportunity/strategy quality;
+- optional confluence contribution;
 - entry timing;
 - Trade Plan/stop quality;
 - execution/slippage;
@@ -208,6 +239,8 @@ Monte Carlo or bootstrap analysis may be used for drawdown/loss-streak distribut
 
 More complex candidates require stronger evidence. Comparable performance should prefer the simpler, more stable policy.
 
+This applies especially to multi-confluence recipes: Trendline + Fibonacci + POC must not become a mandatory checklist merely because all are available in the codebase.
+
 ## Versioning and reproducibility
 
 Every serious research result should identify, as applicable:
@@ -234,8 +267,6 @@ Do not claim `proven profitable` from historical results alone.
 
 ## Research states
 
-Possible lifecycle states:
-
 ```text
 DRAFT
 RESEARCHING
@@ -255,13 +286,14 @@ Promotion authority is owned by `GOVERNED_EXPERIMENTS_AND_PROMOTION.md`.
 ## Tests required
 
 - deterministic replay chronology;
-- no-lookahead swing/event tests;
+- no-lookahead swing/event/confluence tests;
 - replay/live decision parity where claimed;
 - holdout consumption enforcement;
 - counterfactual P/L isolation;
 - attribution correctness;
 - research reproducibility;
-- stress/ablation report integrity.
+- stress/ablation report integrity;
+- confluence ablation includes Opportunity Recall/trade-frequency effects, not win rate alone.
 
 ## Explicit non-goals
 
@@ -271,7 +303,8 @@ Research must not:
 - silently mutate production;
 - reuse final holdout as selection data while calling it untouched;
 - treat counterfactual results as real P/L;
-- overstate historical evidence.
+- overstate historical evidence;
+- promote a popular indicator/confluence tool without measured value.
 
 ## Open questions
 
@@ -280,4 +313,5 @@ Research must not:
 - walk-forward window design;
 - Monte Carlo/bootstrap method;
 - minimum robustness/stress thresholds;
-- exact promotion evidence thresholds.
+- exact promotion evidence thresholds;
+- final evidence threshold for keeping/removing each optional confluence feature.
