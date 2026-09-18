@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 2.7-design
+**Version:** 2.8-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -29,6 +29,7 @@ Deterministic core exists through Phase 10 including:
 8  Trade Manager + execution bridge
 9  Dashboard renderer
 10 Replay / ablation / outcomes / manager replay
+   + verified historical PRE_CLOSE/session-policy replay integration
    + declared execution stress
    + fixed-policy walk-forward
    + dataset/evidence identity
@@ -56,6 +57,8 @@ Live DEMO release and real-data validation are not complete. Final runtime orche
 
 - chronological Decision replay and confluence ablation;
 - production Trade Plan/Trade Manager outcome replay;
+- historical session schedule model with production PRE_CLOSE permission reuse;
+- manager-replay PRE_CLOSE flatten integration;
 - declared execution stress;
 - fixed-policy walk-forward;
 - content-addressed `ReplayDatasetIdentity`;
@@ -67,9 +70,17 @@ Live DEMO release and real-data validation are not complete. Final runtime orche
 - metrics/StrategyMemory/research episode journal;
 - discovery/invention liveness and governed promotion.
 
+### Historical PRE_CLOSE/session software gap — CLOSED
+
+`research/session_history.py` now requires named/versioned verified coverage plus explicit chronological tradeable intervals. It delegates DAILY/WEEKEND timing to production `evaluate_market_permission()`, so research does not maintain a second threshold table.
+
+`research/management_replay.py` may consume this schedule and forwards mandatory flatten to the real Trade Manager. Outside verified schedule coverage or on a candle/schedule CLOSED contradiction, research fails explicitly rather than guessing.
+
+What remains pending here is **external evidence**, not software semantics: a trustworthy historical broker-session source/version/coverage for the real XAU research periods.
+
 ### Evidence package software gap — CLOSED
 
-`research/packages.py` now stores:
+`research/packages.py` stores:
 
 ```text
 package_manifest.json
@@ -99,6 +110,7 @@ The package is write-new, verifies identities on import and deliberately does **
 - partial historical data cannot silently shrink the declared sample;
 - absent historical spread requires explicit handling rather than zero/current-live fallback;
 - research acquisition reuses `MT5Reader`, never a second raw MT5 client;
+- historical PRE_CLOSE parity requires explicit verified schedule facts; no guessed broker clock;
 - portable datasets/evidence packages are trusted only after hash/content verification;
 - existing immutable destinations are not silently overwritten;
 - financial-authority secrets stay outside public/tracked evidence.
@@ -108,9 +120,9 @@ The package is write-new, verifies identities on import and deliberately does **
 - controlled Windows/MT5 real XAU history acquisition;
 - source-label/source-version convention based on observed broker/history facts;
 - reliable history-depth/terminal-limit evidence;
+- trustworthy versioned historical broker-session schedule coverage for studied periods;
 - broad regime-diverse XAU datasets and fixed-policy validation;
 - empirical stress calibration;
-- historical PRE_CLOSE/session schedule integration;
 - final untouched holdout, Shadow and DEMO forward evidence;
 - higher-level catalog/index/publication convention across many immutable evidence packages.
 
@@ -127,7 +139,7 @@ The package is write-new, verifies identities on import and deliberately does **
 
 ## Persistence / backup — separate pending work
 
-Runtime SQLite persistence is implemented. Portable **research data/evidence** is now implemented. These do not replace Phase 11 runtime-state backup/recovery work.
+Runtime SQLite persistence is implemented. Portable **research data/evidence** is implemented. These do not replace Phase 11 runtime-state backup/recovery work.
 
 Still pending:
 
@@ -141,7 +153,7 @@ Still pending:
 ## Operator / runtime / release pending
 
 - authoritative dashboard runtime DTO + Discovery Health/confluence display;
-- provider/session adapters;
+- live provider/session adapters;
 - final persistent runtime orchestrator;
 - cross-laptop controller proof;
 - controlled Windows/MT5 DEMO lifecycle/fault/restart certification;
@@ -149,4 +161,4 @@ Still pending:
 
 ## Governance conclusion
 
-No major behavioural redesign item is known. Current work is primarily **real external evidence, runtime integration, backup/failover and controlled certification**. Documents remain DRAFT/PROVISIONAL where real historical/live proof is incomplete.
+No major behavioural redesign item is known. Current work is primarily **Phase 11 backup/recovery, real external evidence, runtime integration/failover and controlled certification**. Documents remain DRAFT/PROVISIONAL where real historical/live proof is incomplete.
