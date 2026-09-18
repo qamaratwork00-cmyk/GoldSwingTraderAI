@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 1.8-implementation-map  
+**Version:** 1.9-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -34,6 +34,7 @@ src/goldswingtraderai/
     ├── stress.py
     ├── validation.py
     ├── evidence.py
+    ├── datasets.py
     ├── metrics.py
     ├── learning.py
     ├── episode_journal.py
@@ -59,10 +60,11 @@ config/domain
 → operator → read-only presentation
 
 historical dataset
+→ portable dataset bundle / dataset identity
 → replay / ablation / outcomes / management replay
 → declared stress
 → fixed-policy walk-forward
-→ dataset + evidence identity
+→ evidence manifest
 → metrics / learning / episode journal
 → discovery / invention
 → governed promotion
@@ -136,26 +138,42 @@ ReplayDataset
 → per-timeframe SHA-256 identities
 → dataset_sha256
 
-experiment inputs
-+ code revision
-+ policy version
-+ dataset identity
+experiment inputs + code revision + policy version + dataset identity
 → input_fingerprint_sha256
 
 inputs + generated time + results + limitations
 → manifest_sha256
-→ canonical public JSON representation
+```
+
+Broker endpoint `login/server` are excluded from replay-economic identity; secret-shaped evidence fields are rejected.
+
+### `research/datasets.py`
+Primary owner of portable offline `ReplayDataset` bundles.
+
+```text
+ReplayDataset
+→ dataset_manifest.json
+→ canonical timeframe CSVs
+→ manifest + file SHA-256
+→ immutable directory
+
+bundle import
+→ manifest hash verification
+→ canonical/known timeframe validation
+→ CSV hash + bar-count verification
+→ ReplayDataset reconstruction
+→ recomputed dataset/symbol/account identity verification
 ```
 
 Rules:
 
-- timeframe ordering is normalized before hashing;
-- candle OHLC/volume/spread fields are content-addressed;
-- source label/version, replay spread/realism and symbol geometry participate in identity;
-- economic replay account context participates; broker endpoint `login/server` do not;
-- manifest configuration/results are normalized deterministically;
-- financial-secret-shaped fields are rejected with `FINANCIAL_SECRET_DETECTED`;
-- evidence identity has no broker, risk, strategy-selection or promotion authority.
+- H4/H1/M15/M5 are required;
+- optional supported series such as M1 are preserved;
+- export includes every series present in the dataset;
+- existing destination is never overwritten;
+- manifest/CSV symlink inputs are rejected;
+- login/server are not exported and imported endpoint identity is neutral offline context;
+- this module has no broker or promotion authority.
 
 ### `research/metrics.py`
 Actual/counterfactual metric separation and Opportunity Recall.
@@ -180,8 +198,8 @@ verified snapshot → shared intelligence → strategies → decision → TradeP
 → risk/permissions → execution → manager → dashboard
 
 research:
-dataset → replay/outcomes/manager → stress/walk-forward
-→ dataset/evidence identity → metrics/learning/discovery
+source dataset → portable bundle/identity → replay/outcomes/manager
+→ stress/walk-forward → evidence manifest → metrics/learning/discovery
 ```
 
 ## Prohibited dependency directions
@@ -201,6 +219,7 @@ outcomes     → historical-decision mutation     NO
 stress       → production safety mutation       NO
 validation   → hidden tuning/final holdout       NO
 evidence     → trading/promotion authority      NO
+datasets     → broker credentials/authority     NO
 ```
 
 ## Current deterministic tests
@@ -214,19 +233,20 @@ tests/test_research_outcomes.py
 tests/test_research_stress.py
 tests/test_research_validation.py
 tests/test_research_evidence.py
+tests/test_research_datasets.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Current verified checkpoint: **168 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current verified checkpoint: **173 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
-Coverage now includes no-lookahead, confluence causality, ambiguity-safe outcomes, production-manager reuse, stress assumptions, walk-forward validation boundaries, deterministic dataset identity, evidence input/full-record hashing and manifest secret-field rejection.
+Coverage includes no-lookahead, confluence causality, ambiguity-safe outcomes, production-manager reuse, stress assumptions, walk-forward boundaries, deterministic dataset/evidence identity, portable dataset round-trip/tamper detection and discovery/promotion governance.
 
 ## Remaining Phase-10 work
 
-- real historical XAU dataset ingestion/export around the identity contract;
-- persisted/reproducible evidence package output;
+- authoritative real historical XAU acquisition/ingestion into the portable bundle contract;
+- persisted result/evidence package layout beside dataset identities;
 - broad regime-diverse real-data walk-forward/independent validation;
 - empirical stress calibration from historical/DEMO observations;
 - historical PRE_CLOSE/session-policy integration;
