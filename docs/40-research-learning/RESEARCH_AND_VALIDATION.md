@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Research and Validation
 
 **Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
-**Version:** 0.4-implementation  
+**Version:** 0.5-implementation  
 **Authority:** Chronological replay, no-lookahead validation, holdouts, robustness/stress evidence, opportunity/entry/exit research metrics and evidence claims.  
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../20-trading-decisions/ENTRY_TIMING.md`, `../20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`
 
@@ -11,7 +11,7 @@ Research must test the real documented trading semantics without future leakage,
 
 > **A positive backtest is evidence about a specified historical simulation, not proof of future profitability.**
 
-## Current implementation checkpoint — Phase 10 foundation
+## Current implementation checkpoint — Phase 10
 
 Implemented owners include:
 
@@ -19,6 +19,7 @@ Implemented owners include:
 research/replay.py
 research/ablation.py
 research/outcomes.py
+research/management_replay.py
 research/metrics.py
 research/learning.py
 research/episode_journal.py
@@ -27,7 +28,7 @@ research/invention.py
 research/promotion.py
 ```
 
-The current replay foundation is chronological completed-bar / `BAR_CLOSE` realism. It reuses production Intelligence + Decision semantics rather than maintaining a separate simplified backtest strategy.
+The current replay foundation is chronological completed-bar research. It reuses production Intelligence, Decision, Trade Plan and Trade Manager semantics rather than maintaining a separate simplified backtest strategy.
 
 Current deterministic research infrastructure supports:
 
@@ -36,17 +37,19 @@ Current deterministic research infrastructure supports:
 - decision-level Opportunity/ENTER/WAIT/MISSED/conflict/frequency deltas without inventing P/L;
 - post-hoc production Trade Plan reconstruction for historical ENTER decisions;
 - explicit `BAR_HIGH_LOW` initial stop/initial broker-target path labeling;
-- same-bar stop+target ambiguity preserved as `BOTH_TOUCHED_AMBIGUOUS` rather than favorably guessed;
-- unresolved outcome horizons preserved separately rather than coerced into wins/losses;
-- resolved initial-bracket Net R / average R / Profit Factor / drawdown plus MFE/MAE and 2R/3R/4R reach metrics where valid;
+- chronological production Trade Manager replay at completed M5 boundaries;
+- active trailing stop / active broker TP checking before each new management decision;
+- HOLD / PROTECT / TRAIL / RUNNER / EXIT action histories from the production manager;
+- manager-replay resolved Net R / average R / Profit Factor / drawdown, MFE/MAE, Capture Efficiency, profit-giveback and action counts where outcomes are unambiguous;
+- confluence ablation using both initial-bracket outcomes and idealized Trade Manager outcomes;
+- same-bar stop+target ambiguity preserved instead of favorably guessed;
+- unresolved/open horizons preserved rather than coerced into wins/losses;
 - actual trade/outcome versus counterfactual missed/blocked outcome separation;
 - durable research episodes;
 - StrategyMemory/bounded learning foundation;
 - governed candidate discovery/invention/promotion state.
 
-The initial-bracket outcome layer is **not full production P/L**. It does not yet replay dynamic Trade Manager HOLD/PROTECT/TRAIL/RUNNER/EXIT actions, broker fills/slippage, intrabar tick ordering or every hard runtime authority. Its metrics are explicitly labelled `resolved_bracket_*` and must be interpreted with their resolved-coverage/ambiguity counts.
-
-This remains a **software/research foundation**, not completed market validation. Broader historical XAU datasets, realistic execution assumptions, management replay, stress/walk-forward, independent validation/holdout and DEMO forward evidence remain required before claiming a strategy edge.
+This remains a **software/research foundation**, not completed market validation. Broader historical XAU datasets, execution-friction stress, walk-forward/independent validation, untouched holdout and DEMO forward evidence remain required before claiming a strategy edge.
 
 ## Replay principle
 
@@ -74,8 +77,11 @@ Future candles may be used later to label outcomes for research, but never to im
 ```text
 new completed candle/event
 → update validated snapshot
-→ run production semantics
-→ persist decision/outcome state
+→ run production analytical semantics
+→ build production Trade Plan when ENTER is reached
+→ if modeled trade survives active stop/TP during next M5
+   run production Trade Manager on that completed bar
+→ apply idealized accepted manager modification for following bar
 → advance time
 ```
 
@@ -88,14 +94,14 @@ A historical decision and its later outcome are separate stages:
 ```text
 historical information available at T
 → production analytical decision at T
-→ production Trade Plan reconstructed at T where applicable
+→ production Trade Plan reconstructed at T
 → freeze decision/plan facts
-→ inspect only candles after T for outcome labeling
+→ inspect only candles after T for outcome/management research
 ```
 
 The outcome label may know what happened later; the original decision may not.
 
-Initial V1 bar-path semantics are deliberately conservative:
+Initial bracket semantics:
 
 ```text
 target touched before stop → TARGET_FIRST
@@ -105,6 +111,47 @@ neither within horizon     → HORIZON_UNRESOLVED
 ```
 
 Ambiguous/unresolved cases do not enter resolved bracket Net R. Research reports coverage so incomplete certainty cannot be hidden.
+
+## Trade Manager replay — implemented idealized model
+
+`research/management_replay.py` reuses the production `evaluate_trade_manager()` and `apply_management_decision()` path.
+
+For each READY historical Trade Plan:
+
+```text
+open research ManagedTrade at approved entry reference
+→ for each later M5 bar:
+   active current stop / current broker TP checked against bar high/low
+   if neither closes trade:
+       bar becomes completed
+       rebuild chronological IntelligenceSnapshot
+       run production Trade Manager
+       record HOLD / PROTECT / TRAIL / RUNNER / EXIT
+       idealize verified modify as effective from next bar
+```
+
+Management outcomes are:
+
+```text
+PLAN_NOT_READY
+STOP_FILLED
+TARGET_FILLED
+MANAGER_EXIT
+BOTH_TOUCHED_AMBIGUOUS
+HORIZON_OPEN
+```
+
+A trailing stop can therefore realize positive R, and a runner TP can become the active broker objective when the production manager earns it.
+
+The current management replay is explicitly `BAR_CLOSE_IDEALIZED`. It assumes requested stop/TP modifications are accepted at the completed-bar boundary. It does **not** yet simulate:
+
+- broker modify rejection/latency;
+- fill slippage beyond the replay quote model;
+- tick-level ordering inside an M5 candle;
+- historical PRE_CLOSE schedule input inside this management replay;
+- live reconciliation failures.
+
+Therefore `resolved_net_r` from management replay is research evidence under this declared model, not actual broker P/L.
 
 ## Execution realism
 
@@ -120,7 +167,15 @@ Research states its realism level. Depending on available data, simulation may m
 
 Bar-level simulation must not be described as tick-perfect execution.
 
-Current decision replay is `BAR_CLOSE`; current initial Trade Plan path outcome labeling is `BAR_HIGH_LOW`. Neither is a claim of tick-perfect broker execution.
+Current layers are:
+
+```text
+Decision replay          BAR_CLOSE
+Initial bracket outcomes BAR_HIGH_LOW
+Trade Manager replay     BAR_CLOSE_IDEALIZED + active bar-high/low barriers
+```
+
+None is a claim of tick-perfect broker execution.
 
 ## Evidence chronology
 
@@ -148,9 +203,7 @@ Research should test multiple chronological periods/regimes rather than depend o
 
 ## Ablation testing
 
-Research should prove whether optional evidence actually adds value.
-
-The implemented confluence ablation currently compares identical historical event chronology under:
+The implemented confluence ablation compares identical historical event chronology under:
 
 ```text
 BASE                   no Trendline/Fibonacci/POC bonus
@@ -174,15 +227,25 @@ Decision-level ablation measures:
 
 A positive-only family bonus does **not** guarantee a higher final fused Opportunity Score: confluence can strengthen both BUY and SELL hypotheses and therefore increase conflict. Research measures the resulting signed effect rather than assuming every bonus helps.
 
-Where ENTER events produce a READY production Trade Plan, bracket-outcome ablation can additionally compare:
+Initial-bracket ablation may additionally compare:
 
 - READY plan count;
-- resolved outcome coverage;
-- resolved initial-bracket Net R / average R / Profit Factor / drawdown;
+- resolved coverage;
+- resolved initial-bracket Net/Avg R, Profit Factor and drawdown;
 - MFE / MAE;
 - 2R / 3R / 4R reach rates.
 
-These bracket metrics still do not replace full Trade Manager/execution replay.
+Management ablation may additionally compare:
+
+- managed-trade count;
+- resolved management coverage;
+- resolved management Net/Avg R, Profit Factor and drawdown;
+- MFE / MAE;
+- Capture Efficiency;
+- profit giveback;
+- HOLD / PROTECT / TRAIL / RUNNER / EXIT action mix.
+
+These metrics remain tied to the declared replay realism. They are not broker-certified P/L.
 
 Other ablations may later include:
 
@@ -191,28 +254,15 @@ Other ablations may later include:
 - remove liquidity evidence;
 - reduce duplicated/correlated features.
 
-Ultimately evaluate not only headline win rate but also:
-
-- Net R under the declared realism level;
-- Profit Factor;
-- drawdown;
-- average R;
-- Opportunity Recall;
-- missed meaningful moves;
-- large-move capture;
-- trade frequency;
-- Capture Efficiency;
-- uncertainty/coverage.
+Ultimately evaluate not only headline win rate but also Net R under the declared model, Profit Factor, drawdown, Opportunity Recall, missed meaningful moves, large-move capture, trade frequency, Capture Efficiency and uncertainty/coverage.
 
 A feature that slightly raises accuracy by eliminating a large share of good opportunities is not automatically an improvement. Optional confluence exists to improve quality, not to recreate filter soup.
-
-A primitive that does not improve relevant outcomes should not be retained merely because it is popular terminology.
 
 ## Core performance metrics
 
 At minimum research should report, when the required outcome realism exists:
 
-- trades / resolved modeled outcomes;
+- modeled/resolved trades;
 - Net R;
 - Average R;
 - Profit Factor;
@@ -220,6 +270,8 @@ At minimum research should report, when the required outcome realism exists:
 - MFE and MAE;
 - hold time;
 - Capture Efficiency;
+- profit giveback;
+- HOLD/PROTECT/TRAIL/RUNNER/EXIT distribution where management is replayed;
 - 2R/3R/4R+ reach rates;
 - normalized 100/200/300+ move reach/capture where meaningful;
 - Opportunity Recall;
@@ -227,8 +279,8 @@ At minimum research should report, when the required outcome realism exists:
 - Entry Efficiency / late-entry cost;
 - Premature Exit Cost;
 - runner capture;
-- trade-frequency change versus baseline when a new filter/confluence rule is tested;
-- ambiguity/unresolved coverage for bar-level modeled outcomes.
+- trade-frequency change versus baseline;
+- ambiguity/unresolved/open coverage.
 
 Win rate is not sufficient by itself.
 
@@ -250,7 +302,7 @@ SYSTEM_FAULT
 
 This prevents strategy logic from being blamed for risk/execution/system failures.
 
-The definition of an objectively meaningful missed opportunity must be chronological and non-hindsight in decision reconstruction; exact labeling methodology remains research calibration.
+The exact objective meaningful-move labeling method remains research calibration.
 
 ## Counterfactuals
 
@@ -274,20 +326,19 @@ Research may propose family-specific Entry Policy Challengers but cannot mutate 
 
 ## Exit research
 
-Exit research should compare:
+Exit research now has deterministic idealized production-manager replay support for:
 
-- realized R;
+- realized modeled R;
 - MFE;
 - Capture Efficiency;
-- Premature Exit Cost;
-- profit given back;
-- trail quality;
-- runner objective quality;
-- structural state after exit.
+- profit giveback;
+- structural protection/trailing action mix;
+- runner activation/target behavior;
+- manager EXIT reason.
 
 A winning trade may still be a poor exit if capture is consistently weak; a losing trade may still be a valid high-quality setup and normal statistical loss.
 
-Current `research/outcomes.py` evaluates the initial bracket only. Full exit research requires chronological Trade Manager replay before claiming management/runner capture parity.
+PRE_CLOSE historical replay, modify latency/failure and tick-level ordering remain additional realism work before full broker-parity claims.
 
 ## Attribution
 
@@ -311,6 +362,7 @@ Candidate stress may include:
 
 - worse spread/slippage;
 - execution delay;
+- modify failure/latency;
 - slightly worse entries;
 - parameter perturbation;
 - missing optional evidence;
@@ -348,11 +400,12 @@ Use precise language such as:
 
 - `positive on specified historical replay`;
 - `resolved initial-bracket evidence under BAR_HIGH_LOW model`;
+- `resolved management evidence under BAR_CLOSE_IDEALIZED model`;
 - `passed independent validation`;
 - `passed final holdout`;
 - `positive DEMO forward evidence`.
 
-Do not claim `proven profitable` from historical results alone, and do not describe initial-bracket bar modeling as full Trade Manager/broker realized P/L.
+Do not claim `proven profitable` from historical results alone, and do not describe idealized bar replay as broker-realized P/L.
 
 ## Research states
 
@@ -385,6 +438,11 @@ Deterministic coverage includes:
 - same-bar stop+target ambiguity preserved rather than favorably guessed;
 - unresolved outcome horizon isolation;
 - resolved bracket metrics exclude ambiguous/unresolved cases;
+- active trailing-stop R realization;
+- production Trade Manager composition over chronological completed bars;
+- manager actions applied only after the bar that generated them, for following-bar barrier checks;
+- management replay unresolved/ambiguous isolation from resolved Net R;
+- confluence management-ablation delta accounting;
 - actual/counterfactual isolation;
 - outcome attribution and Opportunity Recall metrics;
 - durable research episode feed;
@@ -394,11 +452,11 @@ Deterministic coverage includes:
 Still required for full research validation:
 
 - broad historical XAU datasets across regimes;
-- full chronological Trade Manager/runner outcome replay or suitably scoped forward evidence;
-- execution-friction/stress scenarios;
+- execution-friction/modify-failure/PRE_CLOSE stress scenarios;
 - walk-forward/independent validation;
 - final untouched holdout on locked candidates;
-- Shadow/DEMO forward evidence.
+- Shadow/DEMO forward evidence;
+- controlled broker comparison to quantify replay-versus-DEMO differences.
 
 ## Explicit non-goals
 
@@ -409,6 +467,7 @@ Research must not:
 - reuse final holdout as selection data while calling it untouched;
 - treat counterfactual or unresolved modeled results as real P/L;
 - resolve same-bar stop/target ambiguity in the favorable direction without adequate intrabar data;
+- call idealized manager modifications broker-verified fills;
 - overstate historical evidence;
 - promote a popular indicator/confluence tool without measured value.
 
@@ -416,7 +475,8 @@ Research must not:
 
 - exact data periods/sample requirements;
 - exact Opportunity Recall labeling method;
-- full Trade Manager replay detail and management realism level;
+- historical PRE_CLOSE/session integration into management replay;
+- execution modification failure/latency model;
 - walk-forward window design;
 - Monte Carlo/bootstrap method;
 - minimum robustness/stress thresholds;
