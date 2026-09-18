@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 1.4-implementation-map  
+**Version:** 1.5-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -41,6 +41,7 @@ src/goldswingtraderai/
     ├── replay.py
     ├── ablation.py
     ├── outcomes.py
+    ├── management_replay.py
     ├── metrics.py
     ├── learning.py
     ├── episode_journal.py
@@ -65,9 +66,12 @@ config/domain
 → management → open-trade decision floor
 → operator → read-only presentation
 
-production/replay facts + outcomes
-→ research replay/ablation/outcome labeling/metrics
-→ episode journal
+historical dataset
+→ research replay
+→ controlled ablation
+→ historical Trade Plan reconstruction
+→ initial bracket / chronological Trade Manager outcome modeling
+→ metrics / episode journal
 → discovery/invention candidates
 → governed promotion evidence
 ```
@@ -92,7 +96,7 @@ These are soft confluence facts only. Missing or opposing confluence must not be
 ### `strategies/` + `decisions/`
 Parallel strategy families, BUY/SELL fusion, Opportunity/Entry Timing and structural Trade Plan. Soft evidence remains separate from hard safety.
 
-`strategies/confluence.py` is deliberately **positive-only**. Production defaults enable Trendline/Fibonacci/POC support; the typed source toggles are research-ablation controls and cannot create penalties or hard permission.
+`strategies/confluence.py` is deliberately **positive-only**. Production defaults enable Trendline/Fibonacci/POC support; typed source toggles are research-ablation controls and cannot create penalties or hard permission.
 
 Trendline behaviour naturally supports existing pullback, breakout, retest and compression families. A separate seventh family is not created unless governed research later proves a materially distinct edge.
 
@@ -140,12 +144,18 @@ DIRECTIONAL_COMBINED
 ALL
 ```
 
-Decision-level output measures Opportunity/ENTER/WAIT/MISSED/frequency/score/conflict deltas. A separate bracket-ablation path can attach the explicit initial Trade Plan outcome model from `research/outcomes.py`.
+It supports three evidence layers:
+
+1. decision-level Opportunity/ENTER/WAIT/MISSED/frequency/score/conflict deltas;
+2. initial Trade Plan bracket evidence from `research/outcomes.py`;
+3. idealized production Trade Manager evidence from `research/management_replay.py`.
+
+Every layer exposes signed deltas versus BASE. Decision-only evidence never invents P/L.
 
 ### `research/outcomes.py`
-Owns post-hoc initial Trade Plan path labeling for historical analytical ENTER events.
+Owns historical production Trade Plan reconstruction and initial bracket path labeling for analytical ENTER events.
 
-It rebuilds production Trade Plan geometry at the historical decision timestamp, then inspects only later M5 candles. The explicit bar-high/low vocabulary is:
+It rebuilds Trade Plan geometry from the historical decision-time snapshot, then inspects only later M5 candles. Vocabulary:
 
 ```text
 TARGET_FIRST
@@ -154,7 +164,28 @@ BOTH_TOUCHED_AMBIGUOUS
 HORIZON_UNRESOLVED
 ```
 
-Same-bar stop+target ordering is never guessed favorably. Ambiguous/unresolved cases remain outside resolved bracket Net R and are exposed through coverage. This module does not yet claim dynamic Trade Manager or tick/broker execution parity.
+Same-bar stop+target ordering is never guessed favorably. Ambiguous/unresolved cases remain outside resolved bracket Net R and are exposed through coverage.
+
+### `research/management_replay.py`
+Owns chronological idealized replay of the **production Trade Manager**.
+
+For each READY historical Trade Plan:
+
+```text
+create research ManagedTrade
+→ check currently active stop/TP against next M5 high/low
+→ if trade survives, complete bar
+→ rebuild chronological IntelligenceSnapshot
+→ call production evaluate_trade_manager()
+→ record HOLD / PROTECT / TRAIL / RUNNER / EXIT
+→ apply manager state change for following bar
+```
+
+It reuses `evaluate_trade_manager()` and `apply_management_decision()` rather than implementing a separate backtest manager.
+
+Current research realism is `BAR_CLOSE_IDEALIZED`: requested manager modifications are treated as accepted at the completed-bar boundary. Broker modify rejection/latency, tick ordering, historical PRE_CLOSE integration and live reconciliation failures are separate stress/integration evidence.
+
+Same-bar active stop+TP remains ambiguous. Open/ambiguous cases do not enter resolved management Net R.
 
 ### `research/metrics.py`
 Owns actual trade/outcome metrics and Opportunity Recall. Counterfactual blocked/missed MFE is isolated from actual broker P/L.
@@ -193,8 +224,6 @@ The registry's `broker_authority` remains false even at DEMO Canary/Promoted sta
 ```text
 one verified broker snapshot
 → one shared intelligence derivation
-   → structure/quant/technical/liquidity
-   → optional Trendline/Fib/POC confluence
 → parallel strategies
 → bounded positive-only confluence uplift
 → one decision/timing derivation
@@ -204,12 +233,13 @@ one verified broker snapshot
 → one Trade Manager cycle
 → one presentation frame
 
-then asynchronously/offline as appropriate:
-outcomes / historical dataset
-→ chronological production replay
-→ controlled ablation / outcome labeling
-→ one durable research episode
-→ bounded discovery cycle
+historical research:
+one dataset / chronology
+→ production Decision semantics
+→ shared historical Trade Plan reconstruction
+→ initial bracket and/or production Trade Manager replay
+→ controlled variant comparison
+→ metrics / learning / discovery
 ```
 
 Research should not rerun expensive analysis merely to reconstruct facts already durably captured unless chronological replay specifically requires it.
@@ -225,11 +255,12 @@ persistence  → trading decision                 NO
 management   → raw order_send                   NO
 operator     → MT5/risk/gate authority          NO
 research     → production broker write          NO
-invention    → arbitrary Python/eval/exec        NO
-candidate    → hard-risk/safety mutation         NO
-candidate    → self-promotion                    NO
-confluence   → hard execution permission         NO
-outcomes     → historical-decision mutation      NO
+invention    → arbitrary Python/eval/exec       NO
+candidate    → hard-risk/safety mutation        NO
+candidate    → self-promotion                   NO
+confluence   → hard execution permission        NO
+outcomes     → historical-decision mutation     NO
+manager replay → raw broker execution           NO
 ```
 
 ## Current deterministic tests
@@ -241,6 +272,7 @@ tests/test_technical_confluence.py
 tests/test_execution_safety.py
 tests/test_trade_manager.py
 tests/test_management_execution.py
+tests/test_management_replay.py
 tests/test_dashboard.py
 tests/test_research_ablation.py
 tests/test_research_outcomes.py
@@ -249,19 +281,22 @@ tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, positive-only technical confluence, same-chronology ablation, ambiguity-safe outcome labeling, risk/session/execution safety, restart integrity, one-shot broker writes, structural management, dashboard isolation and working discovery/invention liveness.
+Current verified manager-research checkpoint includes **153 passing tests**, Ruff PASS and financial-secret scan PASS.
 
-CI gates remain Ruff, Pytest and financial-secret scan. Deterministic CI is software evidence, not live DEMO certification or proof of strategy edge.
+Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, positive-only technical confluence, same-chronology ablation, ambiguity-safe outcome labeling, chronological production-manager reuse, risk/session/execution safety, restart integrity, one-shot broker writes, dashboard isolation and discovery/invention liveness.
+
+Deterministic CI is software evidence, not live DEMO certification or proof of strategy edge.
 
 ## Remaining Phase-10 work
 
-- broader real historical XAU replay datasets and live/replay parity evidence;
-- full chronological Trade Manager/runner outcome replay or clearly scoped forward evidence;
-- stress/execution-friction/parameter-perturbation utilities;
+- execution-friction, spread/slippage, entry-delay and manager-modify failure/latency stress utilities;
+- historical PRE_CLOSE/session-policy integration where trustworthy schedule history exists;
+- broader real historical XAU replay datasets and regime coverage;
 - walk-forward and independent-validation evidence;
-- richer entry/exit attribution/research reports;
+- final untouched holdout evidence for locked candidates;
+- richer entry/exit attribution and controlled replay-versus-DEMO comparison;
 - operator visibility for Discovery Health/candidate stage and compact Trendline/Fib/POC context;
-- calibration of research/confluence thresholds on real historical/DEMO evidence.
+- calibration of research/confluence/management thresholds on real historical/DEMO evidence.
 
 ## Phase completion rule
 
