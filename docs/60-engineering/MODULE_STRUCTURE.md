@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 1.3-implementation-map  
+**Version:** 1.4-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -9,7 +9,7 @@
 
 > **One primary owner per responsibility; facts flow forward; irreversible broker authority stays narrow and last.**
 
-## Current package shape — implemented through Phase 10 foundation
+## Current package shape — implemented through Phase 10 research foundation
 
 ```text
 src/goldswingtraderai/
@@ -39,6 +39,8 @@ src/goldswingtraderai/
 │   └── dashboard.py
 └── research/
     ├── replay.py
+    ├── ablation.py
+    ├── outcomes.py
     ├── metrics.py
     ├── learning.py
     ├── episode_journal.py
@@ -64,7 +66,8 @@ config/domain
 → operator → read-only presentation
 
 production/replay facts + outcomes
-→ research metrics/episode journal
+→ research replay/ablation/outcome labeling/metrics
+→ episode journal
 → discovery/invention candidates
 → governed promotion evidence
 ```
@@ -89,7 +92,7 @@ These are soft confluence facts only. Missing or opposing confluence must not be
 ### `strategies/` + `decisions/`
 Parallel strategy families, BUY/SELL fusion, Opportunity/Entry Timing and structural Trade Plan. Soft evidence remains separate from hard safety.
 
-`strategies/confluence.py` is deliberately **positive-only**: it can add a small capped uplift when Trendline/Fib/POC context supports an existing family, but it cannot lower the base family score or require any confluence feature to exist.
+`strategies/confluence.py` is deliberately **positive-only**. Production defaults enable Trendline/Fibonacci/POC support; the typed source toggles are research-ablation controls and cannot create penalties or hard permission.
 
 Trendline behaviour naturally supports existing pullback, breakout, retest and compression families. A separate seventh family is not created unless governed research later proves a materially distinct edge.
 
@@ -123,6 +126,35 @@ Read-only stdlib presentation over flattened authoritative facts. UI must not re
 
 ### `research/replay.py`
 Chronological prefix-only bar-close replay. It reuses production Intelligence + Decision semantics and explicitly declares `BAR_CLOSE` realism instead of pretending tick-perfect execution.
+
+### `research/ablation.py`
+Runs controlled same-chronology research variants without creating a second strategy implementation.
+
+Current confluence variants are:
+
+```text
+BASE
+TRENDLINE
+FIBONACCI
+DIRECTIONAL_COMBINED
+ALL
+```
+
+Decision-level output measures Opportunity/ENTER/WAIT/MISSED/frequency/score/conflict deltas. A separate bracket-ablation path can attach the explicit initial Trade Plan outcome model from `research/outcomes.py`.
+
+### `research/outcomes.py`
+Owns post-hoc initial Trade Plan path labeling for historical analytical ENTER events.
+
+It rebuilds production Trade Plan geometry at the historical decision timestamp, then inspects only later M5 candles. The explicit bar-high/low vocabulary is:
+
+```text
+TARGET_FIRST
+STOP_FIRST
+BOTH_TOUCHED_AMBIGUOUS
+HORIZON_UNRESOLVED
+```
+
+Same-bar stop+target ordering is never guessed favorably. Ambiguous/unresolved cases remain outside resolved bracket Net R and are exposed through coverage. This module does not yet claim dynamic Trade Manager or tick/broker execution parity.
 
 ### `research/metrics.py`
 Owns actual trade/outcome metrics and Opportunity Recall. Counterfactual blocked/missed MFE is isolated from actual broker P/L.
@@ -173,7 +205,9 @@ one verified broker snapshot
 → one presentation frame
 
 then asynchronously/offline as appropriate:
-outcomes
+outcomes / historical dataset
+→ chronological production replay
+→ controlled ablation / outcome labeling
 → one durable research episode
 → bounded discovery cycle
 ```
@@ -195,6 +229,7 @@ invention    → arbitrary Python/eval/exec        NO
 candidate    → hard-risk/safety mutation         NO
 candidate    → self-promotion                    NO
 confluence   → hard execution permission         NO
+outcomes     → historical-decision mutation      NO
 ```
 
 ## Current deterministic tests
@@ -207,20 +242,24 @@ tests/test_execution_safety.py
 tests/test_trade_manager.py
 tests/test_management_execution.py
 tests/test_dashboard.py
+tests/test_research_ablation.py
+tests/test_research_outcomes.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, positive-only technical confluence, risk/session/execution safety, restart integrity, one-shot broker writes, structural management, dashboard isolation and working discovery/invention liveness.
+Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, positive-only technical confluence, same-chronology ablation, ambiguity-safe outcome labeling, risk/session/execution safety, restart integrity, one-shot broker writes, structural management, dashboard isolation and working discovery/invention liveness.
 
 CI gates remain Ruff, Pytest and financial-secret scan. Deterministic CI is software evidence, not live DEMO certification or proof of strategy edge.
 
 ## Remaining Phase-10 work
 
-- broader replay and live/replay parity tests;
-- stress/fault/ablation evidence utilities;
-- richer entry/exit attribution and research reports;
+- broader real historical XAU replay datasets and live/replay parity evidence;
+- full chronological Trade Manager/runner outcome replay or clearly scoped forward evidence;
+- stress/execution-friction/parameter-perturbation utilities;
+- walk-forward and independent-validation evidence;
+- richer entry/exit attribution/research reports;
 - operator visibility for Discovery Health/candidate stage and compact Trendline/Fib/POC context;
 - calibration of research/confluence thresholds on real historical/DEMO evidence.
 
