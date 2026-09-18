@@ -128,12 +128,14 @@ def mark_accepted_unknown(
     *,
     message: str,
     broker_retcode: int | None = None,
+    broker_ticket: int | None = None,
 ) -> ExecutionIntent:
     if intent.state is not IntentState.SUBMITTING:
         raise ValueError("only SUBMITTING intent can become ACCEPTED_UNKNOWN")
     return replace(
         intent,
         state=IntentState.ACCEPTED_UNKNOWN,
+        broker_ticket=broker_ticket,
         broker_retcode=broker_retcode,
         result_message=message,
     )
@@ -168,7 +170,7 @@ def reconcile_accepted(
     return replace(
         intent,
         state=IntentState.ACCEPTED_VERIFIED,
-        broker_ticket=broker_ticket,
+        broker_ticket=broker_ticket or intent.broker_ticket,
         result_message=message,
     )
 
