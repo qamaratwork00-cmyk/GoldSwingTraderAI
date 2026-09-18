@@ -1,9 +1,9 @@
 # GoldSwingTraderAI — Dashboard and UX
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-design  
 **Authority:** Main terminal dashboard information architecture, operator visibility, reason presentation and restrained emoji usage.  
-**Depends on:** `../20-trading-decisions/SCORING_AND_DECISION_FUSION.md`, `../30-risk-execution/RISK_CONTRACT.md`, `../60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`
+**Depends on:** `../20-trading-decisions/SCORING_AND_DECISION_FUSION.md`, `../30-risk-execution/RISK_CONTRACT.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`
 
 ## Purpose
 
@@ -13,9 +13,10 @@ The dashboard should answer at a glance:
 - What does the bot currently think?
 - Why did it enter, wait, miss or block?
 - What is the active Trade Plan/open-trade state?
-- Is risk/execution healthy?
+- Is risk/execution healthy and permitted?
 - What is learning/research doing?
-- Is the bot itself healthy and recoverable?
+- Is backup/recovery healthy?
+- Is the bot itself healthy?
 
 The dashboard observes authoritative state; it does not define trading behaviour.
 
@@ -27,7 +28,8 @@ The dashboard observes authoritative state; it does not define trading behaviour
 - meaningful emojis are used as visual markers, not decoration;
 - avoid raw-data overload;
 - one clear top-level status must always be visible;
-- normal `WAIT` must remain visually distinct from a system fault.
+- normal `WAIT` must remain visually distinct from a system fault;
+- centralized Execution Permission must be visible when it is the final allow/block boundary.
 
 ## Emoji policy
 
@@ -60,14 +62,14 @@ The header should expose compact identity facts such as:
 
 - bot/project name;
 - XAU symbol;
-- verified DEMO/other account mode;
+- verified account environment/mode;
 - runtime role (`PRIMARY EXECUTOR`, `OBSERVER`, `RESEARCH`);
 - production policy version;
 - UTC time;
 - M5 candle time remaining where available;
 - current market state.
 
-A real-account or account-identity mismatch must be prominent when execution is not authorized.
+A real account connected while the current policy remains DEMO-first must be prominent as an environment-authorization block, not a mysterious generic error.
 
 ## Market panel
 
@@ -183,6 +185,44 @@ Display compact authoritative risk state such as:
 
 Exact risk numbers are owned by Risk Contract/config, not this dashboard document.
 
+## Execution Permission panel
+
+The centralized broker-write safeguard should be directly visible and easy to demonstrate.
+
+Compact example:
+
+```text
+⚙️ EXECUTION
+Environment       DEMO ✅ AUTHORIZED
+Controller        ⚡ PRIMARY
+Account Identity  ✅ PASS
+Order Lifecycle   ✅ CLEAR
+Fresh Checks      ✅ PASS
+Permission        ✅ ALLOW
+```
+
+Blocked example:
+
+```text
+⚙️ EXECUTION
+Environment       REAL
+Permission        🔴 BLOCK
+Reason            ENVIRONMENT_NOT_AUTHORIZED
+Policy            DEMO-FIRST
+```
+
+Or a normal trade-specific safety block:
+
+```text
+Permission        🔴 BLOCK
+Reason            SPREAD_TOO_HIGH
+Would trade otherwise? YES
+```
+
+This panel displays the result owned by `EXECUTION_AND_BROKER_SAFETY.md`; UI code must not recompute permission.
+
+When a future frozen REAL policy is approved, the panel should show that authorization explicitly while keeping the same permission gate/path.
+
 ## Open Trade panel
 
 When a bot-managed position is open, prioritize:
@@ -224,11 +264,11 @@ Expose:
 
 ## System Health panel
 
-Use the states/reason codes owned by `SYSTEM_HEALTH_AND_DIAGNOSTICS.md`. A normal market `WAIT` is not a system error.
+Use the states/reason codes owned by `SYSTEM_HEALTH_AND_DIAGNOSTICS.md`. A normal market `WAIT` or an expected policy block is not automatically a system error.
 
 ## Startup view
 
-Before execution readiness, show a startup checklist including account, symbol/specs, history, state integrity, broker reconciliation, risk, Strategy Registry, learning, news safety and execution-controller authority.
+Before execution readiness, show a startup checklist including account, environment authorization, symbol/specs, history, state integrity, broker reconciliation, risk, Strategy Registry, learning, news safety and execution-controller authority.
 
 New trades remain disabled until required startup authorities are ready.
 
@@ -252,7 +292,7 @@ The main dashboard is mostly read-only. Only deliberately governed actions shoul
 - safe shutdown;
 - portable state export/restore workflows where later implemented.
 
-Do not expose casual hotkeys for changing weights, bypassing news/risk or impulsively promoting strategies.
+Do not expose casual hotkeys for changing weights, bypassing news/risk/execution permission or impulsively promoting strategies.
 
 ## Refresh behaviour
 
@@ -263,6 +303,8 @@ Dashboard refresh frequency is presentation only and must not cause repeated str
 - WAIT versus BLOCKED versus system-fault rendering;
 - stable reason code + human explanation;
 - decision trace correctness;
+- centralized Execution Permission display correctness;
+- DEMO-first versus future authorized-REAL display semantics;
 - role/controller visibility;
 - backup/learning/system-health panels;
 - emoji fallback;
@@ -272,7 +314,7 @@ Dashboard refresh frequency is presentation only and must not cause repeated str
 
 The dashboard must not:
 
-- become a second strategy/risk specification;
+- become a second strategy/risk/execution specification;
 - place trades because a UI element changed;
 - hide system faults behind generic `NO TRADE`;
 - overwhelm the main screen with every swing/FVG/OB/log line;
@@ -282,6 +324,6 @@ The dashboard must not:
 
 - final terminal dimensions/section order;
 - exact refresh cadence;
-- final bilingual wording standard;
+- final wording polish;
 - final safe-shutdown/export operator controls;
 - optional future notification channels.
