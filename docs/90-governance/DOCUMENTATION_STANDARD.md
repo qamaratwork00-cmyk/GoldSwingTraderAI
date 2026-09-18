@@ -1,49 +1,47 @@
 # GoldSwingTraderAI — Documentation Standard
 
 **Status:** PROVISIONAL  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** Documentation placement, ownership, status and change-control rules.
 
 ## 1. Purpose
 
-GoldSwingTraderAI is documentation-first. This standard prevents the repository from becoming a collection of overlapping Markdown files that disagree about the same behaviour.
-
-Core rule:
+GoldSwingTraderAI is documentation-first.
 
 > **One behavioural rule has one authoritative home. Other documents link to it; they do not restate a competing version.**
 
+This standard prevents overlapping Markdown files from silently disagreeing about the same behaviour.
+
 ## 2. Repository root and docs-root primary guides
 
-Repository root is reserved for repository entry/runtime artifacts. `README.md` remains the primary project introduction/navigation file. Future root artifacts such as `CHANGELOG.md`, `VERSION`, release manifests, dependency/runtime files and source folders may exist when implementation begins.
+Repository root is reserved for repository entry/runtime artifacts. `README.md` is the primary project introduction/navigation file.
 
 Detailed behavioural documentation belongs under `docs/`.
 
-A small set of **high-visibility whole-project/operator/developer guides** live directly in `docs/` so they can be found without opening numbered subfolders:
+The following high-visibility whole-project/operator/developer guides intentionally live directly in `docs/`:
 
-- `docs/FINAL_BUILD_PROMPT.md` — final implementation handoff; DRAFT until design freeze.
-- `docs/USER_MANUAL.md` — authoritative operator/user manual.
-- `docs/SETUP_AND_RUN_GUIDE.md` — authoritative installation/startup/shutdown/migration/recovery guide.
+- `docs/FINAL_BUILD_PROMPT.md` — whole-project implementation handoff summary;
+- `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` — large implementation phases, phase completion and recovery navigation;
+- `docs/USER_MANUAL.md` — authoritative operator/user manual;
+- `docs/SETUP_AND_RUN_GUIDE.md` — authoritative installation/startup/shutdown/migration/recovery guide;
 - `docs/CODER_GUIDE.md` — authoritative feature-oriented developer map.
-- `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` — final large-phase build/recovery navigation guide, created at the end of design when the actual phase plan is stable.
 
-The numbered folders still own the relevant **domain category**, but the three high-use User/Setup/Coder guides are intentionally surfaced at docs root. Their previous subfolder paths may remain as lightweight compatibility redirects only; behavioural content must not be maintained in two places.
+The numbered folders still own the relevant domain categories. Previous subfolder paths for User/Setup/Coder guides may remain only as lightweight compatibility redirects; behavioural content must not be maintained in two places.
 
-These root-level guides summarize/navigate authoritative subsystem contracts where appropriate; they do not create competing trading, risk, execution or research rules.
+These docs-root guides summarize/navigate authoritative subsystem contracts where appropriate; they do not create competing trading, risk, execution or research rules.
 
 ## 3. Folder ownership
 
 ### `docs/00-foundation/`
-Owns the constitution of the project:
+Owns the project constitution:
 
 - mission and non-goals;
 - system-wide invariants;
 - high-level architecture;
 - trading-floor authority model.
 
-It must not become a second copy of detailed entry, exit, risk or research rules.
-
 ### `docs/10-market-intelligence/`
-Owns what the system can observe and infer about the market:
+Owns market observations/inference:
 
 - market data/history;
 - candle structure;
@@ -53,12 +51,12 @@ Owns what the system can observe and infer about the market:
 - macro/fundamental/event facts;
 - session context as market evidence.
 
-Market-intelligence documents do not grant final execution authority.
+Market-intelligence documents do not grant final broker authority.
 
 ### `docs/20-trading-decisions/`
-Owns how market evidence becomes a trade idea or open-trade action:
+Owns how evidence becomes trade intent or open-trade action:
 
-- production strategy families;
+- strategy families;
 - BUY/SELL thesis construction;
 - scoring/fusion/debate and decision attribution;
 - setup lifecycle and entry timing;
@@ -68,12 +66,14 @@ Owns how market evidence becomes a trade idea or open-trade action:
 ### `docs/30-risk-execution/`
 Owns hard financial/operational authority:
 
-- monetary risk and dynamic sizing;
+- monetary risk and dynamic/hybrid sizing;
 - daily loss/manual reset accounting;
 - hard market/news/risk permission states;
 - cooldown/blocked states;
 - centralized broker-write permission;
+- DEMO guard;
 - account/symbol/order safety and one-shot execution;
+- controller lease/fencing;
 - persistence, restart, reconciliation, backup and migration.
 
 Risk/safety rules are not converted into weighted strategy scores.
@@ -88,14 +88,10 @@ Owns evidence generation and governed improvement:
 - autonomous declarative invention;
 - experiments/promotion/rollback.
 
-There is intentionally no separate authoritative `OFFLINE_RESEARCH.md`; offline/replay methodology belongs in `RESEARCH_AND_VALIDATION.md` to avoid duplicate contracts.
-
-Research cannot silently redefine production or hard-risk semantics.
+There is intentionally no separate authoritative `OFFLINE_RESEARCH.md`.
 
 ### `docs/50-operator/`
-Owns the operator-domain supporting material, especially dashboard/UX and operator-control semantics. The primary high-use `USER_MANUAL.md` and `SETUP_AND_RUN_GUIDE.md` are surfaced directly in `docs/` for convenience while remaining operator-domain documents.
-
-Operator docs explain authoritative behaviour but do not redefine it.
+Owns operator-domain supporting material, especially dashboard/UX and operator-control semantics. Primary `USER_MANUAL.md` and `SETUP_AND_RUN_GUIDE.md` are surfaced at docs root.
 
 ### `docs/60-engineering/`
 Owns implementation/developer/diagnostic/release maps:
@@ -106,21 +102,19 @@ Owns implementation/developer/diagnostic/release maps:
 - release checklist;
 - final release audit.
 
-The primary high-use `CODER_GUIDE.md` is surfaced directly in `docs/` for convenience while remaining an engineering-domain document. The Coder Guide is feature-oriented; Module Structure is file/module-oriented. System Health explains fault aggregation, not the underlying risk/execution rules.
+Primary `CODER_GUIDE.md` is surfaced at docs root. Coder Guide is feature-oriented; Module Structure is file/module-oriented.
 
 ### `docs/90-governance/`
-Owns design governance:
+Owns:
 
 - design-decision ledger;
-- open questions;
+- open questions/freeze matrix;
 - this documentation standard;
 - future change-control records if needed.
 
-Whole-project handoff/high-use guides do **not** live here; they live directly in `docs/`.
-
 ## 4. Status lifecycle
 
-Every authoritative design document should declare one of:
+Authoritative design documents use:
 
 ```text
 DRAFT
@@ -130,26 +124,23 @@ IMPLEMENTED
 VERIFIED
 ```
 
-Meaning:
+- `DRAFT` — incomplete working document;
+- `PROVISIONAL` — current agreed direction, still open to refinement/calibration;
+- `FROZEN` — approved behavioural contract for implementation;
+- `IMPLEMENTED` — corresponding behaviour exists in code;
+- `VERIFIED` — exact implementation passed required executable validation.
 
-- `DRAFT`: incomplete; do not treat as settled behaviour.
-- `PROVISIONAL`: current agreed direction, still open to refinement/calibration.
-- `FROZEN`: approved behavioural contract for implementation.
-- `IMPLEMENTED`: corresponding behaviour exists in code, but not necessarily fully validated.
-- `VERIFIED`: exact implementation passed the required executable validation.
-
-Do not mark a document VERIFIED merely because the Markdown is complete.
+Do not mark a document `IMPLEMENTED` because a plan exists, or `VERIFIED` because Markdown is complete.
 
 ## 5. Standard technical-document shape
 
-Where appropriate, subsystem contracts should use:
+Where useful, subsystem contracts should include:
 
 ```text
-# Title
+Title
 Status
 Authority
 Depends on
-
 Purpose
 Core principles
 Inputs
@@ -173,84 +164,92 @@ Not every document needs every heading, but omissions should be deliberate.
 
 Examples:
 
-- Exact daily-loss/manual-reset arithmetic belongs in `30-risk-execution/RISK_CONTRACT.md`; the state machine consumes the resulting risk state and the User Manual explains it to the operator.
-- Exact news-event facts belong in `10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`; hard news permission belongs in `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md`.
-- Exact entry-state semantics belong in `20-trading-decisions/ENTRY_TIMING.md`; `ARCHITECTURE.md` only shows high-level flow.
-- Exact candle/BOS/MSS definitions belong in `10-market-intelligence/CANDLE_STRUCTURE.md`; Technical/Liquidity/Strategy documents consume them rather than redefine them.
-- Initial Trade Plan semantics belong in `20-trading-decisions/TRADE_PLAN.md`; post-entry management belongs in `TRADE_MANAGER_AND_EXIT.md`.
-- Final broker-write permission/one-shot semantics belong in `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`; Coder/Module docs only map the code owner.
-- `Why no trade?` decision attribution belongs in `SCORING_AND_DECISION_FUSION.md` plus the blocking authority; `SYSTEM_HEALTH_AND_DIAGNOSTICS.md` owns fault aggregation, not a competing decision engine.
-- Exact promotion chronology belongs in `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md`; engineering docs map its implementation path.
-- Compatibility redirect files must contain only a pointer to the new authoritative path, not a second behavioural copy.
+- daily-loss/manual-reset arithmetic → `30-risk-execution/RISK_CONTRACT.md`;
+- hard news permission → `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` from event facts supplied by `10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`;
+- entry-state semantics → `20-trading-decisions/ENTRY_TIMING.md`;
+- BOS/MSS/swing definitions → `10-market-intelligence/CANDLE_STRUCTURE.md`;
+- initial entry/SL/targets/original R → `20-trading-decisions/TRADE_PLAN.md`;
+- post-entry management → `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`;
+- centralized broker-write permission/one-shot/controller semantics → `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`;
+- decision attribution → `SCORING_AND_DECISION_FUSION.md` plus the actual blocking authority;
+- fault aggregation → `60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`;
+- promotion chronology → `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md`.
 
-If two documents contain competing detailed versions of the same rule, that is a documentation defect and must be resolved before implementation.
+Compatibility redirect files contain only a pointer to the authoritative path.
+
+If two documents contain competing detailed versions of the same rule, that is a documentation defect and must be resolved before implementing the affected behaviour.
 
 ## 7. Cross-references
 
-Use relative repository links wherever possible. A supporting doc should link to the authoritative source instead of pasting a second independent version.
+Use relative repository links wherever possible. Supporting docs should link to authoritative sources instead of pasting a second independent version.
 
-Examples:
+## 8. Design decisions and freeze matrix
 
-> Daily loss calculation/reset-reference semantics are defined by `30-risk-execution/RISK_CONTRACT.md`.
+Material accepted choices belong in `90-governance/DESIGN_DECISIONS.md`.
 
-> Hard news permission is defined by `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` from event facts supplied by `10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`.
+Unresolved or not-yet-fixed items belong in `90-governance/OPEN_QUESTIONS.md`, classified as appropriate:
 
-## 8. Design decisions and open questions
+```text
+FIX BEFORE BUILD
+CALIBRATE IN RESEARCH
+IMPLEMENTATION CHOICE
+DEFER LATER
+```
 
-A materially important accepted choice should be recorded in `DESIGN_DECISIONS.md`.
+Research calibration and ordinary implementation choices do not automatically block implementation.
 
-An unresolved choice that could change implementation must be recorded in `OPEN_QUESTIONS.md` instead of being guessed in code or in the final build prompt.
+When an important question is resolved:
 
-When an open question is resolved:
-
-1. update the authoritative topic document;
-2. add/adjust the design-decision entry;
-3. remove/mark the open question resolved;
-4. update affected supporting links/summaries.
+1. update authoritative topic doc;
+2. add/supersede decision entry where material;
+3. reclassify/remove the open item;
+4. update affected summaries/links.
 
 ## 9. Implementation synchronization rule
 
-Documentation is updated during each implementation phase, not after the project is finished.
+Documentation is updated during each coherent implementation phase, not as end-of-project cleanup.
 
-When code ownership/behaviour changes, synchronize as applicable:
+Synchronize as applicable:
 
 - authoritative topic doc;
 - `DESIGN_DECISIONS.md` / `OPEN_QUESTIONS.md`;
 - `60-engineering/MODULE_STRUCTURE.md`;
 - `CODER_GUIDE.md`;
-- operator docs;
-- test/release docs;
+- User/Setup/operator docs;
+- testing/release docs;
 - `docs/README.md`.
 
-A phase is not complete while code and its authoritative documentation knowingly disagree.
+A phase is not complete while code and authoritative documentation knowingly disagree.
 
 ## 10. Final Build Prompt rule
 
-`docs/FINAL_BUILD_PROMPT.md` is a handoff summary. It may reference frozen design documents and implementation sequence, but it must not become a shadow specification that contradicts them.
+`docs/FINAL_BUILD_PROMPT.md` is a whole-project handoff summary. It may summarize frozen/current implementation direction, but it must not override authoritative subsystem documents.
 
-Before it can become FROZEN:
+Before it is marked `FROZEN`:
 
-- required core topic documents must be FROZEN;
-- required open questions must be resolved or explicitly deferred;
-- cross-document contradiction audit must be complete;
+- implementation-critical behavioural choices must be frozen or explicitly classified/deferred;
+- cross-document contradiction/coverage audit must be complete;
 - implementation phases and validation expectations must be explicit.
 
 ## 11. ChatGPT Project Build and Recovery Guide rule
 
-`docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` is created at the end of the design phase after the build structure is stable. It is a navigation/recovery meta-guide for completing the project in large phases.
+`docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` is the persistent meta-guide for completing the project in large phases and resuming safely after interruption.
 
-It should define:
+It defines:
 
-- large implementation phases and their deliverables;
-- required checks before moving to the next phase;
-- how to reconstruct project state after conversation/context loss;
-- how to resume after failed/incomplete code, missing files, docs/code mismatch, failed tests or interrupted work;
-- how to recover on a new machine from repository/state backups;
-- how to identify the last verified phase rather than restarting blindly;
+- large phases and deliverables;
+- exit gates before moving forward;
+- context-loss reconstruction;
+- incomplete/broken phase recovery;
+- docs/code mismatch recovery;
+- failed-test procedure;
+- Git/local/state mismatch handling;
+- crash-during-broker-write recovery;
+- new-machine/disaster recovery;
 - final completion/audit flow.
 
-It must point back to authoritative documents instead of inventing behavioural rules.
+It points to authoritative documents rather than inventing behavioural rules.
 
 ## 12. Reference-project rule
 
-External/prior repositories may be studied for lessons, but GoldSwingTraderAI documentation must describe GoldSwingTraderAI itself. Do not copy prior project identity, legacy compatibility constraints or file architecture merely because they existed in a reference project.
+External/prior projects may be studied for lessons, but GoldSwingTraderAI documentation describes GoldSwingTraderAI itself. Do not copy legacy project identity, compatibility constraints or architecture merely because they existed elsewhere.
