@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Final Build Prompt
 
 **Status:** PROVISIONAL — FINAL HANDOFF CANDIDATE  
-**Version:** 0.7-design  
+**Version:** 0.8-design  
 **Location:** `docs/` root. This is a whole-project implementation handoff, not a competing behavioural authority.
 
 ## Role
@@ -102,26 +102,23 @@ Do **not** implement a separate REAL authorization system, REAL mode workflow, o
 ## Initial frozen risk policy
 
 ```text
-Profile  Normal Risk   Elevated Risk    Entry Ceiling   Daily Lock
-SMALL    3.0–4.5%      >4.5–6.5%        7%              12%
-MEDIUM   2.0–3.0%      >3.0–4.5%        5%               9%
-NORMAL   1.0–2.0%      >2.0–3.5%        4%               7%
-```
-
-Account profiles:
-
-```text
-SMALL   $100–$299
-MEDIUM  $300–$999
-NORMAL  $1,000+
+Profile  Equity Range            Normal Risk   Elevated Risk    Entry Ceiling   Daily Lock
+SMALL    >0 and < $300           3.0–4.5%      >4.5–6.5%        7%              12%
+MEDIUM   $300–$999.99            2.0–3.0%      >3.0–4.5%        5%               9%
+NORMAL   $1,000+                 1.0–2.0%      >2.0–3.5%        4%               7%
 ```
 
 Important rules:
 
+- **There is no V1 `$100` minimum balance/equity floor.** Any positive DayStartEquity below `$300` is SMALL.
+- `$99`, `$50`, `$30`, etc. do not become blocked merely because the account is below `$100`.
+- Account size alone must not be added as an extra hard filter; actual executable risk geometry is authoritative.
 - SMALL evaluates practical broker minimum volume such as `0.01`; a theoretical raw lot below minimum is not an automatic reject.
 - Actual all-in risk of executable volume decides affordability.
+- If minimum volume makes the current plan exceed the SMALL `7%` new-entry ceiling, block that current plan without tightening SL; the opportunity may remain ARMED for a better natural entry.
 - Never tighten/widen structural SL merely to fit a desired lot/risk.
 - High strategy score does not increase monetary risk.
+- Profile is fixed from positive DayStartEquity for the UTC risk day rather than switching because of intraday floating P/L.
 - V1 capacity is `0/1`: one independently risk-bearing Gold position.
 - Manual/foreign/unknown-owner Gold exposure blocks a new bot Gold entry and is never managed as bot-owned.
 - Daily loss accounting uses cash-flow-adjusted verified account equity so floating account drawdown counts.
@@ -129,6 +126,7 @@ Important rules:
 - One ordinary loss does not create a global cooldown.
 - At most one genuinely fresh same-Market-Episode re-entry; a second loss in that episode locks it.
 - Three consecutive closed bot losses trigger at least 30 minutes cooldown plus fresh completed M15 context and a fresh opportunity before release.
+- Generic margin estimates are diagnostic only; exact broker-required margin is authoritative when available and must be freshly revalidated before execution.
 
 Items explicitly classified as research calibration or later-version work in `OPEN_QUESTIONS.md` must not block V1 implementation.
 
@@ -358,6 +356,7 @@ Do not:
 - use future candles/future-confirmed pivots;
 - move structural SL to fit desired risk;
 - redefine original R after trailing;
+- invent an arbitrary `$100` or other positive-equity minimum trading floor for SMALL accounts;
 - open automatic second Gold position/hedge in V1;
 - manage manual/foreign exposure as bot-owned;
 - blind-retry ambiguous broker writes;
