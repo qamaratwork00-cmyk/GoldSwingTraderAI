@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 2.4-design
+**Version:** 2.5-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -34,10 +34,11 @@ Deterministic core implementation currently exists through Phase 10, including:
    + declared execution stress
    + fixed-policy walk-forward validation
    + content-addressed dataset/evidence manifests
+   + portable integrity-checked replay dataset bundles
    + metrics/learning + discovery/invention/promotion
 ```
 
-This does **not** mean live DEMO release is complete. The normal launcher remains read-only readiness; final persistent orchestration, production shared cross-laptop coordination, backup/fresh-machine drill and controlled Windows/MT5 DEMO certification remain pending.
+This does **not** mean live DEMO release is complete. The normal launcher remains read-only readiness; final persistent orchestration, production shared cross-laptop coordination, runtime-state backup/fresh-machine drill and controlled Windows/MT5 DEMO certification remain pending.
 
 ## Market intelligence
 
@@ -100,7 +101,8 @@ Primary is normally management checkpoint; Expansion is default broker TP; fixed
 - chronological production Trade Manager replay;
 - declared execution-friction stress;
 - fixed-policy walk-forward validation with non-overlapping scored validation slices and no final-holdout authority;
-- content-addressed dataset/evidence identity for reproducible research.
+- content-addressed dataset/evidence identity for reproducible research;
+- portable research dataset export/import with integrity verification.
 
 ### CALIBRATE IN RESEARCH
 
@@ -191,10 +193,12 @@ These are research calibration baselines only.
 
 Standard-library SQLite + canonical JSON + SHA-256 checksums + explicit schema versions + transactional state/events + typed recovery adapters.
 
+Portable **research datasets** now have a separate implemented CSV/manifest bundle. That does not replace the runtime-state backup/checkpoint work below.
+
 ### PHASE 11–12 PENDING
 
-- backup/checkpoint cadence/retention;
-- portable checkpoint/export/manifest format;
+- runtime-state backup/checkpoint cadence/retention;
+- portable runtime checkpoint/export/manifest format;
 - schema migration/rollback when v2+ exists;
 - automatic/public GitHub publication packaging for allowed recovery state;
 - fresh-machine restore workflow;
@@ -216,6 +220,10 @@ Standard-library SQLite + canonical JSON + SHA-256 checksums + explicit schema v
 - separate experiment-input fingerprint and complete-manifest hash;
 - canonical JSON representation;
 - evidence-key `FINANCIAL_SECRET_DETECTED` guard;
+- portable `dataset_manifest.json` + timeframe CSV bundle export/import;
+- bundle manifest/file/bar-count/recomputed-identity verification;
+- optional supported timeframe preservation, including M1;
+- broker endpoint login/server exclusion from research bundle;
 - metrics/StrategyMemory/research episodes;
 - declarative discovery/invention and governed promotion.
 
@@ -229,13 +237,15 @@ Standard-library SQLite + canonical JSON + SHA-256 checksums + explicit schema v
 - serious evidence must identify code revision + policy version + content-addressed dataset + explicit config/realism/limitations;
 - mutable filename alone is not sufficient dataset identity;
 - evidence manifests must not contain financial-authority secrets;
-- broker endpoint login/server is not part of replay-economic dataset identity; economic replay account context is hashed.
+- broker endpoint login/server is not part of replay-economic dataset identity;
+- a portable dataset is trusted only after manifest/file/content identity verification;
+- existing research bundle destinations are never silently overwritten.
 
 ### NEXT IMPLEMENTATION CHOICES
 
-- real historical XAU dataset ingestion/export format around the identity contract;
-- persisted evidence package layout/naming/retention;
-- integration of generated manifests with walk-forward/stress reports;
+- authoritative real historical XAU acquisition/import adapter(s) feeding the portable dataset contract;
+- persisted evidence package layout/naming/retention beside immutable dataset identities;
+- integration of generated manifests with broad real-data walk-forward/stress reports;
 - historical PRE_CLOSE schedule integration once trustworthy data exists.
 
 ### CALIBRATE IN RESEARCH
@@ -278,6 +288,6 @@ Authoritative runtime DTO builder, Discovery Health/candidate/suppression displa
 
 No major behavioural `FIX BEFORE BUILD` item is known.
 
-Closed software-foundation gaps now include chronological production Trade Manager research, declared execution stress, fixed-policy walk-forward validation and deterministic dataset/evidence identity.
+Closed software-foundation gaps now include chronological production Trade Manager research, declared execution stress, fixed-policy walk-forward validation, deterministic dataset/evidence identity and portable integrity-checked research dataset bundles.
 
-Current main work is **real-data integration and evidence**, followed by runtime/provider/shared-controller/backup integration and controlled DEMO certification. Documents remain DRAFT/PROVISIONAL where real historical/live evidence is not yet complete.
+Current main work is **authoritative real-data acquisition/integration and evidence**, followed by runtime/provider/shared-controller/backup integration and controlled DEMO certification. Documents remain DRAFT/PROVISIONAL where real historical/live evidence is not yet complete.
