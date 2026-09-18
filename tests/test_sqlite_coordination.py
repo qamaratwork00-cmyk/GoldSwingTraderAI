@@ -3,12 +3,9 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
+from goldswingtraderai.domain.enums import HardDecision
 from goldswingtraderai.domain.ids import new_controller_id
-from goldswingtraderai.execution import (
-    ControllerLeaseManager,
-    HardDecision,
-    SQLiteCoordinationStore,
-)
+from goldswingtraderai.execution import ControllerLeaseManager, SQLiteCoordinationStore
 
 
 NOW = datetime(2026, 9, 18, 21, 0, tzinfo=timezone.utc)
