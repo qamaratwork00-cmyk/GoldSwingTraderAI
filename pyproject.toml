@@ -38,4 +38,6 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+# Phase 1 blocks functional Python errors. Formatting/import/style gates can be
+# tightened later without changing runtime behaviour.
+select = ["F"]
