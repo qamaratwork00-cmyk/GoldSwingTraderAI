@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Architecture
 
 **Status:** PROVISIONAL  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** High-level system architecture
 
 ## High-level flow
@@ -11,11 +11,12 @@ VERIFIED MARKET / BROKER FACTS
             │
             ▼
 PARALLEL MARKET-INTELLIGENCE DESKS
-Candle/Structure | Technical/Location | Liquidity/SMC
-Indicator/Quant  | Fundamental Facts | Session Context
+Candle/Structure | Technical/Location | Technical Confluence
+Liquidity/SMC    | Indicator/Quant     | Fundamental Facts | Session Context
             │
             ▼
 PARALLEL STRATEGY FAMILIES
+(base hypotheses + bounded optional confluence bonus)
             │
             ▼
 BUY THESIS  ↔  SELL THESIS
@@ -49,7 +50,7 @@ ONE GOVERNED BROKER WRITE + RECONCILIATION
 OPEN-TRADE MANAGEMENT FLOOR
             │
             ▼
-JOURNAL / LEARNING / RESEARCH / DISCOVERY
+JOURNAL / LEARNING / RESEARCH / DISCOVERY / PROMOTION
 ```
 
 Cross-cutting services:
@@ -74,6 +75,7 @@ The system does not force all evidence through one long sequential filter chain 
 - Data layer owns broker/market facts.
 - Candle Structure owns candle sequences/swings/BOS/MSS geometry.
 - Technical owns generic zones/location/target room.
+- Technical Confluence owns causal trendlines, Fibonacci geometry and broker-local volume-profile/POC context.
 - Liquidity owns pools/sweeps/FVG/qualified OB/premium-discount interpretation.
 - Quant owns indicators/volatility/momentum/extension metrics.
 - Fundamental/Session intelligence publishes facts/context, not broker-write authority.
@@ -89,13 +91,15 @@ The system does not force all evidence through one long sequential filter chain 
 - Research/Learning owns governed evidence/candidate creation, never direct broker authority.
 - System Health aggregates faults/impact/recovery without redefining subsystem rules.
 
+Technical Confluence is explicitly **soft**. Trendline/Fibonacci/POC may strengthen an already-valid directional hypothesis through bounded bonus evidence. Their absence does not penalize a base strategy score; disagreement may be recorded as context/conflict but is not a hard execution blocker.
+
 ### 3. Separate opportunity from entry timing
 
 A market opportunity may be strong while current execution timing is poor. Persistent setup lifecycle and separate Opportunity/Entry Timing scores preserve valid ideas without chasing.
 
 ### 4. Separate market opinion from hard safety
 
-Analytical uncertainty may lower confidence. Safety uncertainty can block action. Missing optional macro/indicator evidence is different from unknown financial risk, required event safety, broker identity, order outcome, controller ownership or corrupted state.
+Analytical uncertainty may lower confidence. Safety uncertainty can block action. Missing optional macro/indicator/confluence evidence is different from unknown financial risk, required event safety, broker identity, order outcome, controller ownership or corrupted state.
 
 ### 5. Structural plan before monetary sizing
 
@@ -131,8 +135,8 @@ Standby takeover after expiry enters recovery/reconciliation first; lease owners
 ```text
 H4  → macro regime / major external structure / major liquidity
 H1  → directional structure / thesis context
-M15 → opportunity / location / target / structural context
-M5  → entry timing / fine structure / retest / reclaim
+M15 → opportunity / location / target / confluence context
+M5  → entry timing / fine structure / retest / reclaim / local confluence
 M1  → diagnostics/execution telemetry unless explicitly promoted later
 ```
 
@@ -230,6 +234,8 @@ Known scheduled XAU closure is a hard V1 session boundary: PRE_CLOSE blocks new 
 
 Durable state includes risk/order/trade lifecycle, original R, Opportunity/Episode lineage, Strategy Registry, learning/research/promotion state and diagnostic/backup metadata where applicable.
 
+Initial V1 local durable storage is standard-library SQLite with typed adapters/canonical records/checksums/schema versions. Broker truth remains authoritative for current positions/orders/deals.
+
 Startup conceptually:
 
 ```text
@@ -258,6 +264,9 @@ Runtime evidence / trades / missed+blocked opportunities
         Learning         │        declarative only
             └────────────┼────────────┘
                          ▼
+             Candidate created OR explicit
+               governed suppression reason
+                         ▼
                Independent validation
                          ▼
                  Locked Challenger
@@ -273,8 +282,14 @@ Runtime evidence / trades / missed+blocked opportunities
                governed promotion
 ```
 
+Eligible discovery evidence must not disappear silently. If the discovery engine cannot create/suppress an eligible cluster with an auditable reason, Discovery Health is degraded.
+
 Research cannot bypass risk/execution, silently mutate production or generate arbitrary executable strategy code.
+
+Trendline/Fibonacci/POC may participate in research as audited primitives. Research must use ablation/opportunity-recall metrics to prove they improve quality rather than merely reduce trade count.
 
 ## Health / operator architecture
 
 System Health reports `OK/WARN/DEGRADED/BLOCKED/ERROR`, subsystem, trading impact and recovery state. Dashboard presents compact Market/Decision/Setup/Trade/Risk/Execution/Learning/Backup/Health panels with restrained emojis and stable reason codes.
+
+Optional market context such as trendline/Fibonacci/POC should remain compact and must be presented as confluence, not a hard trade permission state.
