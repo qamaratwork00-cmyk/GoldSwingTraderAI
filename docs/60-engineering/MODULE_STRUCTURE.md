@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 1.5-implementation-map  
+**Version:** 1.6-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -42,6 +42,7 @@ src/goldswingtraderai/
     ├── ablation.py
     ├── outcomes.py
     ├── management_replay.py
+    ├── stress.py
     ├── metrics.py
     ├── learning.py
     ├── episode_journal.py
@@ -71,6 +72,7 @@ historical dataset
 → controlled ablation
 → historical Trade Plan reconstruction
 → initial bracket / chronological Trade Manager outcome modeling
+→ declared execution-friction stress
 → metrics / episode journal
 → discovery/invention candidates
 → governed promotion evidence
@@ -148,7 +150,7 @@ It supports three evidence layers:
 
 1. decision-level Opportunity/ENTER/WAIT/MISSED/frequency/score/conflict deltas;
 2. initial Trade Plan bracket evidence from `research/outcomes.py`;
-3. idealized production Trade Manager evidence from `research/management_replay.py`.
+3. production Trade Manager evidence from `research/management_replay.py`.
 
 Every layer exposes signed deltas versus BASE. Decision-only evidence never invents P/L.
 
@@ -167,25 +169,37 @@ HORIZON_UNRESOLVED
 Same-bar stop+target ordering is never guessed favorably. Ambiguous/unresolved cases remain outside resolved bracket Net R and are exposed through coverage.
 
 ### `research/management_replay.py`
-Owns chronological idealized replay of the **production Trade Manager**.
+Owns chronological replay of the **production Trade Manager** plus declared research-only execution assumptions.
 
-For each READY historical Trade Plan:
+Default flow:
 
 ```text
 create research ManagedTrade
-→ check currently active stop/TP against next M5 high/low
+→ check currently active stop/TP against next M5
 → if trade survives, complete bar
 → rebuild chronological IntelligenceSnapshot
 → call production evaluate_trade_manager()
 → record HOLD / PROTECT / TRAIL / RUNNER / EXIT
-→ apply manager state change for following bar
+→ apply verified-style state transition for following bar
 ```
 
-It reuses `evaluate_trade_manager()` and `apply_management_decision()` rather than implementing a separate backtest manager.
+The default remains `BAR_CLOSE_IDEALIZED`. Optional `ManagementReplayAssumptions` add bounded stress without changing production management logic:
 
-Current research realism is `BAR_CLOSE_IDEALIZED`: requested manager modifications are treated as accepted at the completed-bar boundary. Broker modify rejection/latency, tick ordering, historical PRE_CLOSE integration and live reconciliation failures are separate stress/integration evidence.
+- adverse fill measured in immutable original-R units;
+- executable-side Bid/Ask barrier approximation from a declared spread;
+- completed-M5 manager-modify delay;
+- deterministic every-Nth manager-modify rejection.
+
+While a synthetic modify is pending, later modify submissions are suppressed until it resolves. This mirrors the production rule that ambiguous lifecycle state must reconcile before another irreversible write. Structural stop/target geometry and original R are never rewritten merely to hide adverse slippage.
 
 Same-bar active stop+TP remains ambiguous. Open/ambiguous cases do not enter resolved management Net R.
+
+### `research/stress.py`
+Owns deterministic execution-friction scenario orchestration around a **fixed analytical ReplayRun**.
+
+It changes only declared Trade Plan / fill / exit-side spread / manager-write assumptions and compares signed metrics versus BASE. Default V1 research probes are 1.50x spread, 0.10R adverse entry, one-M5 modify delay, every-second modify rejection and a combined scenario.
+
+Those values are transparent calibration probes, not frozen production thresholds or historical broker claims. `stress.py` has no broker-write authority and does not simulate the complete Execution Permission Gate, margin, order book, variable intrabar spread or tick ordering.
 
 ### `research/metrics.py`
 Owns actual trade/outcome metrics and Opportunity Recall. Counterfactual blocked/missed MFE is isolated from actual broker P/L.
@@ -238,6 +252,7 @@ one dataset / chronology
 → production Decision semantics
 → shared historical Trade Plan reconstruction
 → initial bracket and/or production Trade Manager replay
+→ optional declared execution stress
 → controlled variant comparison
 → metrics / learning / discovery
 ```
@@ -261,6 +276,7 @@ candidate    → self-promotion                   NO
 confluence   → hard execution permission        NO
 outcomes     → historical-decision mutation     NO
 manager replay → raw broker execution           NO
+stress model → production risk/safety mutation  NO
 ```
 
 ## Current deterministic tests
@@ -276,20 +292,21 @@ tests/test_management_replay.py
 tests/test_dashboard.py
 tests/test_research_ablation.py
 tests/test_research_outcomes.py
+tests/test_research_stress.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Current verified manager-research checkpoint includes **153 passing tests**, Ruff PASS and financial-secret scan PASS.
+Current verified stress-research checkpoint includes **159 passing tests**, Ruff PASS and financial-secret scan PASS.
 
-Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, positive-only technical confluence, same-chronology ablation, ambiguity-safe outcome labeling, chronological production-manager reuse, risk/session/execution safety, restart integrity, one-shot broker writes, dashboard isolation and discovery/invention liveness.
+Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, positive-only technical confluence, same-chronology ablation, ambiguity-safe outcome labeling, chronological production-manager reuse, immutable-R adverse-fill accounting, executable-side spread approximation, explicit stress scenarios, risk/session/execution safety, restart integrity, one-shot broker writes, dashboard isolation and discovery/invention liveness.
 
 Deterministic CI is software evidence, not live DEMO certification or proof of strategy edge.
 
 ## Remaining Phase-10 work
 
-- execution-friction, spread/slippage, entry-delay and manager-modify failure/latency stress utilities;
+- calibrate stress assumptions with broader historical XAU and controlled DEMO evidence;
 - historical PRE_CLOSE/session-policy integration where trustworthy schedule history exists;
 - broader real historical XAU replay datasets and regime coverage;
 - walk-forward and independent-validation evidence;
