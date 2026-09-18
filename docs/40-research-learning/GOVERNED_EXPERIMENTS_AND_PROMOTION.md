@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Governed Experiments and Promotion
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-implementation  
 **Authority:** Champion/challenger lifecycle, final-holdout use, stress, shadow, DEMO canary, promotion, rollback and production-policy versioning.  
 **Depends on:** `RESEARCH_AND_VALIDATION.md`, `GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md`
 
@@ -13,146 +13,81 @@ Research may discover promising changes, but production policy changes require s
 
 ## Champion and Challenger
 
-The currently approved policy/strategy is the `CHAMPION`. A proposed improvement is a `CHALLENGER`.
-
-A Challenger must be evaluated against the approved baseline, not merely show positive standalone performance.
+The currently approved policy/strategy is the `CHAMPION`. A proposed improvement is a `CHALLENGER`. A Challenger is evaluated against the approved baseline, not merely against zero.
 
 ## Candidate types
 
-A governed candidate may change:
+Candidates may alter researchable strategy parameters, scoring, entry timing, target/trailing policy, regime suitability or declarative strategy recipes. Hard safety semantics are not ordinary experiment candidates.
 
-- strategy parameters;
-- scoring weights;
-- entry timing policy;
-- chase/extension policy;
-- target/trailing policy;
-- regime suitability;
-- declarative strategy recipe.
+## Enforced lifecycle
 
-Hard safety semantics are not ordinary experiment candidates.
-
-## Promotion pipeline
-
-Conceptual chronology:
+The implemented registry permits only explicit next-stage transitions:
 
 ```text
 PROPOSED
 → RESEARCHING
 → VALIDATED
 → LOCKED
-→ FINAL HOLDOUT
-→ STRESS / ROBUSTNESS
+→ HOLDOUT_PASSED
+→ STRESS_PASSED
 → SHADOW
-→ DEMO CANARY
+→ DEMO_CANARY
 → PROMOTION_READY
+→ explicit approval
 → PROMOTED
 ```
 
-Alternative terminal states include `REJECTED`, `ROLLED_BACK` and `DISABLED`.
+Failure/terminal states include `HOLDOUT_FAILED`, `STRESS_FAILED`, `REJECTED`, `DISABLED` and `ROLLED_BACK`.
 
-Exact sample thresholds remain open.
+A candidate cannot jump directly from discovery to Shadow/Canary/production.
 
 ## Locked candidate
 
-After independent validation selects a candidate, its semantics/parameters/code version are locked before final holdout.
+A validated candidate is locked to a durable SHA-256 semantic fingerprint before final holdout.
 
-Any material tweak creates a new candidate/version and restarts the required evidence cycle.
+The same fingerprint must be supplied when the holdout is consumed. If recipe/parameters/semantics changed after locking, the final holdout cannot proceed under the old candidate claim; a new candidate/version must restart the required evidence cycle.
 
-## Final holdout
+## Final holdout — one-shot
 
-The final holdout is one-shot for the locked Challenger. Failure rejects that candidate. Trying multiple alternates on the same holdout destroys its untouched status and is prohibited as a final-holdout claim.
+The final holdout has a durable identity and may be consumed only once for the locked candidate. A failing candidate terminates that candidate's untouched-holdout claim.
+
+Repeatedly testing changed alternatives on the same holdout and still calling it untouched is prohibited.
 
 ## Stress gate
 
-A holdout-passing candidate must survive reasonable stress such as:
+A holdout-passing candidate must survive reasonable stress such as worse spread/slippage, execution delay, parameter perturbation, different regimes/directions and missing optional evidence where valid.
 
-- worse spread/slippage;
-- execution delay;
-- parameter perturbation;
-- multiple market regimes/directions;
-- missing optional evidence where allowed.
+Fragility may fail the candidate even with positive headline return.
 
-Fragile performance may reject the candidate despite good headline return.
+## Shadow
 
-## Shadow stage
-
-In Shadow, the Challenger evaluates live/forward market data but has **zero broker-write authority**.
-
-Record:
-
-- agreement/disagreement with Champion;
-- hypothetical entries/exits;
-- extra false entries/missed moves;
-- AvgR/capture/drawdown counterfactuals;
-- regime/family differences.
-
-Shadow P/L is counterfactual and must remain separate from actual broker P/L.
+Shadow evaluates live/forward facts but has zero raw broker authority. Agreement/disagreement, hypothetical entries/exits, missed/extra opportunities, R/capture/drawdown counterfactuals and regime differences remain isolated from real broker P/L.
 
 ## DEMO Canary
 
-After successful Shadow evidence, a Challenger may receive bounded DEMO authority through the normal Risk/Execution path.
+A candidate reaching DEMO Canary may only participate through the ordinary DEMO guard, Trade Plan, Risk and centralized Execution path. The research/promotion registry itself never grants raw broker authority.
 
-Canary is intended to prove real broker timing, spread, fill, slippage, restart and lifecycle behaviour that replay cannot fully prove.
+Canary evidence is intended to validate real broker timing/spread/fill/restart/lifecycle behaviour that bar-close replay cannot fully prove.
 
-It never bypasses safety/risk.
+## Promotion approval
 
-## Promotion decision
+`PROMOTION_READY` is not production authority.
 
-Promotion should consider multiple objectives, for example:
+The implemented baseline requires an explicit approval flag plus a known rollback target. Calling promotion without approval raises a permission failure; autonomous invention/learning cannot set itself to production.
 
-- Net/Avg R;
-- drawdown;
-- Profit Factor;
-- Capture Efficiency;
-- Opportunity Recall;
-- entry/exit efficiency;
-- loss streak/risk distribution;
-- execution friction;
-- complexity/stability.
+## Rollback / disable
 
-Tiny numerical improvement is not automatically material improvement. Comparable performance should prefer the simpler/more stable policy.
+A promoted candidate retains its rollback target. Rollback is explicit, reasoned and durable. Safety violations may disable a candidate; performance rollback must avoid reacting blindly to an ordinary short losing streak.
 
-## Evidence packet
+## Evidence objectives
 
-Every promotion should retain:
+Promotion evaluates multiple objectives, including Net/Avg R, drawdown, Profit Factor, Capture Efficiency, Opportunity Recall, entry/exit efficiency, loss-streak distribution, execution friction, trade frequency and complexity/stability.
 
-- Candidate ID/version;
-- previous Champion;
-- exact changes;
-- selection/validation evidence;
-- final-holdout result;
-- stress result;
-- Shadow result;
-- Canary result;
-- known weaknesses/limitations;
-- rollback target;
-- approval/promotion timestamp.
-
-## Policy versioning
-
-Trades/research records should retain the production policy/strategy/risk/execution versions relevant to their decisions.
-
-Existing open trades should not silently switch to a newly promoted management policy mid-trade unless explicit compatibility/migration semantics are frozen. Their original strategy/management context remains attributable.
-
-## Rollback
-
-Every promotion requires a known-good rollback target where feasible.
-
-Critical invariant/software violations may automatically disable the candidate/fallback to safe baseline. Performance-based rollback should avoid reacting to ordinary short losing streaks without evidence of actual regression.
-
-Rollback history is permanent and auditable.
-
-## Safety violation
-
-A Challenger that attempts to bypass frozen risk/account/execution invariants is immediately disabled/rejected. Safety violations are not treated as parameters to learn around.
-
-## State/schema compatibility
-
-Promotion that changes durable-state schema must include validated migration/rollback compatibility. Uncertain migration blocks promotion.
+A policy that marginally raises win rate while destroying opportunity recall or large-move capture is not automatically better.
 
 ## Evidence isolation
 
-Keep environments distinct:
+Keep environments/version evidence distinct:
 
 ```text
 REPLAY
@@ -163,53 +98,55 @@ DEMO_CANARY
 MAIN_DEMO
 ```
 
-Do not merge all results into one misleading performance series.
+Counterfactual Shadow P/L never becomes actual broker P/L.
 
-## Permanent promotion history
+## Persistence
 
-Promotion, rejection and rollback events remain durable and portable across laptops. Failed candidates are retained as research evidence.
+Candidate promotion stage, locked fingerprint, consumed holdout identity/status, rejection reason, rollback target and promotion timestamp are durable in the SQLite research registry and survive restart.
 
-## Dashboard visibility
+## Current implementation checkpoint — 2026-09-18
 
-Compact example:
+Owner:
 
 ```text
-Champion        GSW-1.3
-Challenger      GSW-1.4-C03
-Stage           SHADOW
-Holdout         PASS
-Stress          PASS
-Broker Authority NONE
+research/promotion.py
 ```
 
-If rejected, show the primary reason such as `FINAL_HOLDOUT_FAILED` or `INSUFFICIENT_FORWARD_SAMPLE`.
+Deterministic regressions enforce:
+
+- no stage skipping;
+- candidate fingerprint cannot change after lock and reuse the holdout;
+- final holdout is one-shot;
+- failed holdout terminates the candidate path;
+- Shadow/Canary lifecycle order;
+- research registry never grants direct broker authority;
+- autonomous/self-promotion is denied;
+- explicit approved promotion requires rollback target;
+- promotion and rollback survive restart.
+
+Deterministic CI is not proof that a candidate has market edge. Actual candidates must still supply the required evidence at every stage.
 
 ## Tests required
 
-- candidate cannot skip required lifecycle stages;
+- strict lifecycle ordering;
 - final-holdout one-shot enforcement;
-- Shadow has zero broker authority;
-- Canary still passes normal risk/execution path;
+- locked fingerprint immutability;
+- Shadow zero raw broker authority;
+- Canary uses normal risk/execution path;
 - self-promotion denied;
-- critical safety violation disables candidate;
+- safety violation disables candidate;
 - open-trade policy version preserved;
-- promotion/rollback history survives restart/migration;
-- schema migration blocks unsafe promotion.
+- promotion/rollback history survives restart;
+- unsafe state-schema migration blocks promotion.
 
 ## Explicit non-goals
 
-Governance must not:
+Governance must not promote on development profit alone, let research/AI self-promote, silently mutate open-trade semantics, erase failures/rollbacks, or treat a few losses as proof of strategy failure.
 
-- promote on development profit alone;
-- let AI/research self-promote;
-- silently mutate open-trade semantics;
-- erase failed/rolled-back history;
-- treat a few losses as automatic strategy failure.
+## Open questions / calibration
 
-## Open questions
-
-- exact minimum samples and material-improvement tests;
-- Shadow duration/episode requirement;
-- DEMO Canary scope/volume/duration;
-- promotion approval mechanism in V1;
-- automatic rollback triggers versus operator review.
+- exact minimum validation/Shadow/Canary samples;
+- material-improvement tests versus Champion;
+- DEMO Canary duration/scope;
+- final operator approval UX;
+- automatic performance-degradation alerts versus manual rollback review.
