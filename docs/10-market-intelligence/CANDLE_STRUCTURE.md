@@ -1,9 +1,9 @@
 # GoldSwingTraderAI — Candle Structure and Price Behaviour
 
-**Status:** PROVISIONAL  
-**Version:** 0.2-implementation-baseline  
-**Authority:** Candle anatomy, candle-sequence behaviour, swing formation, protected structure, BOS/MSS classification, displacement, rejection, compression/expansion and exhaustion evidence.  
-**Depends on:** `MARKET_DATA_AND_HISTORY.md`, `SYSTEM_CONTRACT.md`
+**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
+**Version:** 0.3-implementation  
+**Authority:** Candle anatomy, sequence behaviour, swing formation, protected structure, BOS/MSS classification, displacement, rejection, compression/expansion and exhaustion evidence.  
+**Depends on:** `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
 
@@ -21,17 +21,19 @@ The Candle/Structure desk is market intelligence only. It never sizes lots, gran
 6. **Candidate/early evidence is distinct from confirmed/protected authority.**
 7. **No lookahead.** Replay cannot expose a swing/event before it became knowable.
 
-## Phase 3 implementation checkpoint
+## Current implementation checkpoint
 
 Implemented in:
 
 ```text
 src/goldswingtraderai/intelligence/candle_structure.py
+src/goldswingtraderai/intelligence/snapshot.py
 ```
 
-Current implementation consumes completed chronological candles and a shared ATR series from the Quant desk during normal runtime. Standalone/replay calls may calculate ATR internally using the same baseline period.
+Normal runtime consumes completed chronological candles and a shared ATR series computed once by the Quant desk. Standalone/replay calls may calculate ATR internally using the same configured period.
 
-Implemented typed outputs include:
+Typed outputs include:
+
 - candle anatomy (`range`, body, wicks, body ratio, close position, range/ATR);
 - candle-sequence state;
 - confirmed causal swings with `pivot_time` and later `confirmed_at`;
@@ -41,11 +43,9 @@ Implemented typed outputs include:
 - structural break events;
 - bounded bull/bear evidence + coverage.
 
-The current thresholds in `StructureConfig` are explicit initial implementation baselines intended for replay calibration. They are not immutable market truth.
+Thresholds in `StructureConfig` are explicit implementation baselines intended for replay calibration, not immutable market truth.
 
 ## Candle-sequence states
-
-Current typed baseline supports:
 
 ```text
 BULL_CONTINUATION
@@ -64,8 +64,6 @@ These are evidence labels, not trade commands.
 
 ## Swing model
 
-The architecture remains:
-
 ```text
 CANDIDATE → CONFIRMED → PROTECTED → possible EXTERNAL/MAJOR interpretation
 ```
@@ -76,7 +74,7 @@ An emerging extreme. It may move as new completed candles arrive and is not stru
 
 ### Confirmed
 
-The Phase-3 baseline confirms a pivot only after a later completed candle moves sufficiently away from the candidate extreme using a configurable ATR-normalized reversal threshold.
+A pivot becomes confirmed only after later completed-candle movement satisfies the configured ATR-normalized reversal requirement.
 
 Every confirmed swing preserves:
 
@@ -85,7 +83,7 @@ pivot_time
 confirmed_at
 side
 price
-timeframe (through report)
+timeframe
 significance_atr
 ```
 
@@ -93,15 +91,13 @@ A replay prefix ending before `confirmed_at` cannot see that confirmed swing.
 
 ### Protected
 
-When a later accepted structural break proves that a prior opposite swing generated meaningful continuation, that swing may be promoted to `PROTECTED`. Protected structure may later support thesis invalidation and Trade Manager trailing, but this desk does not set the broker stop.
+When later accepted structure proves that a prior opposite swing generated meaningful continuation, that swing may be promoted to `PROTECTED`. Consumers may use protected geometry for invalidation/trailing, but this desk does not set broker stops.
 
 ### External / major
 
-Higher-level external/major interpretation remains a consumer/context concept. The current baseline exposes confirmed/protected geometry and significance so later Technical/Liquidity/strategy logic can rank it without inventing future knowledge.
+Higher-level external/major interpretation remains contextual. Current reports expose confirmed/protected geometry and significance so downstream consumers can rank it without future knowledge.
 
 ## Structure state per timeframe
-
-Current typed states:
 
 ```text
 BULLISH
@@ -111,13 +107,11 @@ TRANSITION
 UNDETERMINED
 ```
 
-Two recent confirmed highs/lows are used to establish directional structural geometry. Mixed higher-high/lower-low evidence produces transition rather than a forced trend label.
+Recent confirmed highs/lows establish directional geometry. Mixed HH/LL evidence produces transition rather than a forced trend label.
 
-A fresh M5 shift cannot rewrite H1/H4 state because each report is built independently for its own timeframe.
+M5 cannot silently rewrite H1/H4 state because each timeframe report is built independently.
 
 ## Break hierarchy
-
-Current typed states:
 
 ```text
 PROBE
@@ -130,33 +124,34 @@ FAILED_BREAK
 
 ### PROBE
 
-Price trades beyond a confirmed swing but the completed candle does not establish accepted close-through evidence.
+Price trades beyond a confirmed swing but completed-candle acceptance is insufficient.
 
 ### QUALIFIED_BREAK
 
-A completed candle closes beyond a confirmed swing by a configurable ATR-normalized penetration amount.
+A completed candle closes beyond a confirmed swing by the configured ATR-normalized penetration amount.
 
 ### CONFIRMED_BOS
 
-A qualified break consistent with the existing structural direction receives subsequent acceptance/follow-through.
+A qualified break consistent with existing structural direction receives subsequent acceptance/follow-through.
 
 ### MSS_CANDIDATE / CONFIRMED_MSS
 
-A counter-structure qualified break becomes an MSS candidate; subsequent acceptance may confirm MSS. Confirmed MSS means meaningful transition/opposing evidence, not an automatic opposite trade.
+A counter-structure qualified break becomes an MSS candidate; later acceptance may confirm MSS. Confirmed MSS means meaningful transition/opposing evidence, not automatic opposite trade authority.
 
 ### FAILED_BREAK
 
-A pending qualified break loses acceptance and closes back through the broken level in the opposite sense. This becomes useful evidence for the Failed Breakout Reversal strategy later.
+A pending qualified break loses acceptance and closes back through the broken level. This becomes useful evidence for reversal families.
 
 ## Avoiding over-restriction
 
-The desk exposes graduated evidence rather than turning every uncertainty into a hard gate. `PROBE`, `QUALIFIED_BREAK`, `CONFIRMED_BOS`, `MSS_CANDIDATE` and `CONFIRMED_MSS` may all be useful to different strategy families at different maturity levels.
+The desk exposes graduated evidence rather than turning every uncertainty into a hard gate. PROBE, QUALIFIED_BREAK, BOS and MSS maturity may all matter differently to different strategy families.
 
 ## Authority boundaries
 
 This file does not own:
+
 - liquidity pools/FVG/OB — `LIQUIDITY_AND_SMC.md`;
-- technical zones/location — `TECHNICAL_STRUCTURE_AND_LEVELS.md`;
+- technical zones/location/confluence — `TECHNICAL_STRUCTURE_AND_LEVELS.md`;
 - EMA/RSI/ATR meaning — `INDICATORS_AND_VOLATILITY.md`;
 - strategy family decisions — `../20-trading-decisions/STRATEGY_FLOOR.md`;
 - Entry Timing — `../20-trading-decisions/ENTRY_TIMING.md`;
@@ -165,7 +160,7 @@ This file does not own:
 
 ## Persistence/restart
 
-Raw rolling candles may be reloaded and structure rebuilt deterministically. Any cache/persistence must preserve chronology and never expose a swing/event earlier after restart than a fresh chronological rebuild would.
+Raw rolling candles may be reloaded and structure rebuilt deterministically. Persistence/recovery must never expose a swing/event earlier after restart than a fresh chronological rebuild would.
 
 ## Runtime integration
 
@@ -174,25 +169,29 @@ MarketSnapshot CandleSeries
 → IndicatorSeries once
 → shared ATR
 → StructureReport
-→ Technical/Liquidity consumers
+→ Technical/Liquidity/Confluence consumers
 → IntelligenceSnapshot
+→ Strategy/Decision/Management consumers
 ```
 
 The Structure desk does not query MT5 independently.
 
-## Replay requirements
+## Replay requirements and current foundation
 
-Replay/live parity requires:
+Phase-10 bar-close replay reuses production Intelligence/Decision semantics on chronological prefixes. Structure parity requires:
+
 - completed-candle chronology;
-- same ATR and structure config version;
+- same ATR/structure config version;
 - explicit swing `confirmed_at`;
 - no future-confirmed pivot visibility;
 - deterministic break classification;
 - no final-bar hindsight upgrades.
 
+The current replay foundation is implemented, while broader historical calibration and live-vs-replay evidence remain ongoing Phase-10/release work.
+
 ## Dashboard visibility
 
-Compact future example:
+Compact example:
 
 ```text
 CANDLE / STRUCTURE
@@ -204,9 +203,10 @@ Latest Event     QUALIFIED_BREAK ↑
 Protected Low    4312.40
 ```
 
-## Tests required / current evidence
+## Tests / current evidence
 
-Required:
+Deterministic coverage includes:
+
 - no-lookahead pivot confirmation;
 - candidate/confirmed chronology;
 - protected-swing promotion;
@@ -216,15 +216,15 @@ Required:
 - timeframe independence;
 - failed-break classification;
 - volatility normalization;
-- live/replay timestamp parity.
-
-Phase-3 deterministic coverage exists in `tests/test_indicators_structure.py` and the shared-ATR integration test in `tests/test_intelligence_snapshot.py`. Full chronological replay parity remains a later Phase-10 verification gate.
+- shared-ATR integration;
+- chronological replay prefix behaviour.
 
 ## Explicit non-goals
 
 This desk must not:
+
 - force every candle into BUY/SELL;
-- treat named patterns as strategies;
+- treat named patterns as standalone strategies;
 - use forming candles as structural proof;
 - make every minor pivot equal;
 - convert local MSS directly into H1/H4 reversal;
@@ -233,10 +233,9 @@ This desk must not:
 
 ## Open calibration questions
 
-The implementation baseline still requires replay calibration for:
 - swing reversal/prominence threshold;
 - qualified-break penetration;
 - follow-through/acceptance amount;
 - expansion/compression/rejection thresholds;
-- significance ranking and future external/major classification;
+- significance ranking and external/major classification;
 - how much early versus confirmed structure each strategy family should consume.
