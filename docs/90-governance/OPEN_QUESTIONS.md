@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.0-design
+**Version:** 1.1-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -17,40 +17,31 @@ These items are intentionally unresolved. Most are calibration/implementation ch
 - Exact S/R zone-width, strength/freshness and role-flip thresholds.
 - Exact equal-high/low/liquidity clustering tolerance and sweep/reclaim thresholds.
 - Exact FVG/qualified-OB quality thresholds.
-- Exact volatility/momentum/extension bands and indicator periods if different from the initial EMA20/EMA50/RSI/ATR design.
+- Exact volatility/momentum/extension bands and indicator periods if different from initial EMA20/EMA50/RSI/ATR design.
 - Which intrabar facts, if any, may be consumed as telemetry without becoming structural confirmation authority.
 
 ## Strategy / scoring / entry
 
 - Whether the six initial production families remain exactly six at V1 freeze after validation.
 - Whether any FVG/OB-led behaviour deserves an independent future production family.
-- Exact Market Episode identity/duplicate-opportunity/re-entry mechanics.
+- Exact Market Episode identity/duplicate-opportunity mechanics beyond the frozen one-reentry limit.
 - Exact family-specific Opportunity Score and Entry Timing thresholds.
 - Initial evidence-group weights, synergy cap, conflict penalty and Red-Team calibration.
 - Minimum Evidence Coverage for executable opportunity/timing decisions.
 - Exact chase/extension tolerance, ideal-entry-zone and setup-expiry rules by family.
-- Exact second-chance limits within one Market Episode.
 
 ## Trade Plan / targets / exits
 
 - Exact family-specific stop-buffer calculation and Stop Quality thresholds.
-- Whether the initial broker TP is always placed at a market objective, omitted for some runner designs, or follows a family-specific policy.
-- Exact minimum acceptable target-room/RR policy by family; no universal value has been frozen.
+- Whether initial broker TP is always placed at a market objective, omitted for some runner designs, or family-specific.
+- Exact minimum acceptable target-room/RR policy by family; no universal value frozen.
 - Exact protection/trailing eligibility and M5/M15/H1 precedence.
 - Exact runner-extension criteria and objective progression limits.
 - Whether/when partial profit is supported when broker volume permits it; V1 must remain valid without partials.
 
 ## Risk
 
-**Resolved profile boundaries:**
-
-```text
-SMALL   $100–$299
-MEDIUM  $300–$999
-NORMAL  $1,000+
-```
-
-**Resolved sizing direction:** SMALL uses practical base/minimum-lot hybrid sizing with all-in risk validation; MEDIUM uses stepped dynamic lots; NORMAL uses fully dynamic percentage sizing. `raw lot < broker minimum` is not an automatic trade blocker.
+**Resolved profile boundaries:** `SMALL $100–$299`, `MEDIUM $300–$999`, `NORMAL $1,000+`.
 
 **Resolved initial risk policy:**
 
@@ -61,50 +52,51 @@ MEDIUM   2.0–3.0%      >3.0–4.5%        5%               9%
 NORMAL   1.0–2.0%      >2.0–3.5%        4%               7%
 ```
 
-Elevated risk is tolerance, not target sizing.
+**Resolved V1 capacity:** one independently risk-bearing Gold position (`0/1`); external Gold exposure blocks new bot entry.
 
-**Resolved V1 capacity direction:** one independently risk-bearing Gold position at a time (`0/1`). Opposite opportunities go to Trade Manager first rather than creating an automatic hedge. Unexpected manual/foreign/unknown-owner Gold exposure blocks new bot entries and is never managed as bot-owned.
+**Resolved manual reset:** OFF by default; if enabled, max one `R,R` reset per UTC day, only from `LOSS_LOCKED`, with cumulative P/L/history preserved.
+
+**Resolved cooldown:** one ordinary loss does not trigger global cooldown; one fresh same-episode re-entry maximum; second same-episode loss locks that episode; 3 consecutive closed bot losses trigger minimum 30-minute cooldown plus fresh completed M15 context/fresh opportunity requirement.
 
 Remaining risk questions:
 
-- Emergency safety ceiling and aggregate-risk semantics for any future multi-position design.
+- Emergency safety ceiling and aggregate-risk semantics for future multi-position design.
 - Policy for accounts below `$100`.
 - Exact slippage-reserve model and commission treatment by broker/account type.
-- Exact realized/floating P/L accounting formula for applying the frozen daily lock percentages.
-- Bounded manual-reset count and confirmation timing per UTC risk day.
-- Exact cooldown trigger/release rules.
+- Exact realized/floating P/L accounting formula for applying daily locks/reset reference.
+- Exact keyboard timing window for `R,R`.
 - Exact drawdown-aware target-band reduction curve.
 - Emergency maximum-trade/runaway circuit-breaker value.
 
-**Resolved direction:** the provisional daily-risk boundary is `00:00 UTC`; it is no longer an open XAU-reopen-versus-calendar question.
+**Resolved direction:** risk day is UTC calendar day at `00:00 UTC`.
 
 ## Session / news / position holding
 
-**Resolved V1 holding policy:** bot-managed Gold positions are flattened before the scheduled daily XAU market break and before weekend closure. V1 does not intentionally carry managed Gold exposure across known market closure/reopen gap risk.
+**Resolved V1 holding policy:** flatten managed Gold before daily XAU break/weekend closure.
 
 **Resolved initial news policy:**
 
 ```text
-TIER 1 CRITICAL   → block new entries -15 min / +15 min
-TIER 2 HIGH       → block new entries -5 min / +5 min
+TIER 1 CRITICAL   → -15 / +15 min hard entry blackout
+TIER 2 HIGH       → -5 / +5 min hard entry blackout
 TIER 3 CONTEXT    → no automatic hard blackout
 ```
 
-Known linked TIER 1 clusters stay blocked through 15 minutes after the final scheduled critical item. Scheduled news does not automatically close an existing managed trade. After the minimum blackout, post-news permission is evidence-driven; severe dislocation requires at least one clean completed M5 candle plus normalized execution conditions.
+Known linked TIER 1 clusters remain blocked through final critical item +15 min. Existing trade is not auto-closed solely due to news. Severe post-event dislocation requires one clean completed M5 plus normalized execution conditions.
 
 Remaining session/news questions:
 
 - Exact PRE_CLOSE no-new-entry and mandatory-flatten lead time.
 - Exact REOPEN_WARMUP evidence/fresh-candle requirements.
-- Final production event provider(s), freshness TTL and provider-specific event mapping table.
-- Detailed handling of unusual long-duration speeches or unscheduled event classification.
-- Future research-backed changes, if any, to the frozen initial event tiers/windows.
+- Final production event provider(s), freshness TTL and provider-specific mapping table.
+- Detailed handling of unusual long-duration speeches/unscheduled event classification.
+- Future research-backed changes, if any, to frozen initial event tiers/windows.
 - Exact holiday/liquidity-caution adjustments, if any, to soft scoring.
 
 ## Execution / broker safety
 
 - Exact price-drift and spread limits by broker/volatility context.
-- Exact DEMO-to-future-REAL approval/config mechanism. Architecture is already decided: REAL is not a separate engine and must use the same centralized Execution Permission Gate.
+- Exact DEMO-to-future-REAL approval/config mechanism; REAL uses same centralized gate/engine.
 - Exact execution-controller/lease mechanism, timeout/clock/failover semantics and coordination store.
 - Exact broker comment/magic/lineage conventions.
 - Exact retry policy for safe read-only/before-submit operations; irreversible ambiguous writes remain no-blind-retry.
@@ -117,7 +109,7 @@ Remaining session/news questions:
 - Exact financial-authority secret scanner/tooling and CI integration.
 - State schema migration/rollback compatibility policy.
 - Exact portable export/import packaging and integrity format.
-- Whether backup publication to GitHub is automatic or performed by a controlled external/script workflow; credentials for GitHub must never be embedded in tracked state.
+- Whether backup publication to GitHub is automatic or performed by a controlled external/script workflow; GitHub credentials never embedded in tracked state.
 
 ## Research / learning / autonomous improvement
 
@@ -135,16 +127,14 @@ Remaining session/news questions:
 
 - Final terminal dimensions/section order after implementation proves readability.
 - Exact dashboard refresh cadence; presentation refresh must not become decision cadence.
-- Exact `R,R` timing/keyboard implementation and safe-shutdown/export controls.
+- Exact `R,R` keyboard timing and safe-shutdown/export controls.
 - Optional notification channels for critical health/trade events.
 - Final wording polish for English technical terms plus concise Roman-Urdu explanations.
-
-The restrained-emoji policy itself is decided: emojis are meaningful visual markers with text fallback, not decorative logic.
 
 ## Engineering / release
 
 - Exact Python/runtime dependency versions and packaging policy.
-- Final source filenames/classes inside the module ownership map once implementation starts.
+- Final source filenames/classes once implementation starts.
 - Exact persistence database/library choices.
 - Exact CI/static/security/coverage thresholds.
 - Exact controlled MT5 DEMO certification sample/steps and long-duration forward-evidence requirement.
@@ -152,4 +142,4 @@ The restrained-emoji policy itself is decided: emojis are meaningful visual mark
 
 ## Governance note
 
-No major architectural subsystem is currently missing from the design corpus. Items above are retained because they can materially affect code/config/research and therefore must be chosen, validated or explicitly deferred rather than guessed.
+No major architectural subsystem is currently missing from the design corpus. Remaining items must be chosen, validated or explicitly deferred rather than guessed.
