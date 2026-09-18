@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
-**Version:** 2.4-implementation-map  
+**Version:** 2.5-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -12,7 +12,7 @@ Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `6
 
 ## Current checkpoint — 2026-09-18
 
-Deterministic core exists through Phase 10 plus the first **Phase-11 portable runtime checkpoint/fresh-database restore foundation**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+Deterministic core exists through Phase 10 plus **Phase-11 portable runtime checkpoints and verified automatic local backup cadence/retention/catalog**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
 
 ## Implemented phase map
 
@@ -78,11 +78,13 @@ verified history
 → governed learning/discovery/promotion evidence
 ```
 
-### Phase 11 — Backup / Recovery — foundation implemented
+### Phase 11 — Backup / Recovery — local foundation implemented
 
 ```text
 persistence/store.py
+persistence/runtime_state.py
 persistence/checkpoint.py
+persistence/backup.py
 security/financial_secrets.py
 ```
 
@@ -94,36 +96,33 @@ records.jsonl
 events.jsonl
 ```
 
-`StateStore` now exports deterministic integrity-checked `StoreSnapshot` objects containing both current records and append-only events. Record/event timestamps, checksums and event IDs are preserved. `integrity_check()` validates event history as well as current state.
+`StateStore` exports integrity-checked `StoreSnapshot` objects containing current records + append-only events. Record/event timestamps, checksums and event IDs are preserved; event history is part of `integrity_check()`.
 
-`persistence/checkpoint.py` owns portable checkpoint export/import/restore:
+`persistence/checkpoint.py` owns public-safe immutable export/import/restore. Restore requires a NEW DB, verifies through a temporary store and always leaves `broker_reconciliation_required=True`.
 
-```text
-source StateStore integrity
-→ StoreSnapshot
-→ structured financial-secret scan
-→ canonical JSONL records/events
-→ file hashes + checkpoint manifest hash
-→ immutable write-new checkpoint
-```
-
-Restore:
+`persistence/backup.py` owns the verified local rolling-backup layer:
 
 ```text
-verify checkpoint completely
-→ require NEW destination DB
-→ restore into temporary StateStore
-→ integrity-check + WAL checkpoint
-→ atomic move
-→ reopen + verify
-→ broker_reconciliation_required=True
+backup_catalog.json
+checkpoints/runtime-YYYYMMDDTHHMMSSZ-<sha12>/...
 ```
 
-Never merge a stale checkpoint into an existing live DB. Never treat restored OPEN/intent/trade state as broker truth.
+Initial configurable engineering baseline:
+
+```text
+interval_minutes = 15
+keep_latest      = 96
+```
+
+`create_backup_if_due()` verifies existing catalog/checkpoints, skips when not due, stages + verifies a new checkpoint, atomically installs it, writes the new hashed catalog and only then prunes old retention entries. `latest_verified_checkpoint()` returns a newest checkpoint only after full catalog + checkpoint verification.
+
+Failed checkpoint creation, including a financial-secret block, leaves the previous known-good catalog/checkpoint unchanged. Catalog entries are chronological, hash-bound, basename-only and path-traversal-safe.
+
+Remote GitHub publication is **not** owned by `backup.py`; authenticated publication must be external tooling so PAT/token material never enters repository/runtime checkpoint state.
 
 ### Shared security owner
 
-`security/financial_secrets.py` owns reusable financial-authority secret detection. Repository source scanning remains fixture-safe text scanning; exported structured state receives stricter recursive key/value inspection. Checkpoint state containing passwords/tokens/private/recovery keys is blocked with `FINANCIAL_SECRET_DETECTED`.
+`security/financial_secrets.py` owns reusable financial-authority secret detection. Repository source scanning remains fixture-safe text scanning; exported structured state gets stricter recursive key/value inspection.
 
 ### Discovery / promotion
 Eligible evidence must create a candidate or explicit suppression reason. Candidate recipes remain declarative, final holdout is one-shot, self-promotion/broker authority is prohibited.
@@ -143,14 +142,15 @@ tests/test_research_datasets.py
 tests/test_research_acquisition.py
 tests/test_research_packages.py
 tests/test_research_session_history.py
-tests/test_runtime_checkpoint.py
 tests/test_persistence_recovery.py
+tests/test_runtime_checkpoint.py
+tests/test_backup_catalog.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Latest verified Phase-11 checkpoint foundation: **195 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Latest verified Phase-11 local-backup checkpoint: **202 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Feature ownership index
 
@@ -160,8 +160,8 @@ Latest verified Phase-11 checkpoint foundation: **195 tests PASS**, Ruff PASS an
 | Technical/confluence | `10-market-intelligence/*` | `intelligence/` + `strategies/confluence.py` |
 | Strategy/decision/Trade Plan | `20-trading-decisions/*` | `strategies/`, `decisions/` |
 | Risk/session/news | `30-risk-execution/*` | `risk/` |
-| Runtime persistence/backup | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/store.py`, `runtime_state.py`, `checkpoint.py` |
-| Financial-secret detection | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` + security policy | `security/financial_secrets.py` |
+| Runtime persistence/backup | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/store.py`, `runtime_state.py`, `checkpoint.py`, `backup.py` |
+| Financial-secret detection | persistence/security policy | `security/financial_secrets.py` |
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/` |
@@ -182,14 +182,16 @@ Latest verified Phase-11 checkpoint foundation: **195 tests PASS**, Ruff PASS an
 - missing historical spread is explicit, never hidden zero/live fallback;
 - historical broker session times are explicit/versioned;
 - mutable filenames/paths never replace content identity;
-- runtime checkpoints are canonical, write-new and integrity checked;
+- runtime checkpoints/catalogs are canonical and integrity checked;
+- backup replacement must verify before old-retention prune;
 - restore targets a new local DB; no stale-state merge into live DB;
 - restored state never grants broker authority before reconciliation;
+- authenticated remote backup credentials stay outside runtime/repository state;
 - financial-authority credentials never enter tracked/public checkpoint state.
 
 ## Current integration gaps / next work
 
-1. Phase 11 automatic checkpoint cadence/retention and public-safe publication/catalog policy;
+1. public-safe **authenticated GitHub publication workflow** for already-verified backup artifacts, with credentials external;
 2. real fresh-machine restore + MT5 broker reconciliation drill;
 3. production shared cross-laptop atomic controller backend and failover proof;
 4. controlled Windows/MT5 real-history acquisition + real broker-session evidence;
