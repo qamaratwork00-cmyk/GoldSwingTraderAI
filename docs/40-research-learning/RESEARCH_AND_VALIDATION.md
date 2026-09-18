@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Research and Validation
 
 **Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
-**Version:** 1.1-implementation  
-**Authority:** Chronological replay, no-lookahead validation, dataset/evidence identity, portable research datasets, historical acquisition, immutable evidence packaging, holdouts, robustness/stress evidence and research claims.  
+**Version:** 1.2-implementation  
+**Authority:** Chronological replay, no-lookahead validation, dataset/evidence identity, portable research datasets, historical acquisition, historical session-policy replay, immutable evidence packaging, holdouts, robustness/stress evidence and research claims.  
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../20-trading-decisions/ENTRY_TIMING.md`, `../20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`
 
 ## Purpose
@@ -20,6 +20,7 @@ research/replay.py
 research/ablation.py
 research/outcomes.py
 research/management_replay.py
+research/session_history.py
 research/stress.py
 research/validation.py
 research/evidence.py
@@ -34,11 +35,11 @@ research/invention.py
 research/promotion.py
 ```
 
-The foundation reuses production Intelligence, Decision, Trade Plan and Trade Manager semantics rather than a separate simplified backtest strategy.
+The foundation reuses production Intelligence, Decision, Trade Plan, hard session permission and Trade Manager semantics rather than separate simplified backtest rules.
 
-Implemented deterministic infrastructure includes prefix-only replay, confluence ablation, ambiguity-safe Trade Plan/Trade Manager outcomes, declared execution stress, fixed-policy walk-forward, content-addressed dataset/evidence identity, portable datasets, read-only MT5 historical acquisition, immutable evidence packages, metrics/learning and governed discovery/invention/promotion.
+Implemented deterministic infrastructure includes prefix-only replay, confluence ablation, ambiguity-safe Trade Plan/Trade Manager outcomes, declared execution stress, fixed-policy walk-forward, content-addressed dataset/evidence identity, portable datasets, read-only MT5 historical acquisition, verified historical PRE_CLOSE/session-policy replay, immutable evidence packages, metrics/learning and governed discovery/invention/promotion.
 
-This remains a **software/research foundation**, not completed market validation. Broad real XAU datasets, empirical calibration, sufficiently large validation, untouched holdout and DEMO forward evidence remain required before claiming edge.
+This remains a **software/research foundation**, not completed market validation. Broad real XAU datasets, trustworthy real broker-session history, empirical calibration, sufficiently large validation, untouched holdout and DEMO forward evidence remain required before claiming edge.
 
 ## No-lookahead / replay boundary
 
@@ -53,9 +54,23 @@ historical facts at T
 
 Same-bar stop/target ambiguity is preserved; unresolved/open cases stay outside resolved P/L.
 
-## Trade Manager / stress / walk-forward
+## Trade Manager / historical session / stress / walk-forward
 
 `research/management_replay.py` reuses production HOLD/PROTECT/TRAIL/RUNNER/EXIT logic after active barrier checks. Default manager realism is `BAR_CLOSE_IDEALIZED`.
+
+When an explicit `HistoricalSessionSchedule` is supplied, manager replay also reuses the production `evaluate_market_permission()` session authority. Mandatory PRE_CLOSE flatten is therefore passed into the real Trade Manager as `pre_close_flatten=True`; the research layer does not duplicate daily/weekend thresholds.
+
+`research/session_history.py` owns verified historical session intervals. It never guesses a broker clock. A schedule must identify `source_label`, `source_version`, verified coverage and chronological non-overlapping tradeable intervals with `DAILY` or `WEEKEND` closure kind.
+
+Historical-session rules:
+
+- DAILY PRE_CLOSE remains production `T-20 no new entry / T-10 mandatory flatten`;
+- WEEKEND remains production `T-60 / T-30`;
+- close instant belongs to the closed side;
+- within verified coverage but outside a tradeable interval, market state is CLOSED;
+- outside verified schedule coverage, replay raises `HistoricalSessionCoverageError` rather than inventing permission;
+- if session-aware manager replay encounters a completed candle where the verified schedule says the market is closed, it fails explicitly instead of treating the bar as normal;
+- omitting `session_schedule` preserves earlier replay behaviour, but such a run must not claim historical PRE_CLOSE parity.
 
 `research/stress.py` holds analytical decisions fixed and can declare adverse entry, executable-side spread, completed-M5 modify delay and deterministic modify rejection. Structural stop/target/original R are not rewritten to improve results.
 
@@ -157,6 +172,7 @@ The evidence package has no trading, risk, execution or promotion authority.
 Decision replay          BAR_CLOSE
 Initial bracket outcomes BAR_HIGH_LOW
 Trade Manager replay     BAR_CLOSE_IDEALIZED + active barriers
+Historical session       VERIFIED_INTERVALS + production session permission
 Execution stress         BAR_CLOSE_EXECUTION_STRESS + declared assumptions
 Walk-forward             FIXED_POLICY_WALK_FORWARD over declared replay layers
 ```
@@ -179,50 +195,50 @@ Walk-forward/evidence/package utilities cannot consume the final holdout automat
 
 ## Quality objective
 
-Evaluate not only win rate but modeled Net/Average R, Profit Factor, drawdown, MFE/MAE, Capture Efficiency, giveback, action mix, 2R/3R/4R reach, Opportunity Recall, missed-opportunity rate, trade frequency and ambiguity/open coverage.
+Evaluate not only win rate but modeled Net/Average R, Profit Factor, drawdown, MFE/MAE, Capture Efficiency, giveback, action mix, PRE_CLOSE exits, 2R/3R/4R reach, Opportunity Recall, missed-opportunity rate, trade frequency and ambiguity/open coverage.
 
 A feature that slightly raises accuracy by removing too many good opportunities is not automatically an improvement. Optional confluence exists to improve quality, not recreate filter soup.
 
 ## Reproducibility requirements
 
-Serious evidence should identify code revision, policy version, configuration, dataset source/version/content hash, bundle manifest hash where applicable, evidence input/manifest/package hashes, historical windows, realism/stress assumptions and limitations. A mutable filename alone is insufficient.
+Serious evidence should identify code revision, policy version, configuration, dataset source/version/content hash, bundle manifest hash where applicable, historical-session source/version/coverage when session-aware, evidence input/manifest/package hashes, historical windows, realism/stress assumptions and limitations. A mutable filename alone is insufficient.
 
 ## Tests / current evidence
 
-Deterministic coverage includes no-lookahead replay, confluence ablation, ambiguity-safe outcomes, execution stress, walk-forward boundary isolation, dataset/evidence identity, portable dataset integrity, exact-count MT5 acquisition and immutable evidence package integrity.
+Deterministic coverage includes no-lookahead replay, confluence ablation, ambiguity-safe outcomes, production Trade Manager reuse, verified historical-session/PRE_CLOSE integration, execution stress, walk-forward boundary isolation, dataset/evidence identity, portable dataset integrity, exact-count MT5 acquisition and immutable evidence package integrity.
 
-Evidence-package tests prove:
+Historical-session tests prove:
 
-- package round-trip with a verified dataset bundle;
-- dataset binding without copying dataset bytes;
-- mismatched dataset bundle rejection;
-- evidence-file tamper detection;
-- package-manifest tamper detection;
-- no-overwrite destination policy.
+- DAILY production PRE_CLOSE timing reuse;
+- WEEKEND production PRE_CLOSE timing reuse;
+- closed-state handling inside verified coverage;
+- explicit failure outside verified coverage;
+- interval overlap rejection;
+- manager-replay integration where a verified T-5 DAILY event exits through production `PRE_CLOSE_FLATTEN`.
 
-Current deterministic CI after evidence-package coverage: **183 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic CI after historical-session/PRE_CLOSE integration: **189 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 Still required for full validation:
 
 - controlled Windows/MT5 acquisition on real broker history;
+- trustworthy versioned real broker-session schedule history covering research periods;
 - broad regime-diverse XAU datasets;
 - actual real-data evidence packages and walk-forward reports;
 - empirical execution-friction calibration;
-- historical PRE_CLOSE/session integration;
 - final untouched holdout;
 - Shadow/DEMO forward evidence and replay-versus-DEMO comparison.
 
 ## Explicit non-goals
 
-Research packaging must not duplicate large datasets unnecessarily, rely on mutable paths as identity, accept tampered evidence/data, export financial authority, mutate production, hide uncertainty or turn historical evidence into a profitability guarantee.
+Research must not guess historical broker session times, infer unverified session coverage from missing candles, duplicate large datasets unnecessarily, rely on mutable paths as identity, accept tampered evidence/data, export financial authority, mutate production, hide uncertainty or turn historical evidence into a profitability guarantee.
 
 ## Open questions
 
 - controlled Windows/MT5 source/version convention and reliable history depth;
+- trustworthy historical broker-session schedule source/version and coverage acquisition;
 - real-data periods/sample requirements;
 - higher-level publication/catalog convention for many evidence packages;
 - walk-forward window sizes/stepping;
-- historical PRE_CLOSE integration;
 - empirical spread/slippage/modify-failure distributions;
 - Monte Carlo/bootstrap method;
 - minimum robustness/validation/promotion thresholds;
