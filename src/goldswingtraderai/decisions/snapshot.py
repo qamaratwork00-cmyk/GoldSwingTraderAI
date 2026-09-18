@@ -23,7 +23,10 @@ from goldswingtraderai.decisions.timing import (
 )
 from goldswingtraderai.domain.enums import OpportunityStage
 from goldswingtraderai.intelligence.snapshot import IntelligenceSnapshot
-from goldswingtraderai.strategies.confluence import apply_optional_confluence
+from goldswingtraderai.strategies.confluence import (
+    ConfluenceBonusConfig,
+    apply_optional_confluence,
+)
 from goldswingtraderai.strategies.floor import (
     StrategyFloorConfig,
     StrategyFloorReport,
@@ -34,6 +37,7 @@ from goldswingtraderai.strategies.floor import (
 @dataclass(frozen=True, slots=True)
 class DecisionConfig:
     strategies: StrategyFloorConfig = StrategyFloorConfig()
+    confluence: ConfluenceBonusConfig = ConfluenceBonusConfig()
     fusion: FusionConfig = FusionConfig()
     opportunity: OpportunityConfig = OpportunityConfig()
     timing: EntryTimingConfig = EntryTimingConfig()
@@ -59,9 +63,9 @@ def build_decision_snapshot(
     _require_utc(now_utc)
     cfg = config or DecisionConfig()
     strategies = evaluate_strategy_floor(intelligence, cfg.strategies)
-    # Optional technical confluence is positive-only. It can strengthen a valid
-    # hypothesis but cannot penalize or gate a setup when absent/opposed.
-    strategies = apply_optional_confluence(strategies, intelligence)
+    # Optional technical confluence is positive-only. Research may disable an
+    # individual source for ablation, but production defaults keep all sources on.
+    strategies = apply_optional_confluence(strategies, intelligence, cfg.confluence)
     board = fuse_decision(strategies, intelligence, cfg.fusion)
     opportunity = update_opportunity(
         board,
