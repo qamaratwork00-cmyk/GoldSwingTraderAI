@@ -126,13 +126,17 @@ def analyze_structure(
     candles: tuple[Candle, ...],
     timeframe: Timeframe,
     config: StructureConfig | None = None,
+    *,
+    atr_values: tuple[float | None, ...] | None = None,
 ) -> StructureReport:
     """Build a causal structural report from chronological completed candles."""
 
     if not candles:
         raise ValueError("structure analysis requires completed candles")
     cfg = config or StructureConfig()
-    atr = atr_series(candles, cfg.atr_period)
+    atr = atr_values if atr_values is not None else atr_series(candles, cfg.atr_period)
+    if len(atr) != len(candles):
+        raise ValueError("precomputed ATR must match candle count")
     latest_atr = atr[-1] if atr else None
     latest_facts = candle_facts(candles[-1], latest_atr)
 
