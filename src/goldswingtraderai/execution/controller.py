@@ -84,15 +84,33 @@ class ControllerLeaseManager:
         self.controller_id = controller_id
         self.ttl = ttl
         self.lease: LeaseSnapshot | None = None
+        self._takeover_reconciliation_required = False
+
+    @property
+    def takeover_reconciliation_required(self) -> bool:
+        return self._takeover_reconciliation_required
 
     def acquire(self) -> ControllerStatus:
+        """Acquire one epoch; expired-lease takeover remains blocked until reconciled."""
+
         try:
+            previous = self.store.read(self.scope)
             lease = self.store.try_acquire(self.scope, self.controller_id, self.ttl)
         except Exception as exc:  # backend boundary: convert failure into safe authority state
             raise CoordinationError("controller coordination acquire failed") from exc
         if lease is None:
             return ControllerStatus(HardDecision.BLOCK, "ANOTHER_ACTIVE_CONTROLLER", None)
+
         self.lease = lease
+        self._takeover_reconciliation_required = (
+            previous is not None and lease.epoch > previous.epoch
+        )
+        if self._takeover_reconciliation_required:
+            return ControllerStatus(
+                HardDecision.BLOCK,
+                "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED",
+                lease,
+            )
         return ControllerStatus(HardDecision.PASS, "CONTROLLER_PRIMARY", lease)
 
     def renew(self) -> ControllerStatus:
@@ -104,13 +122,58 @@ class ControllerLeaseManager:
             raise CoordinationError("controller coordination renew failed") from exc
         if renewed is None:
             self.lease = None
+            self._takeover_reconciliation_required = False
             return ControllerStatus(HardDecision.UNKNOWN, "CONTROLLER_OWNERSHIP_UNKNOWN", None)
         self.lease = renewed
+        if self._takeover_reconciliation_required:
+            return ControllerStatus(
+                HardDecision.BLOCK,
+                "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED",
+                renewed,
+            )
         return ControllerStatus(HardDecision.PASS, "CONTROLLER_PRIMARY", renewed)
+
+    def complete_takeover_reconciliation(self, now_utc: datetime) -> ControllerStatus:
+        """Mark externally completed durable/broker reconciliation for this takeover.
+
+        The caller must perform the actual reconciliation before invoking this method.
+        We then freshly re-verify that the same holder/epoch is still authoritative.
+        """
+
+        status = self._verify_current_authority(now_utc)
+        if status.decision is not HardDecision.PASS:
+            return status
+        self._takeover_reconciliation_required = False
+        return ControllerStatus(HardDecision.PASS, "CONTROLLER_PRIMARY", status.lease)
 
     def verify_write_authority(self, now_utc: datetime) -> ControllerStatus:
         """Freshly verify holder, epoch and expiry immediately before a broker write."""
 
+        status = self._verify_current_authority(now_utc)
+        if status.decision is not HardDecision.PASS:
+            return status
+        if self._takeover_reconciliation_required:
+            return ControllerStatus(
+                HardDecision.BLOCK,
+                "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED",
+                status.lease,
+            )
+        return status
+
+    def release(self) -> bool:
+        if self.lease is None:
+            self._takeover_reconciliation_required = False
+            return True
+        try:
+            released = self.store.release(self.lease)
+        except Exception as exc:
+            raise CoordinationError("controller coordination release failed") from exc
+        if released:
+            self.lease = None
+            self._takeover_reconciliation_required = False
+        return released
+
+    def _verify_current_authority(self, now_utc: datetime) -> ControllerStatus:
         _require_utc(now_utc)
         if self.lease is None:
             return ControllerStatus(HardDecision.UNKNOWN, "CONTROLLER_OWNERSHIP_UNKNOWN", None)
@@ -132,17 +195,6 @@ class ControllerLeaseManager:
             return ControllerStatus(HardDecision.UNKNOWN, "CONTROLLER_OWNERSHIP_UNKNOWN", current)
         self.lease = current
         return ControllerStatus(HardDecision.PASS, "CONTROLLER_PRIMARY", current)
-
-    def release(self) -> bool:
-        if self.lease is None:
-            return True
-        try:
-            released = self.store.release(self.lease)
-        except Exception as exc:
-            raise CoordinationError("controller coordination release failed") from exc
-        if released:
-            self.lease = None
-        return released
 
 
 class InMemoryCoordinationStore:
