@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.9-design
+**Version:** 1.0-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -82,13 +82,23 @@ Remaining risk questions:
 
 **Resolved V1 holding policy:** bot-managed Gold positions are flattened before the scheduled daily XAU market break and before weekend closure. V1 does not intentionally carry managed Gold exposure across known market closure/reopen gap risk.
 
+**Resolved initial news policy:**
+
+```text
+TIER 1 CRITICAL   → block new entries -15 min / +15 min
+TIER 2 HIGH       → block new entries -5 min / +5 min
+TIER 3 CONTEXT    → no automatic hard blackout
+```
+
+Known linked TIER 1 clusters stay blocked through 15 minutes after the final scheduled critical item. Scheduled news does not automatically close an existing managed trade. After the minimum blackout, post-news permission is evidence-driven; severe dislocation requires at least one clean completed M5 candle plus normalized execution conditions.
+
 Remaining session/news questions:
 
 - Exact PRE_CLOSE no-new-entry and mandatory-flatten lead time.
 - Exact REOPEN_WARMUP evidence/fresh-candle requirements.
-- Final event severity tiers and scheduled blackout windows.
-- Exact POST_NEWS_WARMUP normalization criteria.
-- Final provider(s), freshness/reliability requirements and fallback policy for event facts.
+- Final production event provider(s), freshness TTL and provider-specific event mapping table.
+- Detailed handling of unusual long-duration speeches or unscheduled event classification.
+- Future research-backed changes, if any, to the frozen initial event tiers/windows.
 - Exact holiday/liquidity-caution adjustments, if any, to soft scoring.
 
 ## Execution / broker safety
