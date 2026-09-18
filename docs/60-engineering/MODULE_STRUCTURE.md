@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 1.6-implementation-map  
+**Version:** 1.7-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -19,17 +19,7 @@ src/goldswingtraderai/
 ├── domain/
 ├── market_data/
 ├── intelligence/
-│   ├── indicators.py
-│   ├── candle_structure.py
-│   ├── technical.py
-│   ├── liquidity.py
-│   ├── session.py
-│   ├── news.py
-│   ├── confluence.py
-│   └── snapshot.py
 ├── strategies/
-│   ├── floor.py
-│   └── confluence.py
 ├── decisions/
 ├── risk/
 ├── persistence/
@@ -43,6 +33,7 @@ src/goldswingtraderai/
     ├── outcomes.py
     ├── management_replay.py
     ├── stress.py
+    ├── validation.py
     ├── metrics.py
     ├── learning.py
     ├── episode_journal.py
@@ -71,8 +62,9 @@ historical dataset
 → research replay
 → controlled ablation
 → historical Trade Plan reconstruction
-→ initial bracket / chronological Trade Manager outcome modeling
+→ bracket / chronological Trade Manager outcome modeling
 → declared execution-friction stress
+→ fixed-policy walk-forward validation
 → metrics / episode journal
 → discovery/invention candidates
 → governed promotion evidence
@@ -86,21 +78,10 @@ The execution package remains the only package allowed to contain irreversible r
 Read-only broker/account/symbol/quote/completed-candle boundary.
 
 ### `intelligence/`
-Shared causal structure/quant/technical/liquidity/session/news facts. No broker authority.
-
-`intelligence/confluence.py` owns:
-- confirmed-swing trendline projection and touch/break/reclaim facts;
-- causal Fibonacci retracement/extension geometry;
-- broker-local volume-profile POC with explicit real-volume versus tick-volume source.
-
-These are soft confluence facts only. Missing or opposing confluence must not become a universal trade blocker.
+Shared causal structure/quant/technical/liquidity/session/news facts. `intelligence/confluence.py` owns confirmed-swing Trendlines, causal Fibonacci geometry and broker-local Volume Profile/POC. These are soft facts only; no broker authority.
 
 ### `strategies/` + `decisions/`
-Parallel strategy families, BUY/SELL fusion, Opportunity/Entry Timing and structural Trade Plan. Soft evidence remains separate from hard safety.
-
-`strategies/confluence.py` is deliberately **positive-only**. Production defaults enable Trendline/Fibonacci/POC support; typed source toggles are research-ablation controls and cannot create penalties or hard permission.
-
-Trendline behaviour naturally supports existing pullback, breakout, retest and compression families. A separate seventh family is not created unless governed research later proves a materially distinct edge.
+Parallel strategy families, BUY/SELL fusion, Opportunity/Entry Timing and structural Trade Plan. `strategies/confluence.py` is positive-only; production defaults enable Trendline/Fibonacci/POC and research toggles cannot become hard permission.
 
 ### `risk/`
 Monetary sizing/profile/min-lot/capacity plus daily/cooldown/episode state and hard session/news permission. SMALL includes any positive day-start equity below `$300`.
@@ -109,7 +90,7 @@ Monetary sizing/profile/min-lot/capacity plus daily/cooldown/episode state and h
 Standard-library SQLite with canonical JSON, checksums, schema versions, transactions and event rows. Corrupt critical state never silently becomes empty/default.
 
 ### `execution/`
-Single raw irreversible broker-write authority.
+Single raw irreversible broker-write authority:
 
 ```text
 hard authorities
@@ -122,84 +103,49 @@ hard authorities
 → broker reconciliation
 ```
 
-A success-like ACK still requires broker-truth verification. The in-memory coordination backend is tests only; production cross-laptop shared coordination remains required before failover certification.
+A success-like ACK still requires broker-truth verification. In-memory coordination is tests only; production cross-laptop shared coordination remains required before failover certification.
 
 ### `management/`
-Second decision floor for verified bot-owned open trades. HOLD/PROTECT/TRAIL/RUNNER/EXIT. Management can create governed ExecutionIntents but cannot call raw MT5.
+Second decision floor for verified bot-owned open trades. HOLD/PROTECT/TRAIL/RUNNER/EXIT. It can create governed ExecutionIntents but cannot call raw MT5.
 
 ### `operator/`
 Read-only stdlib presentation over flattened authoritative facts. UI must not recompute strategy/risk/execution permission.
 
 ### `research/replay.py`
-Chronological prefix-only bar-close replay. It reuses production Intelligence + Decision semantics and explicitly declares `BAR_CLOSE` realism instead of pretending tick-perfect execution.
+Chronological prefix-only bar-close replay reusing production Intelligence + Decision semantics. Explicit `BAR_CLOSE` realism.
 
 ### `research/ablation.py`
-Runs controlled same-chronology research variants without creating a second strategy implementation.
-
-Current confluence variants are:
-
-```text
-BASE
-TRENDLINE
-FIBONACCI
-DIRECTIONAL_COMBINED
-ALL
-```
-
-It supports three evidence layers:
-
-1. decision-level Opportunity/ENTER/WAIT/MISSED/frequency/score/conflict deltas;
-2. initial Trade Plan bracket evidence from `research/outcomes.py`;
-3. production Trade Manager evidence from `research/management_replay.py`.
-
-Every layer exposes signed deltas versus BASE. Decision-only evidence never invents P/L.
+Controlled same-chronology variants without a second strategy implementation. Supports decision, initial-bracket and manager evidence layers. Decision-only evidence never invents P/L.
 
 ### `research/outcomes.py`
-Owns historical production Trade Plan reconstruction and initial bracket path labeling for analytical ENTER events.
-
-It rebuilds Trade Plan geometry from the historical decision-time snapshot, then inspects only later M5 candles. Vocabulary:
-
-```text
-TARGET_FIRST
-STOP_FIRST
-BOTH_TOUCHED_AMBIGUOUS
-HORIZON_UNRESOLVED
-```
-
-Same-bar stop+target ordering is never guessed favorably. Ambiguous/unresolved cases remain outside resolved bracket Net R and are exposed through coverage.
+Historical production Trade Plan reconstruction plus ambiguity-safe `TARGET_FIRST / STOP_FIRST / BOTH_TOUCHED_AMBIGUOUS / HORIZON_UNRESOLVED` path labeling.
 
 ### `research/management_replay.py`
-Owns chronological replay of the **production Trade Manager** plus declared research-only execution assumptions.
-
-Default flow:
-
-```text
-create research ManagedTrade
-→ check currently active stop/TP against next M5
-→ if trade survives, complete bar
-→ rebuild chronological IntelligenceSnapshot
-→ call production evaluate_trade_manager()
-→ record HOLD / PROTECT / TRAIL / RUNNER / EXIT
-→ apply verified-style state transition for following bar
-```
-
-The default remains `BAR_CLOSE_IDEALIZED`. Optional `ManagementReplayAssumptions` add bounded stress without changing production management logic:
-
-- adverse fill measured in immutable original-R units;
-- executable-side Bid/Ask barrier approximation from a declared spread;
-- completed-M5 manager-modify delay;
-- deterministic every-Nth manager-modify rejection.
-
-While a synthetic modify is pending, later modify submissions are suppressed until it resolves. This mirrors the production rule that ambiguous lifecycle state must reconcile before another irreversible write. Structural stop/target geometry and original R are never rewritten merely to hide adverse slippage.
-
-Same-bar active stop+TP remains ambiguous. Open/ambiguous cases do not enter resolved management Net R.
+Chronological production Trade Manager replay. Active stop/TP is checked before each new manager action. Optional declared assumptions model adverse fill, executable-side spread, completed-M5 modify delay and deterministic modify rejection without rewriting structural geometry or original R.
 
 ### `research/stress.py`
-Owns deterministic execution-friction scenario orchestration around a **fixed analytical ReplayRun**.
+Deterministic execution-friction scenario orchestration around a fixed analytical `ReplayRun`. Default probes are 1.50x spread, 0.10R adverse entry, one-M5 modify delay, every-second modify rejection and combined stress. These are calibration probes, not frozen production thresholds or broker facts.
 
-It changes only declared Trade Plan / fill / exit-side spread / manager-write assumptions and compares signed metrics versus BASE. Default V1 research probes are 1.50x spread, 0.10R adverse entry, one-M5 modify delay, every-second modify rejection and a combined scenario.
+### `research/validation.py`
+Owns fixed-policy chronological walk-forward validation.
 
-Those values are transparent calibration probes, not frozen production thresholds or historical broker claims. `stress.py` has no broker-write authority and does not simulate the complete Execution Permission Gate, margin, order book, variable intrabar spread or tick ordering.
+```text
+DEVELOPMENT CONTEXT
+→ later non-overlapping VALIDATION SLICE
+```
+
+Responsibilities/invariants:
+
+- build windows from historically eligible replay events;
+- allow overlapping development context but never overlapping scored validation slices;
+- run production Decision semantics from development start so Opportunity state is reconstructed causally;
+- score only the validation slice;
+- truncate every window's dataset at validation end so future windows cannot resolve earlier-window outcomes;
+- optionally attach the declared execution-stress report to validation evidence;
+- perform no parameter search/optimization;
+- never consume the governed one-shot final holdout in `research/promotion.py`.
+
+The implemented validation mode is `FIXED_POLICY_WALK_FORWARD`. Exact window sizes remain research calibration rather than code authority.
 
 ### `research/metrics.py`
 Owns actual trade/outcome metrics and Opportunity Recall. Counterfactual blocked/missed MFE is isolated from actual broker P/L.
@@ -208,56 +154,41 @@ Owns actual trade/outcome metrics and Opportunity Recall. Counterfactual blocked
 Owns interpretable StrategyMemory summaries and bounded score nudges. Evidence is isolated by family/direction/regime/session/environment/policy version.
 
 ### `research/episode_journal.py`
-Durable automatic feed from outcome-labelled episodes into discovery observations. It maps existing audited strategy-evidence labels to the approved primitive registry and infers research triggers such as missed move, false entry or premature exit.
+Durable automatic feed from outcome-labelled episodes into discovery observations and approved primitive mapping.
 
 ### `research/discovery.py`
-Owns approved primitives, declarative candidate recipes, independent-episode requirements, variant/new-family classification, fingerprints/similarity, duplicate/rejected memory and durable CandidateRegistry.
-
-It has no arbitrary-code or broker authority.
+Owns approved primitives, declarative candidate recipes, independent-episode requirements, fingerprints/similarity and durable CandidateRegistry. No arbitrary-code or broker authority.
 
 ### `research/invention.py`
-Owns the automatic recurring-cluster cycle and `IDLE / HEALTHY / DEGRADED` discovery-health result.
-
-Engineering liveness invariant:
-
-```text
-eligible evidence
-→ candidate created
-OR explicit governed suppression reason
-```
-
-Silent eligible-evidence loss is a defect.
+Owns automatic recurring-cluster cycle and `IDLE / HEALTHY / DEGRADED` discovery health. Eligible evidence must create a candidate or explicit governed suppression reason.
 
 ### `research/promotion.py`
-Owns the durable post-discovery challenger lifecycle. It enforces stage order, locked fingerprint, one-shot final holdout, Shadow/Canary chronology, explicit promotion approval and rollback history.
-
-The registry's `broker_authority` remains false even at DEMO Canary/Promoted state; actual execution authority can only come from the normal runtime gate.
+Owns durable challenger lifecycle: stage order, locked fingerprint, one-shot final holdout, Shadow/Canary chronology, explicit promotion approval and rollback. `broker_authority` remains false.
 
 ## Runtime / research efficiency rule
 
 ```text
+live/runtime:
 one verified broker snapshot
-→ one shared intelligence derivation
+→ shared intelligence
 → parallel strategies
-→ bounded positive-only confluence uplift
-→ one decision/timing derivation
-→ one TradePlan
-→ one RiskEvaluation + hard permission set
-→ one centralized execution path if needed
-→ one Trade Manager cycle
-→ one presentation frame
+→ decision/timing
+→ TradePlan
+→ Risk + hard permissions
+→ centralized execution if needed
+→ Trade Manager
+→ presentation
 
 historical research:
 one dataset / chronology
 → production Decision semantics
-→ shared historical Trade Plan reconstruction
-→ initial bracket and/or production Trade Manager replay
-→ optional declared execution stress
-→ controlled variant comparison
+→ historical Trade Plan / management replay
+→ optional declared stress
+→ fixed-policy walk-forward slices
 → metrics / learning / discovery
 ```
 
-Research should not rerun expensive analysis merely to reconstruct facts already durably captured unless chronological replay specifically requires it.
+Research should not rerun expensive analysis merely to reconstruct already durable facts unless chronological replay specifically requires it.
 
 ## Prohibited dependency directions
 
@@ -277,6 +208,7 @@ confluence   → hard execution permission        NO
 outcomes     → historical-decision mutation     NO
 manager replay → raw broker execution           NO
 stress model → production risk/safety mutation  NO
+validation  → automatic tuning/final holdout     NO
 ```
 
 ## Current deterministic tests
@@ -293,27 +225,28 @@ tests/test_dashboard.py
 tests/test_research_ablation.py
 tests/test_research_outcomes.py
 tests/test_research_stress.py
+tests/test_research_validation.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Current verified stress-research checkpoint includes **159 passing tests**, Ruff PASS and financial-secret scan PASS.
+Current verified walk-forward checkpoint: **163 passing tests**, Ruff PASS and financial-secret scan PASS.
 
-Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, positive-only technical confluence, same-chronology ablation, ambiguity-safe outcome labeling, chronological production-manager reuse, immutable-R adverse-fill accounting, executable-side spread approximation, explicit stress scenarios, risk/session/execution safety, restart integrity, one-shot broker writes, dashboard isolation and discovery/invention liveness.
+Alongside earlier suites these protect no-lookahead, positive-only confluence, ambiguity-safe outcomes, production-manager reuse, immutable-R stress accounting, explicit stress assumptions, fixed-policy walk-forward chronology, development/validation separation, validation-boundary clipping, risk/session/execution safety, restart integrity and discovery/promotion governance.
 
 Deterministic CI is software evidence, not live DEMO certification or proof of strategy edge.
 
 ## Remaining Phase-10 work
 
-- calibrate stress assumptions with broader historical XAU and controlled DEMO evidence;
-- historical PRE_CLOSE/session-policy integration where trustworthy schedule history exists;
-- broader real historical XAU replay datasets and regime coverage;
-- walk-forward and independent-validation evidence;
+- dataset identity/versioning and reproducible evidence-manifest tooling;
+- broad real historical XAU replay datasets and regime coverage;
+- sufficiently large walk-forward/independent-validation evidence;
+- empirical stress calibration from historical/DEMO observations;
+- historical PRE_CLOSE/session-policy integration where trustworthy history exists;
 - final untouched holdout evidence for locked candidates;
-- richer entry/exit attribution and controlled replay-versus-DEMO comparison;
-- operator visibility for Discovery Health/candidate stage and compact Trendline/Fib/POC context;
-- calibration of research/confluence/management thresholds on real historical/DEMO evidence.
+- richer replay-versus-DEMO attribution;
+- operator visibility for Discovery Health/candidate stage and compact confluence context.
 
 ## Phase completion rule
 
