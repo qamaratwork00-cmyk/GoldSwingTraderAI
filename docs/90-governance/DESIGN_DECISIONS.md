@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.3-design
+**Version:** 1.4-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -294,6 +294,24 @@ This ledger records accepted/provisional architectural decisions so future imple
 **Decision:** V1 uses a healthy broker/symbol spread baseline rather than a single fixed Gold spread number. Spread Ratio `<=1.50` is normal; `>1.50–2.25` is elevated and requires full revalidation but is not an automatic block; `>2.25` blocks the current entry. Spread also blocks if it exceeds 25% of approved entry-to-structural-SL price distance. Adverse price drift from Approved Entry Reference is normalized by planned stop distance: `<=10%` normal revalidation, `>10–20%` elevated full revalidation, `>20%` blocks the current Execution Intent/returns to WAIT if thesis survives. Any fresh drift that breaks risk, stop, target-room or chase validity blocks regardless of percentage.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
 **Reason:** Avoid both over-restrictive fixed-pip filters and uncontrolled chasing/execution friction.
+
+## DEC-058 — Initial structural RR guard is bounded but not over-restrictive
+
+**Decision:** V1 rejects a current entry plan when credible structural target room is below `1.20R`. `1.20R–<1.50R` is marginal/conditional and requires a credible larger expansion path; initial V1 expects roughly `2.0R+` Expansion Target room with acceptable path quality. `1.50R–<2.00R` is good and `2.00R+` is strong. `3R/4R+` represents large-move/runner potential, not a guaranteed outcome. Higher RR or strategy score never authorizes higher monetary risk.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Reject poor target economics without creating an ultra-rare high-RR-only bot.
+
+## DEC-059 — Primary target is a checkpoint; Expansion is the normal broker objective; Runner must be earned
+
+**Decision:** V1 uses structural/liquidity objectives rather than fixed 100/200/300-pip TP. Primary Structural Target is normally a management checkpoint, not an automatic full exit. A valid Expansion Target is the default initial broker TP; if no valid Expansion Target exists, a valid Primary Target may be used. Runner extension requires fresh acceptance/continuation evidence plus a newly defined objective and may not occur merely because price is profitable. Only one current Runner Objective is active at a time; any further extension requires fresh evidence. PRE_CLOSE flatten overrides runner logic.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Preserve the ability to capture large Gold expansions while keeping every TP extension structurally anchored and auditable.
+
+## DEC-060 — V1 core logic does not depend on partial closes
+
+**Decision:** V1 must remain fully correct for an indivisible broker-minimum `0.01` position. The baseline manager handles the full position through HOLD/PROTECT/TRAIL/RUNNER/EXIT and does not require partial profit taking. Partial-profit policies may be researched for a later version/larger executable volumes but are not an implicit V1 dependency.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Keep behaviour consistent across small accounts and avoid designing core exit logic around volume reductions that may not be executable.
 
 ## Change rule
 
