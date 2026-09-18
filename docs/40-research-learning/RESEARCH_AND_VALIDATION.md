@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Research and Validation
 
-**Status:** PROVISIONAL  
-**Version:** 0.2-implementation  
+**Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
+**Version:** 0.3-implementation  
 **Authority:** Chronological replay, no-lookahead validation, holdouts, robustness/stress evidence, opportunity/entry/exit research metrics and evidence claims.  
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../20-trading-decisions/ENTRY_TIMING.md`, `../20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`
 
@@ -11,11 +11,39 @@ Research must test the real documented trading semantics without future leakage,
 
 > **A positive backtest is evidence about a specified historical simulation, not proof of future profitability.**
 
+## Current implementation checkpoint — Phase 10 foundation
+
+Implemented owners include:
+
+```text
+research/replay.py
+research/metrics.py
+research/learning.py
+research/episode_journal.py
+research/discovery.py
+research/invention.py
+research/promotion.py
+```
+
+The current replay foundation is chronological completed-bar / `BAR_CLOSE` realism. It reuses production Intelligence + Decision semantics rather than maintaining a separate simplified backtest strategy.
+
+Current deterministic research infrastructure already supports:
+
+- prefix-only/no-lookahead replay of production analytical semantics;
+- actual trade/outcome versus counterfactual missed/blocked outcome separation;
+- Net R / average R / drawdown-style research metrics where supplied;
+- MFE/MAE, Capture Efficiency and Opportunity Recall attribution;
+- durable research episodes;
+- StrategyMemory/bounded learning foundation;
+- governed candidate discovery/invention/promotion state.
+
+This is a **software/research foundation**, not completed market validation. Broader historical datasets, realistic execution assumptions, ablation/stress/walk-forward, independent validation/holdout and DEMO forward evidence remain required before claiming a strategy edge.
+
 ## Replay principle
 
 Where parity is claimed, historical replay should reuse the same core market-intelligence, strategy, timing, planning and management semantics as live operation, with different data/execution adapters only where necessary.
 
-The system should avoid maintaining a simplified `backtest strategy` whose rules differ materially from production.
+The system must not maintain a simplified `backtest strategy` whose rules differ materially from production.
 
 ## Chronology and no-lookahead
 
@@ -46,7 +74,7 @@ If forming-candle/intrabar features are later authorized, replay must use suitab
 
 ## Execution realism
 
-Research should state realism level used. Depending on available data, simulation may model:
+Research states its realism level. Depending on available data, simulation may model:
 
 - Bid/Ask/spread;
 - price drift;
@@ -76,7 +104,7 @@ Exact sample sizes remain research-calibratable.
 
 The final holdout is one-shot for the locked candidate. If that candidate fails, the system must not repeatedly try alternate parameters/candidates on the same data while still calling it untouched.
 
-Consumed holdout identity/status should be persisted.
+Consumed holdout identity/status is durable under the promotion registry.
 
 ## Walk-forward and stability
 
@@ -148,9 +176,9 @@ Win rate is not sufficient by itself.
 
 ## Opportunity Recall and missed-move attribution
 
-Research should evaluate not only trades taken but meaningful market episodes missed.
+Research evaluates not only trades taken but meaningful market episodes missed.
 
-Missed outcomes should distinguish causes such as:
+Missed outcomes distinguish causes such as:
 
 ```text
 NO_OPPORTUNITY
@@ -164,11 +192,11 @@ SYSTEM_FAULT
 
 This prevents strategy logic from being blamed for risk/execution/system failures.
 
-The definition of an objectively meaningful missed opportunity must be chronological and non-hindsight in decision reconstruction; exact labeling methodology remains open.
+The definition of an objectively meaningful missed opportunity must be chronological and non-hindsight in decision reconstruction; exact labeling methodology remains research calibration.
 
 ## Counterfactuals
 
-Blocked/missed opportunities may be evaluated after the fact for hypothetical MFE/MAE, but these records must be explicitly labeled `COUNTERFACTUAL` and never added to actual broker P/L.
+Blocked/missed opportunities may be evaluated after the fact for hypothetical MFE/MAE, but these records remain explicitly counterfactual and never become actual broker P/L.
 
 Hard safety rules are not automatically weakened because some blocked trades would have won.
 
@@ -184,7 +212,7 @@ Entry analysis should compare, where available:
 - lost RR from delay/drift/slippage;
 - missed-entry outcomes.
 
-Research may propose family-specific entry-policy challengers but may not mutate production directly.
+Research may propose family-specific Entry Policy Challengers but cannot mutate production directly.
 
 ## Exit research
 
@@ -233,7 +261,7 @@ The goal is to identify fragile edges that disappear under small realistic frict
 
 ## Monte Carlo / path risk
 
-Monte Carlo or bootstrap analysis may be used for drawdown/loss-streak distributions, but methods must account for potential trade/regime dependence. Exact methodology remains open.
+Monte Carlo or bootstrap analysis may be used for drawdown/loss-streak distributions, but methods must account for possible trade/regime dependence. Exact methodology remains open.
 
 ## Complexity discipline
 
@@ -283,17 +311,26 @@ REJECTED
 
 Promotion authority is owned by `GOVERNED_EXPERIMENTS_AND_PROMOTION.md`.
 
-## Tests required
+## Tests / current evidence
 
-- deterministic replay chronology;
-- no-lookahead swing/event/confluence tests;
-- replay/live decision parity where claimed;
-- holdout consumption enforcement;
-- counterfactual P/L isolation;
-- attribution correctness;
-- research reproducibility;
-- stress/ablation report integrity;
-- confluence ablation includes Opportunity Recall/trade-frequency effects, not win rate alone.
+Deterministic coverage includes:
+
+- chronological/prefix-only replay;
+- no-lookahead structure/confluence semantics through production Intelligence;
+- actual/counterfactual isolation;
+- outcome attribution and Opportunity Recall metrics;
+- durable research episode feed;
+- discovery liveness and independent-episode handling;
+- one-shot holdout/promotion governance.
+
+Still required for full research validation:
+
+- broad historical XAU datasets across regimes;
+- execution-friction/stress scenarios;
+- walk-forward/independent validation;
+- confluence ablation report;
+- final untouched holdout on locked candidates;
+- Shadow/DEMO forward evidence.
 
 ## Explicit non-goals
 
