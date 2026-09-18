@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.2-design
+**Version:** 1.3-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -20,8 +20,7 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-003 — Independent BUY and SELL theses
 
 **Decision:** BUY and SELL cases are built independently and compared explicitly.  
-**Status:** PROVISIONAL  
-**Reason:** A strong BUY score is not genuine conviction when an equally strong SELL case exists.
+**Status:** PROVISIONAL
 
 ## DEC-004 — Opportunity and entry timing are separate
 
@@ -271,14 +270,30 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-053 — Manual daily-loss reset is disabled by default and limited to one per UTC day
 
 **Decision:** Manual loss reset remains available as a governed feature but is OFF by default. If explicitly enabled, at most one `R,R` double-confirm reset may occur per UTC risk day, only from `LOSS_LOCKED`. It preserves cumulative broker/day P/L and audit history and cannot clear unrelated hard blockers.  
-**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Retain operator recovery authority without turning the daily lock into an unlimited bypass.
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-054 — Cooldown targets churn, not every loss
 
 **Decision:** One ordinary losing trade does not trigger global cooldown. V1 permits at most one genuinely fresh re-entry in the same Market Episode; if that re-entry also loses, the episode is locked. Three consecutive closed bot-trade losses trigger a minimum 30-minute global cooldown, and release also requires fresh completed M15 context plus a fresh valid opportunity/episode. Execution/shock cooldown remains condition-based until the responsible market/execution fault normalizes.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+
+## DEC-055 — Initial daily/weekend close and reopen timing
+
+**Decision:** Timing is relative to the broker's verified XAU session-close schedule rather than a fixed local/server clock. Daily break: no new entry from `T-20m`, mandatory governed flatten from `T-10m`; daily reopen requires normalized execution/data plus one clean completed M5 candle. Weekend: no new entry from `T-60m`, mandatory flatten from `T-30m`; weekend reopen requires gap assessment, normalized execution/data and two clean completed M5 candles.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Avoid both revenge/re-entry loops and over-restricting normal Gold trading after one loss.
+**Reason:** Avoid known closure/reopen gap risk without relying on DST-sensitive guessed clock times.
+
+## DEC-056 — Daily loss lock uses cash-flow-adjusted account-equity safety P/L
+
+**Decision:** `AccountSafetyPL = CurrentVerifiedEquity - DayStartEquity - NetNonTradingCashFlowSinceDayStart`. This account-safety metric, including floating account drawdown through broker equity, drives the daily loss lock. Realized/floating P/L, commissions/swaps/fees already contained in equity are not added again. Deposits/withdrawals/identifiable non-trading adjustments are removed from the trading P/L calculation. Bot strategy-performance P/L is tracked separately so manual/foreign activity does not contaminate strategy analytics. Manual reset creates a new audited cycle reference while cumulative day P/L remains visible.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Protect the actual account while keeping clean bot-performance attribution and avoiding double-counting.
+
+## DEC-057 — Spread and price-drift protection is dynamic and normalized
+
+**Decision:** V1 uses a healthy broker/symbol spread baseline rather than a single fixed Gold spread number. Spread Ratio `<=1.50` is normal; `>1.50–2.25` is elevated and requires full revalidation but is not an automatic block; `>2.25` blocks the current entry. Spread also blocks if it exceeds 25% of approved entry-to-structural-SL price distance. Adverse price drift from Approved Entry Reference is normalized by planned stop distance: `<=10%` normal revalidation, `>10–20%` elevated full revalidation, `>20%` blocks the current Execution Intent/returns to WAIT if thesis survives. Any fresh drift that breaks risk, stop, target-room or chase validity blocks regardless of percentage.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Avoid both over-restrictive fixed-pip filters and uncontrolled chasing/execution friction.
 
 ## Change rule
 
