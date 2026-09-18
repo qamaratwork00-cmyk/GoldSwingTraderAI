@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Session and Risk State Machine
 
 **Status:** PROVISIONAL  
-**Version:** 0.5-design  
+**Version:** 0.6-design  
 **Authority:** Hard market/session permission states, risk/system permission composition, news-safety states and state transitions.  
 **Depends on:** `RISK_CONTRACT.md`, `EXECUTION_AND_BROKER_SAFETY.md`, `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`, `../10-market-intelligence/SESSION_CONTEXT.md`
 
@@ -21,14 +21,29 @@ Broker/live market is functioning and new trades may be considered if risk, news
 
 Scheduled XAU closure is approaching.
 
-V1 policy:
+Initial V1 timing is relative to the broker's verified XAU session-close time, not a hard-coded local/server clock.
 
-- new entries are blocked;
-- existing bot-managed Gold positions must be flattened before scheduled closure while broker remains tradeable;
-- Trade Manager may protect/exit earlier for structural reasons, but may not intentionally carry a bot-managed position through scheduled daily XAU break/weekend closure;
-- exact pre-close no-new-entry/mandatory-flatten lead time remains broker/research calibration.
+#### Daily XAU break
+
+```text
+T-20 min  → no new entries
+T-10 min  → mandatory governed flatten of any bot-managed Gold position
+T-0       → expected CLOSED
+```
+
+#### Weekend closure
+
+```text
+T-60 min  → no new entries
+T-30 min  → mandatory governed flatten of any bot-managed Gold position
+T-0       → expected CLOSED
+```
+
+Trade Manager may protect/exit earlier for structural reasons, but may not intentionally carry a bot-managed position through the scheduled daily XAU break or weekend closure.
 
 Reason codes should distinguish `SESSION_PRE_CLOSE` from `PRE_CLOSE_FLATTEN`.
+
+If the broker's session schedule cannot be verified close enough to a known closure, the system must not invent a close time; execution/session health should degrade/block appropriately until reliable session truth is available.
 
 ### CLOSED
 
@@ -44,9 +59,27 @@ Broker-confirmed XAU closure/weekend/scheduled break.
 
 First returned quote after closure is not sufficient for trade readiness.
 
-Evidence may include fresh valid quotes, symbol tradeability, normalized spread, candle continuity, gap/dislocation assessment and sufficient fresh data for required timeframe decisions.
+#### Daily reopen
 
-Warmup is evidence-driven rather than an unnecessarily long fixed delay.
+New entries may resume only after all required facts pass:
+
+- broker reports XAU tradeable;
+- fresh valid Bid/Ask and required market data are healthy;
+- spread/execution conditions have normalized under Execution Safety;
+- no unresolved gap/dislocation/data/reconciliation problem exists;
+- at least **one clean completed M5 candle** after reopen is available.
+
+#### Weekend reopen
+
+Weekend reopen is treated more conservatively because gap risk can be materially larger. New entries may resume only after:
+
+- broker reports XAU tradeable;
+- weekend gap/dislocation is assessed;
+- fresh quotes/data and spread/execution conditions normalize;
+- no unresolved reconciliation/data problem exists;
+- at least **two clean completed M5 candles** after reopen are available.
+
+A completed-candle requirement is a minimum freshness rule, not permission to ignore abnormal spread/quotes/dislocation. If conditions remain abnormal after the minimum candles, `REOPEN_WARMUP` continues.
 
 ### HOLIDAY_CAUTION
 
@@ -146,7 +179,7 @@ Examples:
 
 ```text
 OPEN + NEWS_CLEAR + NORMAL + READY → entries may be evaluated
-PRE_CLOSE + otherwise-valid state → no new entry; existing managed trade must flatten
+PRE_CLOSE + otherwise-valid state → no new entry; existing managed trade must flatten at required threshold
 OPEN + NEWS_CLEAR + LOSS_LOCKED + READY → no new entries
 OPEN + NEWS_CLEAR + COOLDOWN + READY → no new entries until cooldown release criteria pass
 OPEN + NEWS_BLACKOUT + NORMAL + READY → no new entries
@@ -162,7 +195,7 @@ Daily-loss accounting/reset boundary is owned by `RISK_CONTRACT.md`: UTC calenda
 
 ## Broker truth over calendar
 
-Calendar may suggest expected state, but broker tradeability and valid live quotes determine whether XAU can execute. Configured close schedule enters PRE_CLOSE early enough to flatten, while broker state remains final fact for whether close can actually execute.
+Calendar may suggest expected state, but broker tradeability and valid live quotes determine whether XAU can execute. The verified broker XAU session schedule drives PRE_CLOSE timing so DST/server-time changes do not rely on a guessed fixed clock.
 
 ## Open-trade priority
 
@@ -172,15 +205,21 @@ A hard new-entry block should not automatically stop safe management of an open 
 
 ## Dashboard requirements
 
-Show at least Market State, News Safety State, next event/tier, blackout countdown, Risk State, loss streak, cooldown state/release condition, manual-reset state, System/Execution State, primary/secondary blocker, PRE_CLOSE countdown/flatten status and next expected transition where knowable.
+Show at least Market State, News Safety State, next event/tier, blackout countdown, Risk State, loss streak, cooldown state/release condition, manual-reset state, System/Execution State, primary/secondary blocker, PRE_CLOSE countdown/flatten status, REOPEN_WARMUP candle progress and next expected transition where knowable.
 
 ## Tests required
 
 - OPEN/PRE_CLOSE/CLOSED transitions;
-- PRE_CLOSE blocks new entries and requests governed flatten;
+- daily break no-new-entry begins at broker-close `T-20m`;
+- daily break mandatory flatten begins at `T-10m`;
+- weekend no-new-entry begins at broker-close `T-60m`;
+- weekend mandatory flatten begins at `T-30m`;
+- PRE_CLOSE close timing is derived from verified broker session schedule rather than fixed local time;
 - no intentional carry through scheduled daily XAU break/weekend;
 - close ambiguity is persisted/reconciled;
-- REOPEN_WARMUP evidence;
+- daily REOPEN_WARMUP requires one clean completed M5 plus normalized conditions;
+- weekend REOPEN_WARMUP requires gap assessment and two clean completed M5 candles plus normalized conditions;
+- abnormal conditions keep warmup active even after minimum candles;
 - holiday caution not market closure;
 - TIER 1 `-15/+15` and linked-cluster blackout;
 - TIER 2 `-5/+5` blackout;
@@ -198,8 +237,7 @@ Show at least Market State, News Safety State, next event/tier, blackout countdo
 
 ## Open questions
 
-- exact PRE_CLOSE no-new-entry and mandatory-flatten lead time;
-- exact REOPEN_WARMUP evidence/fresh-candle requirements;
 - final production event provider(s), freshness TTL and provider-specific mapping details;
 - future research-backed changes to initial news tiers/windows;
-- exact keyboard confirmation timing for `R,R` as an operator UX detail.
+- exact keyboard confirmation timing for `R,R` as an operator UX detail;
+- future research-backed changes, if any, to initial pre-close/reopen timing.
