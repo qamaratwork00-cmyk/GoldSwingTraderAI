@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — User Manual
 
 **Status:** DRAFT  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** Human-facing explanation of normal operation and operator actions.  
 **Depends on:** `50-operator/DASHBOARD_AND_UX.md`, `SETUP_AND_RUN_GUIDE.md`
 
@@ -71,10 +71,12 @@ A non-trade is not automatically a fault.
 Initial V1 profiles:
 
 ```text
-SMALL   $100–$299
-MEDIUM  $300–$999
+SMALL   any positive DayStartEquity below $300
+MEDIUM  $300–$999.99
 NORMAL  $1,000+
 ```
+
+There is **no `$100` minimum balance/equity floor**. If a SMALL account falls to `$99`, `$50`, `$30` or another positive amount below `$300`, it remains SMALL. A specific new trade is accepted/rejected by actual executable risk, broker minimum lot, hard risk ceiling, margin, daily lock and the other normal safety checks — not simply because the account is below `$100`.
 
 The dashboard should show profile, proposed lot, all-in risk, current risk band, hard entry ceiling, daily Account Safety P/L and remaining loss budget.
 
