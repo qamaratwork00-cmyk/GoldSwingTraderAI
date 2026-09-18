@@ -29,6 +29,7 @@ from goldswingtraderai.management.models import managed_trade_from_fill
 from goldswingtraderai.research.management_replay import (
     ActiveBarrierTouch,
     ManagementOutcome,
+    ManagementReplayAssumptions,
     ManagementReplayRecord,
     evaluate_active_barriers,
     run_trade_manager_replay,
@@ -135,6 +136,56 @@ def test_active_stop_and_target_same_bar_remains_ambiguous() -> None:
     assert result.realized_r is None
 
 
+def test_executable_side_spread_can_trigger_buy_stop() -> None:
+    candle = _candle(high=101.0, low=99.05, close=100.0)
+    no_spread = evaluate_active_barriers(_trade(Direction.BUY), candle)
+    stressed = evaluate_active_barriers(
+        _trade(Direction.BUY),
+        candle,
+        spread_price=0.20,
+    )
+
+    assert no_spread.touch is ActiveBarrierTouch.NONE
+    assert stressed.touch is ActiveBarrierTouch.STOP
+    assert stressed.realized_r == pytest.approx(-1.0)
+
+
+def test_adverse_fill_keeps_plan_original_r_immutable() -> None:
+    trade = managed_trade_from_fill(
+        _plan(Direction.BUY),
+        position_ticket=2,
+        volume=0.01,
+        fill_price=100.10,
+        opened_at_utc=NOW,
+        symbol="XAUUSDm",
+    )
+    result = evaluate_active_barriers(
+        trade,
+        _candle(high=100.5, low=98.9, close=99.2),
+    )
+
+    assert trade.original_r_price == pytest.approx(1.0)
+    assert result.touch is ActiveBarrierTouch.STOP
+    assert result.realized_r == pytest.approx(-1.10)
+
+
+def test_management_execution_assumptions_validate_bounds() -> None:
+    assumptions = ManagementReplayAssumptions(
+        adverse_entry_slippage_r=0.10,
+        barrier_spread_price=0.20,
+        modify_delay_bars=1,
+        reject_every_nth_modify=2,
+    )
+    assert assumptions.modify_delay_bars == 1
+
+    with pytest.raises(ValueError):
+        ManagementReplayAssumptions(adverse_entry_slippage_r=1.0)
+    with pytest.raises(ValueError):
+        ManagementReplayAssumptions(barrier_spread_price=-0.01)
+    with pytest.raises(ValueError):
+        ManagementReplayAssumptions(reject_every_nth_modify=0)
+
+
 def test_management_summary_excludes_open_and_ambiguous_from_net_r() -> None:
     records = (
         ManagementReplayRecord(
@@ -152,6 +203,8 @@ def test_management_summary_excludes_open_and_ambiguous_from_net_r() -> None:
             final_stop=100.5,
             final_tp=102.0,
             exit_reason="ACTIVE_BROKER_TP_TOUCHED",
+            modify_requests=1,
+            modify_applied=1,
         ),
         ManagementReplayRecord(
             as_of_utc=NOW,
@@ -200,6 +253,8 @@ def test_management_summary_excludes_open_and_ambiguous_from_net_r() -> None:
             final_stop=100.1,
             final_tp=102.0,
             exit_reason="MANAGEMENT_HORIZON_ENDED_OPEN",
+            modify_requests=1,
+            modify_rejected=1,
         ),
     )
 
@@ -217,6 +272,9 @@ def test_management_summary_excludes_open_and_ambiguous_from_net_r() -> None:
     assert metrics.hold_actions == 2
     assert metrics.protect_actions == 1
     assert metrics.trail_actions == 1
+    assert metrics.modify_requests == 2
+    assert metrics.modify_applied == 1
+    assert metrics.modify_rejected == 1
 
 
 def _series(timeframe: Timeframe, count: int) -> CandleSeries:
