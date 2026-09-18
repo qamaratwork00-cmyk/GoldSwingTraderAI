@@ -1,65 +1,107 @@
-# GoldSwingTraderAI — Open Questions
+# GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 1.4-design
+**Version:** 1.5-design
 
-These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
+This file now separates remaining items into three classes so implementation is not delayed by values that should be learned from evidence.
 
-## Market intelligence calibration
+```text
+FIX BEFORE BUILD       = required architecture/safety decision still missing
+CALIBRATE IN RESEARCH  = implement configurable deterministic baseline, tune with chronological evidence
+IMPLEMENTATION CHOICE  = coder may choose a suitable implementation that preserves frozen contract
+DEFER LATER            = not required for V1
+```
 
-- Exact runtime candle-window sizes per timeframe.
-- Exact volatility-normalized swing prominence/excursion thresholds.
-- Exact candidate-to-confirmed swing reversal/persistence requirements.
-- Exact swing-significance weights/classes.
-- Exact completed-close penetration required for `QUALIFIED_BREAK`.
-- Exact family-specific acceptance/follow-through requirements for `CONFIRMED_BOS`/MSS quality.
-- Exact compression/expansion/exhaustion numeric bands.
-- Exact S/R zone-width, strength/freshness and role-flip thresholds.
-- Exact equal-high/low/liquidity clustering tolerance and sweep/reclaim thresholds.
-- Exact FVG/qualified-OB quality thresholds.
-- Exact volatility/momentum/extension bands and indicator periods if different from initial EMA20/EMA50/RSI/ATR design.
-- Which intrabar facts, if any, may be consumed as telemetry without becoming structural confirmation authority.
+A `CALIBRATE IN RESEARCH` item is **not permission to guess silently**. Initial values must be explicit/configurable, replay-safe and documented; research may propose governed changes.
+
+## Current freeze status
+
+No major trading/risk/execution subsystem is missing. Core V1 architecture is sufficiently defined to proceed once the final documentation/contradiction audit and build/recovery guide are complete.
+
+## Market intelligence
+
+### CALIBRATE IN RESEARCH
+
+- runtime candle-window sizes per timeframe;
+- volatility-normalized swing prominence/excursion thresholds;
+- candidate-to-confirmed swing reversal/persistence requirements;
+- swing-significance weights/classes;
+- completed-close penetration for `QUALIFIED_BREAK`;
+- family-specific BOS/MSS acceptance/follow-through quality;
+- compression/expansion/exhaustion bands;
+- S/R zone width/strength/freshness/role-flip thresholds;
+- equal-high/low/liquidity clustering tolerance and sweep/reclaim thresholds;
+- FVG/qualified-OB quality thresholds;
+- volatility/momentum/extension bands;
+- indicator parameter refinements beyond initial EMA20/EMA50/RSI/ATR design.
+
+### FROZEN PRINCIPLE
+
+Completed candles own structural confirmation. Any forming-candle/intrabar information is telemetry only unless a later explicit contract grants it structural authority.
 
 ## Strategy / scoring / entry
 
-- Whether the six initial production families remain exactly six at V1 freeze after validation.
-- Whether any FVG/OB-led behaviour deserves an independent future production family.
-- Exact Market Episode identity/duplicate-opportunity mechanics beyond the frozen one-reentry limit.
-- Exact family-specific Opportunity Score and Entry Timing thresholds.
-- Initial evidence-group weights, synergy cap, conflict penalty and Red-Team calibration.
-- Minimum Evidence Coverage for executable opportunity/timing decisions.
-- Exact chase/extension tolerance, ideal-entry-zone and setup-expiry rules by family.
+### FROZEN V1 DIRECTION
+
+Initial strategy floor contains six parallel families:
+
+1. Trend Pullback Continuation
+2. Breakout Expansion
+3. Breakout Retest Continuation
+4. Liquidity Sweep Reversal
+5. Failed Breakout Reversal
+6. Compression Expansion
+
+Opportunity and Entry Timing remain separate; BUY and SELL theses are independent; safety is outside weighted scoring.
+
+### CALIBRATE IN RESEARCH
+
+- family-specific Opportunity Score thresholds;
+- Entry Timing thresholds;
+- evidence-group weights;
+- synergy cap;
+- conflict penalty;
+- Red-Team calibration;
+- minimum Evidence Coverage;
+- chase/extension tolerance;
+- ideal-entry zone and setup-expiry values;
+- exact Market Episode duplicate/opportunity heuristics beyond frozen re-entry limit.
+
+### DEFER LATER
+
+- independent FVG/OB-led production family unless research proves it deserves one.
 
 ## Trade Plan / targets / exits
 
-**Resolved initial target/RR direction:**
+### FROZEN INITIAL POLICY
 
 ```text
-Credible structural target room <1.20R  → reject current plan
-1.20R–<1.50R                            → conditional/marginal
-1.50R–<2.00R                            → good
-2.00R+                                  → strong
-3R/4R+                                  → runner potential, not guaranteed
+Credible target room <1.20R  → current plan rejected
+1.20R–<1.50R                 → conditional; credible ~2R+ expansion path required
+1.50R–<2.00R                 → good
+2.00R+                       → strong
+3R/4R+                       → runner potential
 ```
 
-A `1.20R–<1.50R` plan requires a credible larger expansion path; initial V1 expects roughly `2R+` Expansion Target room with acceptable path quality. Higher RR does not increase monetary risk.
+Primary Structural Target is normally a management checkpoint. A valid Expansion Target is the default initial broker TP; a valid Primary Target may be used when no valid Expansion Target exists. Fixed 100/200/300-pip TP logic is not used. Runner extension requires fresh continuation/acceptance evidence and a new objective. V1 core logic does not depend on partial closes.
 
-**Resolved initial objective/TP direction:** Primary Structural Target is a management checkpoint rather than forced full exit. A valid Expansion Target is the default initial broker TP; if no valid Expansion Target exists, a valid Primary Target may be used. Fixed 100/200/300-pip TP logic is not used. Runner extension requires fresh continuation/acceptance evidence plus a newly defined structural/liquidity objective; profit alone cannot move TP endlessly.
+### CALIBRATE IN RESEARCH
 
-**Resolved V1 partial-profit direction:** core V1 does not depend on partial closes. The full position is managed through HOLD/PROTECT/TRAIL/RUNNER/EXIT so `0.01` minimum-lot accounts remain fully supported. Partial-profit research is a future/version option.
+- family-specific stop-buffer calculation;
+- Stop Quality numeric thresholds;
+- protection/trailing eligibility;
+- exact M5/M15/H1 structural trail precedence thresholds;
+- continuation/reversal thresholds for HOLD/PROTECT/TRAIL/RUNNER/EXIT;
+- objective-quality thresholds for runner progression;
+- future family/regime refinements to initial RR guard.
 
-Remaining Trade Plan/exit questions:
+### DEFER LATER
 
-- Exact family-specific stop-buffer calculation and Stop Quality thresholds.
-- Family/regime-specific refinements to the frozen initial RR guard after research.
-- Exact protection/trailing eligibility and M5/M15/H1 precedence thresholds.
-- Exact continuation/reversal score thresholds and objective-quality thresholds for runner progression/exit.
+- partial-profit system for larger divisible volume.
 
 ## Risk
 
-**Resolved profile boundaries:** `SMALL $100–$299`, `MEDIUM $300–$999`, `NORMAL $1,000+`.
-
-**Resolved initial risk policy:**
+### FROZEN INITIAL POLICY
 
 ```text
 Profile  Normal Risk   Elevated Risk    Entry Ceiling   Daily Lock
@@ -68,129 +110,188 @@ MEDIUM   2.0–3.0%      >3.0–4.5%        5%               9%
 NORMAL   1.0–2.0%      >2.0–3.5%        4%               7%
 ```
 
-**Resolved V1 capacity:** one independently risk-bearing Gold position (`0/1`); external Gold exposure blocks new bot entry.
+Capacity is `0/1`. Account Safety P/L uses cash-flow-adjusted equity change. Manual loss reset is OFF by default and, when explicitly enabled, max one per UTC risk day. Three consecutive closed bot losses trigger minimum 30-minute cooldown plus fresh M15 context; same Market Episode allows at most one genuinely fresh re-entry.
 
-**Resolved daily safety P/L:** daily lock is driven by cash-flow-adjusted account-equity change:
+### IMPLEMENTATION CHOICE
 
-```text
-AccountSafetyPL
-= CurrentVerifiedEquity
-- DayStartEquity
-- NetNonTradingCashFlowSinceDayStart
-```
+- broker-specific commission extraction where not already represented in executable/equity truth;
+- classification adapter for unusual broker balance/credit operations, provided unknown classification fails safely.
 
-Floating drawdown therefore counts immediately. Bot strategy-performance P/L remains separate from account-safety P/L. Manual reset creates a new audited risk-cycle reference while cumulative UTC-day P/L remains visible.
+### CALIBRATE IN RESEARCH
 
-**Resolved manual reset:** OFF by default; if enabled, max one `R,R` reset per UTC day, only from `LOSS_LOCKED`, with cumulative P/L/history preserved.
+- slippage reserve model by broker/session/volatility;
+- any drawdown-aware preference inside already frozen risk bands.
 
-**Resolved cooldown:** one ordinary loss does not trigger global cooldown; one fresh same-episode re-entry maximum; second same-episode loss locks that episode; 3 consecutive closed bot losses trigger minimum 30-minute cooldown plus fresh completed M15 context/fresh opportunity requirement.
+### DEFER LATER
 
-Remaining risk questions:
+- account profile below `$100`;
+- multi-position aggregate-risk model beyond V1 `0/1`;
+- separate emergency trade-count quota. V1 relies on intent uniqueness, episode/re-entry controls, one-shot writes and reconciliation rather than a normal trade quota.
 
-- Emergency safety ceiling and aggregate-risk semantics for future multi-position design.
-- Policy for accounts below `$100`.
-- Exact slippage-reserve model and commission treatment by broker/account type beyond costs already represented in broker equity/executable geometry.
-- Exact classification of unusual broker balance/credit adjustments as trading versus non-trading cash flow.
-- Exact keyboard timing window for `R,R`.
-- Exact drawdown-aware target-band reduction curve.
-- Emergency maximum-trade/runaway circuit-breaker value.
+### OPERATOR DETAIL TO FIX DURING UX IMPLEMENTATION
 
-**Resolved direction:** risk day is UTC calendar day at `00:00 UTC`.
+- exact `R,R` second-key timing window.
 
-## Session / news / position holding
+## Session / news
 
-**Resolved V1 holding policy:** flatten managed Gold before daily XAU break/weekend closure.
-
-**Resolved initial close/reopen timing:**
+### FROZEN INITIAL POLICY
 
 ```text
-Daily break:
-T-20m no new entry
-T-10m mandatory flatten
-Reopen: normalized conditions + 1 clean completed M5
-
-Weekend:
-T-60m no new entry
-T-30m mandatory flatten
-Reopen: gap assessment + normalized conditions + 2 clean completed M5
+TIER 1 CRITICAL  → -15/+15 min entry blackout
+TIER 2 HIGH      → -5/+5 min entry blackout
+TIER 3 CONTEXT   → no automatic hard blackout
 ```
 
-Timing is relative to verified broker XAU session schedule, not a guessed fixed clock.
-
-**Resolved initial news policy:**
+Severe post-news dislocation requires normalized conditions plus one clean completed M5.
 
 ```text
-TIER 1 CRITICAL   → -15 / +15 min hard entry blackout
-TIER 2 HIGH       → -5 / +5 min hard entry blackout
-TIER 3 CONTEXT    → no automatic hard blackout
+Daily break:   T-20m no new entry, T-10m mandatory flatten
+Daily reopen:  normalized conditions + 1 clean completed M5
+Weekend:       T-60m no new entry, T-30m mandatory flatten
+Weekend reopen: gap assessment + normalized conditions + 2 clean completed M5
 ```
 
-Known linked TIER 1 clusters remain blocked through final critical item +15 min. Existing trade is not auto-closed solely due to news. Severe post-event dislocation requires one clean completed M5 plus normalized execution conditions.
+### IMPLEMENTATION CHOICE
 
-Remaining session/news questions:
+- production event-provider adapter(s), freshness TTL and provider mapping, while preserving `NEWS_SAFETY_UNKNOWN` on required-truth failure.
 
-- Final production event provider(s), freshness TTL and provider-specific mapping table.
-- Detailed handling of unusual long-duration speeches/unscheduled event classification.
-- Future research-backed changes, if any, to frozen initial event tiers/windows.
-- Exact holiday/liquidity-caution adjustments, if any, to soft scoring.
-- Future research-backed changes, if any, to initial close/reopen timing.
+### CALIBRATE IN RESEARCH
+
+- holiday/liquidity caution contribution to soft scoring;
+- future evidence-backed changes to blackout/reopen timings.
+
+### DEFER LATER
+
+- special long-duration speech taxonomy beyond ordinary event/shock handling unless required by actual provider data.
 
 ## Execution / broker safety
 
-**Resolved initial spread policy:** use healthy broker/symbol spread baseline. `SpreadRatio <=1.50` normal; `>1.50–2.25` elevated with full revalidation but not automatic block; `>2.25` block current entry. Independent guard blocks if spread exceeds 25% of approved entry-to-structural-SL price distance.
+### FROZEN INITIAL POLICY
 
-**Resolved initial price-drift policy:** adverse drift normalized by planned stop distance. `<=10%` normal revalidation; `>10–20%` elevated full revalidation; `>20%` blocks current Execution Intent/returns to WAIT when thesis survives. Risk/stop/target-room/chase invalidation blocks regardless of ratio.
+Spread:
 
-**Resolved V1 controller/failover policy:** one shared cross-machine controller lease with monotonic fencing epoch. Initial renewal target is 10 seconds and TTL is 30 seconds. Every irreversible broker write must freshly verify current holder + non-expired matching epoch. A second laptop stays Observer while another valid controller exists. Standby takeover may occur only after lease expiry, must acquire a new epoch atomically, and must complete durable-state + broker reconciliation before becoming PRIMARY READY. Old/stale epochs cannot write after failover. Coordination uncertainty fails closed for broker writes.
+```text
+SpreadRatio <=1.50        → NORMAL
+>1.50–2.25                → ELEVATED + full revalidation
+>2.25                     → current entry prevented
+spread >25% of SL distance→ current entry prevented
+```
 
-Remaining execution questions:
+Adverse price drift:
 
-- Exact healthy-spread rolling sampling window, minimum valid sample count and persisted-baseline expiry.
-- Exact DEMO-to-future-REAL approval/config mechanism; REAL uses same centralized gate/engine.
-- Final shared coordination-store backend/library satisfying the frozen lease/fencing contract.
-- Exact broker comment/magic/lineage conventions.
-- Exact retry policy for safe read-only/before-submit operations; irreversible ambiguous writes remain no-blind-retry.
-- Future research-backed changes, if any, to initial spread/drift bands or controller lease timing.
+```text
+<=10% of planned SL distance   → normal revalidation
+>10–20%                        → elevated full revalidation
+>20%                           → current intent prevented / WAIT if thesis survives
+```
+
+Controller:
+
+```text
+one PRIMARY
+10s renewal target
+30s lease TTL
+monotonic fencing epoch
+fresh ownership before every broker write
+standby takeover only after expiry + full reconciliation
+```
+
+Environment:
+
+```text
+Verified connected MT5 DEMO account → DEMO_GUARD PASS
+DEMO status not verified            → broker-write permission not granted
+```
+
+V1 defines only the positive DEMO guard. There is no separate REAL authorization policy or REAL hard-block contract in V1.
+
+### IMPLEMENTATION CHOICE
+
+- shared coordination-store product/library, provided frozen atomic lease + fencing contract is satisfied;
+- exact broker comment string shape and magic integer, provided durable Execution Intent/Trade lineage remains authoritative and magic/comment are only reconciliation aids;
+- bounded retry/backoff mechanics for safe read-only/pre-submit operations; irreversible ambiguous writes remain one-shot/reconciliation-only.
+
+### CALIBRATE IN RESEARCH / DEMO OBSERVATION
+
+- healthy-spread baseline sample window/minimum count and persisted-baseline expiry;
+- future evidence-backed spread/drift/lease timing refinements.
 
 ## Persistence / backup / migration
 
-- Final storage engines/formats for durable state and research/learning data.
-- Exact Git-tracked state artifacts versus generated checkpoint artifacts.
-- Backup/checkpoint cadence, retention and pruning policy.
-- Exact financial-authority secret scanner/tooling and CI integration.
-- State schema migration/rollback compatibility policy.
-- Exact portable export/import packaging and integrity format.
-- Whether backup publication to GitHub is automatic or performed by a controlled external/script workflow; GitHub credentials never embedded in tracked state.
+### FIX BEFORE BUILD
+
+None at behavioural-contract level. Broker truth remains authoritative for live positions/orders/deals; critical local lifecycle/risk state must persist and reconcile.
+
+### IMPLEMENTATION CHOICE
+
+Initial implementation may choose the storage stack, schema layout, checkpoint format, migration mechanism, backup cadence/retention and export packaging provided it satisfies:
+
+- atomic/durable critical state;
+- schema versioning;
+- restart recovery;
+- Strategy Registry + learning portability;
+- broker reconciliation;
+- fresh-machine restore test;
+- public backup of useful project intelligence;
+- financial-authority secret exclusion/scanning.
+
+Live mutable database files need not be Git-merged directly if a safer portable checkpoint/export represents the same required recovery state.
 
 ## Research / learning / autonomous improvement
 
-- Exact minimum independent sample/confidence requirements by family/regime.
-- Exact development/validation/final-holdout periods and walk-forward/stress requirements.
-- Exact Shadow, DEMO Canary and Main DEMO promotion thresholds.
-- Exact bounded StrategyMemory influence/adjustment limits.
-- Exact Entry Learning and Exit Learning candidate-creation thresholds.
-- Exact autonomous recipe grammar and allowed parameter ranges for each primitive.
-- Exact duplicate-variant versus genuinely-new-family classifier.
-- Exact Monte Carlo/block/regime-aware method if used.
-- Whether any ML model is included in V1 beyond explicit interpretable baseline logic.
+### FROZEN PRINCIPLE
+
+Research is automatic where practical but cannot self-promote production, bypass hard safety, generate/execute arbitrary Python or leak future data into replay.
+
+### CALIBRATE IN RESEARCH
+
+- minimum sample/confidence requirements by family/regime;
+- development/validation/holdout periods;
+- walk-forward/stress details;
+- Shadow/DEMO Canary/Main DEMO promotion thresholds;
+- bounded StrategyMemory influence;
+- Entry/Exit Learning candidate thresholds;
+- autonomous recipe parameter ranges;
+- duplicate-variant classifier;
+- Monte Carlo/block/regime-aware methods if useful.
+
+### DEFER LATER
+
+- opaque/complex ML model as a V1 dependency. V1 remains fully functional with explicit interpretable logic.
 
 ## Operator / dashboard
 
-- Final terminal dimensions/section order after implementation proves readability.
-- Exact dashboard refresh cadence; presentation refresh must not become decision cadence.
-- Exact `R,R` keyboard timing and safe-shutdown/export controls.
-- Optional notification channels for critical health/trade events.
-- Final wording polish for English technical terms plus concise Roman-Urdu explanations.
+### IMPLEMENTATION CHOICE
+
+- exact terminal dimensions/section order;
+- dashboard refresh cadence independent of decision cadence;
+- safe-shutdown/export key layout;
+- concise English/Roman-Urdu wording polish.
+
+### DEFER LATER
+
+- optional external notification channels.
 
 ## Engineering / release
 
-- Exact Python/runtime dependency versions and packaging policy.
-- Final source filenames/classes once implementation starts.
-- Exact persistence database/library choices.
-- Exact CI/static/security/coverage thresholds.
-- Exact controlled MT5 DEMO certification sample/steps and long-duration forward-evidence requirement.
-- Final release packaging/version/tag strategy.
+### IMPLEMENTATION CHOICE
 
-## Governance note
+- exact supported Python/dependency versions;
+- final filenames/classes;
+- persistence libraries;
+- CI/static/security/coverage thresholds;
+- packaging/version/tag layout.
 
-No major architectural subsystem is currently missing from the design corpus. Remaining items must be chosen, validated or explicitly deferred rather than guessed.
+### REQUIRED BEFORE VERIFIED RELEASE
+
+- controlled MT5 DEMO certification;
+- no-lookahead replay proof;
+- duplicate-write/fault-injection proof;
+- restart/reconciliation proof;
+- fresh-machine recovery proof;
+- financial-secret scan;
+- final release audit with actual evidence.
+
+## Governance conclusion
+
+The design phase should no longer wait for research-calibration numbers or ordinary library/file choices. Those are explicitly classified above. The next design work is the final contradiction/coverage audit, `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`, final synchronization of `FINAL_BUILD_PROMPT.md`, User Manual, Setup/Run Guide and Coder Guide, then implementation may begin in large phases.
