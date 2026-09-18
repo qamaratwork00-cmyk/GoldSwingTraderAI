@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT  
-**Version:** 1.1-implementation-map  
+**Version:** 1.2-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -80,7 +80,7 @@ persistence/store.py
 persistence/runtime_state.py
 ```
 
-PRE_CLOSE/reopen/news safety are explicit hard authorities. Persistence uses standard-library SQLite + canonical JSON/checksum/schema/event records and restores risk/cooldown/episode/Opportunity/TradePlan state without silently defaulting corrupted critical data.
+PRE_CLOSE/reopen/news safety are explicit hard authorities. Persistence uses standard-library SQLite + canonical JSON/checksum/schema/event records and restores critical state without silently defaulting corruption.
 
 ### Phase 7 — Execution + Reconciliation — IMPLEMENTED deterministic baseline + CI green
 
@@ -107,7 +107,7 @@ hard authorities
 → broker reconciliation
 ```
 
-A success-like MT5 ACK is not treated as final truth until broker state verifies it. An Intent ID cannot be sent twice. Ambiguous acknowledgement is never blindly retried. Elevated spread/drift may pass after full revalidation; only frozen hard limits block.
+A success-like MT5 ACK is not final truth until broker state verifies it. An Intent ID cannot be sent twice. Ambiguous acknowledgement is never blindly retried. Elevated spread/drift may pass after full revalidation; only frozen hard limits block.
 
 Pending before failover/DEMO certification: production shared cross-laptop coordination backend and real Windows/MT5 execution evidence. In-memory coordination is test-only.
 
@@ -120,9 +120,7 @@ management/store.py
 management/execution.py
 ```
 
-The manager owns HOLD / PROTECT / TRAIL / RUNNER / EXIT for verified bot-owned positions. Ordinary pullbacks do not force exit; small profit alone does not force breakeven; Primary is a checkpoint; runner needs fresh continuation + actual next objective; PRE_CLOSE overrides continuation. Durable trade state changes only after broker verification.
-
-Numeric management thresholds remain research-calibratable baselines.
+HOLD / PROTECT / TRAIL / RUNNER / EXIT operates on verified bot-owned positions. Ordinary pullbacks do not force exit; small profit alone does not force breakeven; Primary is a checkpoint; runner needs fresh continuation + actual next objective; PRE_CLOSE overrides continuation. Durable trade state changes only after broker verification.
 
 ### Phase 9 — Dashboard / Operator presentation — IMPLEMENTED deterministic baseline + CI green
 
@@ -131,9 +129,50 @@ operator/dashboard.py
 operator/__init__.py
 ```
 
-Current terminal renderer is pure standard library and read-only. It displays already-authoritative facts and preserves requested GoldScalperAI visibility: symbol/account/DEMO/role, Bid/Ask/spread/M5 timer, structure, EMA20/50, RSI, ATR, decision/reason/scores, risk/lot/day P&L/limits, position/loss streak/cooldown, execution/controller/reconciliation, open-trade SL/TP/objectives/R/manager, Learning/Backup/Health summaries.
+Pure-standard-library read-only renderer. It preserves requested GoldScalperAI visibility and consumes, rather than recreates, decision/risk/execution authority.
 
-It provides emoji + plain-text fallback and concise Roman-Urdu reason explanations. It does not call MetaTrader5, Risk Engine or Execution Gate. Runtime state-builder/in-place live refresh remain later integration work.
+### Phase 10 — Replay / Learning / Discovery / Invention — IMPLEMENTED deterministic foundation + CI green
+
+```text
+research/replay.py
+research/metrics.py
+research/learning.py
+research/episode_journal.py
+research/discovery.py
+research/invention.py
+research/promotion.py
+```
+
+Research flow:
+
+```text
+chronological completed-candle replay
+→ production Intelligence + Decision semantics
+→ actual/counterfactual outcome metrics
+→ durable research episodes
+→ approved-primitive observations
+→ recurring cluster detection
+→ candidate creation OR explicit suppression reason
+→ durable CandidateRegistry
+→ governed validation/promotion lifecycle
+```
+
+Important implementation guarantees:
+- replay is prefix-only and labeled `BAR_CLOSE`, never falsely claimed tick-perfect;
+- actual broker P/L and counterfactual missed/blocked MFE stay separate;
+- research measures Net R, drawdown, Capture Efficiency, 2R/3R/4R reach and Opportunity Recall rather than win rate alone;
+- StrategyMemory is version/environment/context isolated and its initial adaptive influence is bounded;
+- discovery requires independent episode IDs; duplicate records cannot fake sample size;
+- candidate recipes use only audited declarative primitives, never arbitrary Python/eval/exec;
+- recurring evidence can create a real durable `VARIANT`, `NEW_FAMILY`, `ENTRY_POLICY` or `EXIT_POLICY` candidate;
+- substantially duplicate/rejected candidates are remembered and suppressed after restart;
+- discovery liveness is explicit: eligible evidence must create a candidate or return a governed suppression reason;
+- candidates cannot skip validation stages;
+- locked candidate fingerprint must survive unchanged through one-shot final holdout;
+- autonomous candidates cannot self-promote;
+- research/promotion registries never grant direct broker authority.
+
+Initial discovery sample/similarity/complexity values and learning influence remain research-calibratable baselines, not frozen profitability truth.
 
 ## Deterministic test ownership
 
@@ -154,6 +193,9 @@ tests/test_execution_safety.py
 tests/test_trade_manager.py
 tests/test_management_execution.py
 tests/test_dashboard.py
+tests/test_discovery_invention.py
+tests/test_discovery_journal.py
+tests/test_promotion_governance.py
 ```
 
 CI gates remain:
@@ -181,7 +223,10 @@ Deterministic CI green is software evidence, not profitability proof or live DEM
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/dashboard.py` |
-| Replay/learning/research | `40-research-learning/*` | **Phase 10 next** |
+| Replay/validation | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `metrics.py` |
+| StrategyMemory | `40-research-learning/LEARNING_AND_AI_BOUNDARIES.md` | `research/learning.py` |
+| Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `research/episode_journal.py`, `discovery.py`, `invention.py` |
+| Promotion lifecycle | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `research/promotion.py` |
 
 ## Coding invariants
 
@@ -192,17 +237,16 @@ Deterministic CI green is software evidence, not profitability proof or live DEM
 - positive balance alone is not an eligibility restriction;
 - raw broker writes live only in `execution/mt5_writer.py`;
 - critical local state never pretends ambiguous broker action succeeded;
-- dashboard/research have zero production broker authority;
+- dashboard/research/discovery have zero raw production broker authority;
+- discovery must not be silently inert when eligible evidence exists;
 - no unnecessary frameworks/factories/service-manager layers;
 - financial-authority credentials never enter tracked project state.
 
-## Next implementation owner — Phase 10
+## Next engineering work
 
-Build chronological replay, journals/performance metrics, entry/exit learning, large-move recall and governed bounded strategy research/invention.
+Phase 10 still needs broader replay/fault/stress evidence and integration of research state into live operator status. After that, Phase 11 is controlled Windows/MT5 DEMO integration/certification.
 
-Phase 10 must optimize for **accuracy plus opportunity recall**, not win rate alone. It must measure missed valid moves and capture efficiency so research does not make the bot progressively over-restrictive.
-
-Research may create/evaluate declarative candidates but cannot change hard risk/execution rules, call the broker, use future data, execute generated Python or silently promote itself into production.
+Research tuning must optimize **accuracy + Net R + drawdown + opportunity recall + large-move capture + sensible trade frequency**, not win rate alone. A change that removes many good opportunities to improve a headline percentage is not automatically an improvement.
 
 ## Debugging order
 
@@ -216,5 +260,6 @@ MarketSnapshot
 → Execution / Reconciliation
 → ManagedTrade / Trade Manager
 → Dashboard
-→ Replay / Research / Learning
+→ Replay / Metrics / Episode Journal
+→ Discovery / Invention / Promotion
 ```
