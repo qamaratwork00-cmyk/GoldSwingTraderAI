@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — System Contract
 
 **Status:** PROVISIONAL  
-**Version:** 0.5-design  
+**Version:** 0.6-design  
 **Authority:** Highest-level behavioural contract
 
 ## Core contract
@@ -15,9 +15,12 @@ If another document conflicts with this contract, the contradiction must be form
 - H4, H1, M15 and M5 are primary timeframes.
 - Completed candles are authoritative for structural confirmation; unfinished candles may supply telemetry only where explicitly allowed.
 - Market analysis runs in parallel rather than as a long sequential filter chain.
-- Candle/structure, technical/location, liquidity/SMC, indicator/quant, fundamental/session and strategy specialists publish bounded evidence from the same verified snapshot.
+- Candle/structure, technical/location, technical confluence, liquidity/SMC, indicator/quant, fundamental/session and strategy specialists publish bounded evidence from the same verified snapshot.
+- Technical confluence may include causal trendlines, Fibonacci geometry and broker-local volume-profile/POC context.
+- Trendline, Fibonacci and POC are **optional soft confluence** intended to improve directional/setup accuracy. They are not universal entry requirements or hard safety gates.
 - Missing optional non-safety evidence is not automatically bearish/zero.
 - Strong opposing evidence matters more than missing confluence.
+- Optional confluence should be evaluated through replay/ablation for whether it improves accuracy, Net R and capture without unnecessarily reducing valid opportunity recall/trade frequency.
 
 ## Decision contract
 
@@ -48,7 +51,9 @@ Initial V1 families:
 5. `FAILED_BREAKOUT_REVERSAL`
 6. `COMPRESSION_EXPANSION`
 
-FVG, qualified Order Block, premium/discount, liquidity pools, session highs/lows, EMA20/EMA50, RSI, ATR and individual candle patterns are primarily evidence primitives, not mandatory independent production strategies.
+FVG, qualified Order Block, premium/discount, liquidity pools, session highs/lows, EMA20/EMA50, RSI, ATR, causal trendlines, Fibonacci geometry, broker-local POC/volume profile and individual candle patterns are primarily evidence primitives, not mandatory independent production strategies.
+
+Trendline/Fibonacci/POC confluence is **bonus/support evidence only in the initial implementation**: supportive presence may increase a family/thesis score within bounded limits; absence must not reduce the base strategy score; disagreement may be recorded as context/conflict but must not automatically become a hard BLOCK.
 
 All strategy families evaluate the same verified market snapshot in parallel. Compatible agreement may add bounded support; correlated evidence must not be counted as independent certainty repeatedly.
 
@@ -195,6 +200,8 @@ Research evaluates completed trades, missed opportunities, blocked/rejected oppo
 
 Governed discovery/autonomous invention may propose bounded declarative candidates but may not directly rewrite production code, hard risk controls, broker permissions or safety gates.
 
+Trendline/Fibonacci/POC evidence may participate in research/discovery only as audited declarative primitives/context. Discovery may later prove a distinct setup family, but initial production must not silently convert them into mandatory filters or a new strategy family without governed evidence/promotion.
+
 No `eval`, `exec`, arbitrary generated executable Python or silent self-modification is part of intended autonomous strategy design.
 
 Promotion is evidence-driven and cannot occur silently.
@@ -210,6 +217,8 @@ Normal trading decisions and technical faults are separate.
 ## Operator contract
 
 The dashboard remains compact and mostly read-only. It preserves useful prior GoldScalperAI observability and adds separate Decision, Execution, Learning, Backup and System Health state. Presentation never becomes trading authority.
+
+Trendline/Fibonacci/POC may be surfaced compactly when useful, but operator display must make clear that they are confluence/context rather than hard permission gates.
 
 ## Development contract
 
