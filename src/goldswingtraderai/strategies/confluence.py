@@ -1,13 +1,13 @@
 """Positive-only strategy confluence bonuses.
 
 Trendline, Fibonacci and POC context may strengthen an already-existing strategy
-hypothesis, but they never reduce a family score, never become mandatory evidence,
-and never grant risk/execution permission.
+hypothesis, but they never reduce a family score, become mandatory evidence, or
+grant risk/execution permission.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from goldswingtraderai.domain.enums import Direction, StrategyFamily, Timeframe
 from goldswingtraderai.intelligence.confluence import LineEvent, PocRelation
@@ -22,15 +22,31 @@ from goldswingtraderai.strategies.floor import (
 _MAX_SCORE_BONUS = 6.0
 
 
+@dataclass(frozen=True, slots=True)
+class ConfluenceBonusConfig:
+    """Enable individual soft-confluence sources without changing their semantics.
+
+    Production defaults keep every implemented source enabled. Research may disable
+    sources for ablation; disabling a source can only remove its positive bonus and
+    can never create a penalty or hard gate.
+    """
+
+    trendline: bool = True
+    fibonacci: bool = True
+    poc: bool = True
+
+
 def apply_optional_confluence(
     report: StrategyFloorReport,
     intelligence: IntelligenceSnapshot,
+    config: ConfluenceBonusConfig | None = None,
 ) -> StrategyFloorReport:
     """Apply bounded positive-only confluence without creating a new hard filter."""
 
+    cfg = config or ConfluenceBonusConfig()
     m15 = intelligence.for_timeframe(Timeframe.M15)
     m5 = intelligence.for_timeframe(Timeframe.M5)
-    families = tuple(_boost_family(family, m15, m5) for family in report.families)
+    families = tuple(_boost_family(family, m15, m5, cfg) for family in report.families)
     return StrategyFloorReport(families=families)
 
 
@@ -38,11 +54,12 @@ def _boost_family(
     report: FamilyReport,
     m15: TimeframeIntelligence,
     m5: TimeframeIntelligence,
+    config: ConfluenceBonusConfig,
 ) -> FamilyReport:
     return replace(
         report,
-        buy=_boost_case(report.family, Direction.BUY, report.buy, m15, m5),
-        sell=_boost_case(report.family, Direction.SELL, report.sell, m15, m5),
+        buy=_boost_case(report.family, Direction.BUY, report.buy, m15, m5, config),
+        sell=_boost_case(report.family, Direction.SELL, report.sell, m15, m5, config),
     )
 
 
@@ -52,8 +69,14 @@ def _boost_case(
     case: DirectionalFamilyCase,
     m15: TimeframeIntelligence,
     m5: TimeframeIntelligence,
+    config: ConfluenceBonusConfig,
 ) -> DirectionalFamilyCase:
-    supports = _support_labels(family, direction, m15) + _support_labels(family, direction, m5)
+    supports = _support_labels(family, direction, m15, config) + _support_labels(
+        family,
+        direction,
+        m5,
+        config,
+    )
     if not supports:
         return case
 
@@ -72,6 +95,7 @@ def _support_labels(
     family: StrategyFamily,
     direction: Direction,
     frame: TimeframeIntelligence,
+    config: ConfluenceBonusConfig,
 ) -> tuple[str, ...]:
     confluence = frame.confluence
     if confluence is None:
@@ -81,7 +105,7 @@ def _support_labels(
     support = confluence.support_trendline
     resistance = confluence.resistance_trendline
 
-    if family is StrategyFamily.TREND_PULLBACK_CONTINUATION:
+    if config.trendline and family is StrategyFamily.TREND_PULLBACK_CONTINUATION:
         if direction is Direction.BUY and support is not None and support.event in {
             LineEvent.TOUCH,
             LineEvent.RECLAIM,
@@ -93,7 +117,7 @@ def _support_labels(
         }:
             output.append("TRENDLINE_PULLBACK_RESISTANCE")
 
-    if family in {
+    if config.trendline and family in {
         StrategyFamily.BREAKOUT_EXPANSION,
         StrategyFamily.BREAKOUT_RETEST_CONTINUATION,
         StrategyFamily.COMPRESSION_EXPANSION,
@@ -104,17 +128,16 @@ def _support_labels(
             output.append("TRENDLINE_BREAK_SELL")
 
     fib = confluence.fibonacci
-    if fib is not None and fib.direction is direction:
+    if config.fibonacci and fib is not None and fib.direction is direction:
         if fib.in_core_retracement:
             output.append("FIB_CORE_RETRACEMENT")
         elif fib.in_deep_retracement:
             output.append("FIB_DEEP_RETRACEMENT")
 
-    # POC is intentionally weaker and direction-neutral by itself. It counts only
-    # when a directional confluence already exists, so "price near POC" cannot
-    # manufacture a trade thesis on its own.
+    # POC is direction-neutral. It only joins an already-directional technical
+    # confluence label so "price near POC" cannot manufacture a thesis by itself.
     profile = confluence.volume_profile
-    if output and profile is not None and profile.relation is PocRelation.NEAR:
+    if config.poc and output and profile is not None and profile.relation is PocRelation.NEAR:
         output.append("POC_LOCATION_CONFLUENCE")
 
     return tuple(output)
