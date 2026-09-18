@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 1.3-design  
-**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research data/evidence integrity, crash/restart, migration, learning-governance and release verification.  
+**Version:** 1.4-design  
+**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research data/evidence integrity, historical session-policy replay, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
 ## Purpose
@@ -17,7 +17,7 @@ Testing must prove documented invariants. `VERIFIED` is reserved for behaviour t
 Unit / Contract
 → Component
 → Deterministic Replay
-→ Research Ablation / Outcomes / Manager / Stress / Walk-Forward
+→ Research Ablation / Outcomes / Manager / Historical Session / Stress / Walk-Forward
 → Dataset / Acquisition / Evidence / Package Integrity
 → Integration / Fault Injection / Persistence
 → Controlled Windows MT5 / DEMO
@@ -32,6 +32,25 @@ Future data cannot leak into structure, confluence, decisions, Trade Plans, mana
 ## Research replay / stress / validation
 
 Tests preserve same-bar ambiguity, production Trade Manager reuse, non-retroactive modifications, explicit friction assumptions, fixed-policy walk-forward boundaries, development-not-scored and final-holdout separation.
+
+## Historical session / PRE_CLOSE replay
+
+`research/session_history.py` and session-aware `research/management_replay.py` must prove:
+
+- historical schedules require explicit source label/version and UTC verified coverage;
+- trading intervals are chronological, non-overlapping and inside coverage;
+- no default/guessed broker close time exists;
+- DAILY no-entry/flatten behaviour comes from production `evaluate_market_permission()` and remains `T-20/T-10`;
+- WEEKEND behaviour remains `T-60/T-30` through the same production authority;
+- time inside verified coverage but outside a tradeable interval is CLOSED;
+- time outside verified coverage raises `HistoricalSessionCoverageError` rather than assuming OPEN/CLOSED;
+- close instant belongs to the closed side;
+- session-aware manager replay passes production mandatory PRE_CLOSE flatten into `evaluate_trade_manager()`;
+- a verified T-5 DAILY replay event can produce manager `PRE_CLOSE_FLATTEN` exit;
+- replay candle/session schedule contradictions fail explicitly instead of silently treating CLOSED time as normal trading;
+- replay without a schedule preserves baseline behaviour but cannot be reported as historical PRE_CLOSE parity.
+
+Synthetic schedules prove software semantics only. They are not evidence that a real broker used those times historically.
 
 ## Dataset / evidence identity
 
@@ -68,7 +87,7 @@ A package path is not evidence identity; hashes are authority.
 
 ## Risk / execution / session / persistence
 
-Risk tests cover all frozen bands, no `$100` floor, min-lot actual risk, daily lock/reset/cooldown and 0/1 capacity. Execution tests cover positive DEMO guard, central gate, exactly-one-send, reconciliation and controller fencing. Session/news tests cover frozen blackout/PRE_CLOSE/reopen rules. Persistence/fault tests protect restart and corruption handling.
+Risk tests cover all frozen bands, no `$100` floor, min-lot actual risk, daily lock/reset/cooldown and 0/1 capacity. Execution tests cover positive DEMO guard, central gate, exactly-one-send, reconciliation and controller fencing. Runtime session/news tests cover frozen blackout/PRE_CLOSE/reopen rules. Persistence/fault tests protect restart and corruption handling.
 
 ## Discovery / promotion
 
@@ -76,25 +95,27 @@ Discovery accepts audited declarative primitives and enforces candidate-or-suppr
 
 ## CI versus controlled broker evidence
 
-Public CI is credential-free software evidence. Windows MT5 acquisition, cross-machine coordination and DEMO execution need controlled environment evidence with secrets outside the repository.
+Public CI is credential-free software evidence. Windows MT5 acquisition, real historical broker-session schedule evidence, cross-machine coordination and DEMO execution need controlled environment evidence with secrets outside the repository.
 
 ## Evidence reporting
 
 ```text
 Unit / deterministic CI       PASS / count
 Replay chronology              PASS
+Historical PRE_CLOSE software  PASS / verified synthetic schedule semantics
 Stress / walk-forward          PASS / declared assumptions/windows
 Dataset identity               PASS / dataset_sha256
 Portable dataset bundle        PASS / bundle manifest SHA
 MT5 acquisition software       PASS / exact-count + spread provenance
 Evidence manifest              PASS / input + manifest SHA
 Immutable evidence package     PASS / package SHA
+Real historical session source PENDING/PASS
 Windows MT5 real history       PENDING/PASS
 Fresh-machine restore          PENDING/PASS
 DEMO execution                 PENDING/PASS
 ```
 
-Current deterministic checkpoint after evidence packages: **183 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic checkpoint after historical-session/PRE_CLOSE integration: **189 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Release-blocking failures
 
@@ -105,6 +126,8 @@ At minimum:
 - favorable ambiguity guessing;
 - stress rewriting structural geometry/original R;
 - hidden walk-forward tuning or holdout bypass;
+- historical session times guessed/defaulted when PRE_CLOSE parity is claimed;
+- session-aware replay treating out-of-coverage or verified CLOSED time as normal OPEN data;
 - dataset/evidence/package hash inconsistency accepted;
 - evidence package accepting a mismatched dataset bundle;
 - historical acquisition silently shrinking sample or inventing spread;
@@ -117,15 +140,15 @@ At minimum:
 
 ## Explicit non-goals
 
-Software correctness is not profitability proof. Synthetic fixtures are not real-market validation. Evidence packages are not broker statements and do not turn modeled P/L into realized P/L.
+Software correctness is not profitability proof. Synthetic fixtures/schedules are not real-market validation. Evidence packages are not broker statements and do not turn modeled P/L into realized P/L.
 
 ## Open questions
 
 - final CI coverage/static/security thresholds;
 - controlled Windows/MT5 historical acquisition matrix;
+- trustworthy historical broker-session source/version/coverage matrix;
 - higher-level evidence catalog/publication convention;
 - real-data walk-forward sample requirements;
-- historical PRE_CLOSE/session integration;
 - empirical execution-friction calibration;
 - final DEMO certification/forward-evidence requirement;
 - optional-confluence retention threshold.
