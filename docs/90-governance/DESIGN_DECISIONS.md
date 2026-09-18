@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.7-design
+**Version:** 0.8-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -239,9 +239,14 @@ This ledger records accepted/provisional architectural decisions so future imple
 
 ## DEC-046 — Profile hard entry ceilings and daily loss locks
 
-**Decision:** Initial V1 hard new-entry ceilings are `SMALL 7%`, `MEDIUM 5%`, `NORMAL 4%`. Initial UTC-risk-day loss locks are `SMALL 12%`, `MEDIUM 9%`, `NORMAL 7%`. These are hard limits, not normal Target Risk values; Target Risk and acceptable bands remain lower separately calibrated values.  
+**Decision:** Initial V1 hard new-entry ceilings are `SMALL 7%`, `MEDIUM 5%`, `NORMAL 4%`. Initial UTC-risk-day loss locks are `SMALL 12%`, `MEDIUM 9%`, `NORMAL 7%`. These are hard limits, not normal Target Risk values.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+
+## DEC-047 — Initial normal and elevated Gold risk bands
+
+**Decision:** Initial DEMO/research risk bands are: `SMALL normal 3.0%–4.5%, elevated >4.5%–6.5%`; `MEDIUM normal 2.0%–3.0%, elevated >3.0%–4.5%`; `NORMAL normal 1.0%–2.0%, elevated >2.0%–3.5%`. Elevated risk is a bounded tolerance for valid Gold/minimum-lot/structural geometry, not the preferred target and never permission to exceed DEC-046 hard ceilings.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Preserve practical Gold trading room for small/medium accounts while keeping explicit upper bounds and a daily circuit breaker.
+**Reason:** Keep Gold tradable across account sizes without reverting to exact-percentage-or-no-trade sizing while preserving explicit hard limits.
 
 ## Change rule
 
