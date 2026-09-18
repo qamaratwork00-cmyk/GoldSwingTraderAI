@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 2.4-implementation-map  
+**Version:** 2.5-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -9,7 +9,7 @@
 
 > **One primary owner per responsibility; facts flow forward; irreversible broker authority stays narrow and last.**
 
-## Current package shape — Phase 10 + Phase 11 local backup foundation
+## Current package shape — Phase 10 + Phase 11 backup/controller foundation
 
 ```text
 src/goldswingtraderai/
@@ -28,6 +28,13 @@ src/goldswingtraderai/
 │   ├── checkpoint.py
 │   └── backup.py
 ├── execution/
+│   ├── controller.py
+│   ├── sqlite_coordination.py
+│   ├── gate.py
+│   ├── intent_store.py
+│   ├── mt5_writer.py
+│   ├── reconcile.py
+│   └── service.py
 ├── management/
 ├── operator/
 ├── security/
@@ -74,6 +81,12 @@ StateStore
 → selected verified checkpoint
 → fresh local StateStore
 → broker reconciliation required
+
+controller CoordinationStore
+→ atomic lease/fencing backend
+→ ControllerLeaseManager
+→ takeover reconciliation gate
+→ ExecutionService pre-write verification
 
 read-only MT5 history/offline source
 → research acquisition/dataset identity
@@ -139,11 +152,41 @@ Responsibilities:
 
 This module has **no remote authentication/publication responsibility**. GitHub/cloud publication belongs to external authenticated tooling with credentials kept outside repository/checkpoint state.
 
+### `execution/controller.py`
+Primary owner of lease/fencing policy and write-authority verification.
+
+Responsibilities:
+
+- `CoordinationStore` protocol;
+- controller lease/epoch identity;
+- fresh holder/epoch/expiry verification before every broker write;
+- fail-closed UNKNOWN/BLOCK on missing/uncertain coordination truth;
+- expired-lease takeover state;
+- `CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED` gate;
+- explicit `complete_takeover_reconciliation()` only after external durable/broker recovery is complete;
+- stale holder denial.
+
+A takeover may own a new epoch while still being forbidden from broker writes.
+
+### `execution/sqlite_coordination.py`
+Durable transactional implementation of `CoordinationStore` for independent processes sharing one SQLite coordination database.
+
+Responsibilities:
+
+- `BEGIN IMMEDIATE` atomic acquire/renew/release;
+- exactly one live lease per managed scope;
+- separate persistent monotonic epoch ledger;
+- strict holder+epoch checks on renew/release;
+- SQLite integrity + lease/epoch consistency checks;
+- explicit `shared_locking_verified` deployment assertion, false by default.
+
+This module does **not** certify arbitrary network filesystems. Cross-laptop production suitability belongs to controlled deployment/fault evidence. If the chosen shared storage cannot prove correct SQLite locking/durability, the backend must be replaced rather than weakening fencing semantics.
+
 ### `security/financial_secrets.py`
 Shared credential detection. Source scanning remains fixture-safe; structured checkpoint payload scanning is stricter. No trading authority.
 
-### `execution/`
-Single raw broker-write authority: centralized permission gate, durable intent, writer, reconciliation and controller/fencing semantics.
+### other `execution/`
+Single raw broker-write authority: centralized permission gate, durable Intent, writer and broker reconciliation. `ExecutionService` freshly verifies controller authority and fencing epoch immediately before irreversible send.
 
 ### `management/`
 Verified open-trade HOLD/PROTECT/TRAIL/RUNNER/EXIT decisions. No raw MT5 writes.
@@ -169,6 +212,9 @@ checkpoint restore → broker-write authority        NO
 checkpoint restore → overwrite/merge live DB       NO
 backup.py          → embedded GitHub/cloud token   NO
 backup catalog     → execution authority           NO
+coordination DB    → broker truth                   NO
+new fencing epoch  → immediate write authority     NO
+takeover manager   → self-declared reconciliation  NO
 security scanner   → trading policy                NO
 invention          → arbitrary Python/eval/exec    NO
 candidate          → self-promotion                NO
@@ -184,6 +230,8 @@ Later suites include:
 tests/test_persistence_recovery.py
 tests/test_runtime_checkpoint.py
 tests/test_backup_catalog.py
+tests/test_execution_safety.py
+tests/test_sqlite_coordination.py
 tests/test_management_replay.py
 tests/test_research_ablation.py
 tests/test_research_outcomes.py
@@ -199,14 +247,15 @@ tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Current verified checkpoint: **202 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current verified checkpoint: **209 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Remaining Phase-11 work
 
-- authenticated public-safe GitHub publication workflow for already-verified artifacts;
+- integrate startup/restore/broker reconciliation with takeover completion;
 - controlled fresh-machine restore + real broker reconciliation drill;
-- production shared cross-laptop atomic controller backend/failover proof;
-- integrated startup recovery orchestration.
+- controlled shared-storage/cross-laptop locking + failover proof for selected coordination deployment;
+- authenticated public-safe GitHub publication workflow for already-verified artifacts;
+- operator-visible backup/restore/controller health.
 
 ## Remaining external research/release work
 
