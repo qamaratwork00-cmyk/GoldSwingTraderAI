@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Final Release Audit
 
 **Status:** DRAFT TEMPLATE  
-**Version:** 0.1-design  
+**Version:** 0.2-design  
 **Authority:** Evidence-backed release snapshot for the exact build being audited.  
 **Depends on:** `RELEASE_CHECKLIST.md`, `TESTING_AND_VERIFICATION.md`
 
@@ -24,6 +24,7 @@ Risk Policy Version:
 Execution Policy Version:
 State Schema Version:
 MT5/Broker Environment:
+Execution Controller ID:
 Audit Timestamp:
 ```
 
@@ -42,6 +43,8 @@ Coder/module/operator docs:     PENDING
 Unit / contract tests:          PENDING
 Replay / no-lookahead:          PENDING
 Integration tests:              PENDING
+Execution Permission Gate:      PENDING
+Broker-write bypass audit:      PENDING
 Crash recovery:                 PENDING
 Persistence/state migration:    PENDING
 Laptop migration/restore:       PENDING
@@ -54,6 +57,7 @@ Use actual counts when available, for example `438/438 PASS`.
 ## Broker DEMO verification
 
 ```text
+Environment policy / DEMO gate: PENDING
 Account/symbol verification:    PENDING
 Order lifecycle:                PENDING
 One-shot duplicate prevention:  PENDING
@@ -62,6 +66,8 @@ SL/TP modify/close:              PENDING
 Restart with broker state:      PENDING
 End-to-end DEMO lifecycle:      PENDING
 ```
+
+A future REAL release is not implied by DEMO verification and requires a separate frozen release decision. It must reuse the same centralized execution path.
 
 ## Trading research evidence
 
@@ -105,6 +111,8 @@ Strategy Registry restore:      PENDING
 Learning restore:               PENDING
 Promotion history restore:      PENDING
 Backup integrity:               PENDING
+Public backup content check:    PENDING
+Financial-secret exclusion:     PENDING
 Fresh-machine restore drill:    PENDING
 Broker reconciliation restore:  PENDING
 ```
@@ -113,10 +121,11 @@ Broker reconciliation restore:  PENDING
 
 ```text
 Why-no-trade attribution:       PENDING
+Execution Permission reasons:   PENDING
 System Health:                  PENDING
 Backup/controller visibility:   PENDING
 Emoji/text fallback:            PENDING
-Setup/run/manual docs:           PENDING
+Setup/run/manual docs:          PENDING
 ```
 
 ## Outstanding failures / pending work
