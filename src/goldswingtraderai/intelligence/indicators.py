@@ -31,11 +31,9 @@ def ema_series(values: tuple[float, ...], period: int) -> tuple[float | None, ..
     _require_period(period)
     if not values:
         return ()
-
     output: list[float | None] = [None] * len(values)
     if len(values) < period:
         return tuple(output)
-
     seed = sum(values[:period]) / period
     output[period - 1] = seed
     multiplier = 2.0 / (period + 1.0)
@@ -53,15 +51,12 @@ def rsi_series(values: tuple[float, ...], period: int = 14) -> tuple[float | Non
     output: list[float | None] = [None] * len(values)
     if len(values) <= period:
         return tuple(output)
-
     changes = [values[index] - values[index - 1] for index in range(1, len(values))]
     gains = [max(change, 0.0) for change in changes]
     losses = [max(-change, 0.0) for change in changes]
-
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
     output[period] = _rsi_value(avg_gain, avg_loss)
-
     for change_index in range(period, len(changes)):
         avg_gain = ((avg_gain * (period - 1)) + gains[change_index]) / period
         avg_loss = ((avg_loss * (period - 1)) + losses[change_index]) / period
@@ -101,7 +96,6 @@ def atr_series(candles: tuple[Candle, ...], period: int = 14) -> tuple[float | N
     output: list[float | None] = [None] * len(ranges)
     if len(ranges) < period:
         return tuple(output)
-
     atr = sum(ranges[:period]) / period
     output[period - 1] = atr
     for index in range(period, len(ranges)):
@@ -152,6 +146,21 @@ class QuantConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class IndicatorSeries:
+    """Chronological indicator arrays computed once and shareable by intelligence desks."""
+
+    ema_fast: tuple[float | None, ...]
+    ema_slow: tuple[float | None, ...]
+    rsi: tuple[float | None, ...]
+    atr: tuple[float | None, ...]
+
+    def __post_init__(self) -> None:
+        lengths = {len(self.ema_fast), len(self.ema_slow), len(self.rsi), len(self.atr)}
+        if len(lengths) != 1:
+            raise ValueError("indicator series lengths must match")
+
+
+@dataclass(frozen=True, slots=True)
 class QuantReport:
     timeframe: Timeframe
     ema_fast: float | None
@@ -167,24 +176,38 @@ class QuantReport:
     coverage: float
 
 
+def compute_indicator_series(
+    candles: tuple[Candle, ...],
+    config: QuantConfig | None = None,
+) -> IndicatorSeries:
+    cfg = config or QuantConfig()
+    closes = tuple(candle.close for candle in candles)
+    return IndicatorSeries(
+        ema_fast=ema_series(closes, cfg.ema_fast_period),
+        ema_slow=ema_series(closes, cfg.ema_slow_period),
+        rsi=rsi_series(closes, cfg.rsi_period),
+        atr=atr_series(candles, cfg.atr_period),
+    )
+
+
 def analyze_quant(
     candles: tuple[Candle, ...],
     timeframe: Timeframe,
     config: QuantConfig | None = None,
+    *,
+    series: IndicatorSeries | None = None,
 ) -> QuantReport:
     """Summarize non-authoritative quantitative evidence for one timeframe."""
 
     cfg = config or QuantConfig()
-    closes = tuple(candle.close for candle in candles)
-    fast = ema_series(closes, cfg.ema_fast_period)
-    slow = ema_series(closes, cfg.ema_slow_period)
-    rsi = rsi_series(closes, cfg.rsi_period)
-    atr = atr_series(candles, cfg.atr_period)
+    values = series or compute_indicator_series(candles, cfg)
+    if values.atr and len(values.atr) != len(candles):
+        raise ValueError("precomputed indicator series must match candle count")
 
-    latest_fast = fast[-1] if fast else None
-    latest_slow = slow[-1] if slow else None
-    latest_rsi = rsi[-1] if rsi else None
-    latest_atr = atr[-1] if atr else None
+    latest_fast = values.ema_fast[-1] if values.ema_fast else None
+    latest_slow = values.ema_slow[-1] if values.ema_slow else None
+    latest_rsi = values.rsi[-1] if values.rsi else None
+    latest_atr = values.atr[-1] if values.atr else None
 
     if latest_fast is None or latest_slow is None:
         trend = Direction.NONE
@@ -195,7 +218,7 @@ def analyze_quant(
     else:
         trend = Direction.NONE
 
-    volatility_ratio = _volatility_ratio(atr, cfg.volatility_lookback)
+    volatility_ratio = _volatility_ratio(values.atr, cfg.volatility_lookback)
     volatility_state = _volatility_state(volatility_ratio, cfg)
 
     extension_atr: float | None = None
@@ -212,7 +235,6 @@ def analyze_quant(
         latest_atr,
         extension_state,
     )
-
     present = sum(
         item is not None
         for item in (latest_fast, latest_slow, latest_rsi, latest_atr, volatility_ratio)
@@ -233,10 +255,7 @@ def analyze_quant(
     )
 
 
-def _volatility_ratio(
-    atr: tuple[float | None, ...],
-    lookback: int,
-) -> float | None:
+def _volatility_ratio(atr: tuple[float | None, ...], lookback: int) -> float | None:
     valid = [value for value in atr if value is not None and value > 0]
     if not valid:
         return None
@@ -283,13 +302,11 @@ def _momentum_phase(
 ) -> MomentumPhase:
     if len(candles) < 3 or fast is None or slow is None or rsi is None or atr is None or atr <= 0:
         return MomentumPhase.UNKNOWN
-
     latest = candles[-1]
     previous = candles[-2]
     body = abs(latest.close - latest.open)
     directional_progress = latest.close - previous.close
     normalized_body = body / atr
-
     trend_up = fast > slow
     trend_down = fast < slow
     if trend_up and directional_progress < 0 and rsi < 50:
@@ -298,7 +315,9 @@ def _momentum_phase(
         return MomentumPhase.REVERSING
     if extension is ExtensionState.SEVERELY_EXTENDED and normalized_body < 0.45:
         return MomentumPhase.EXHAUSTING
-    if normalized_body >= 0.75 and ((trend_up and directional_progress > 0) or (trend_down and directional_progress < 0)):
+    if normalized_body >= 0.75 and (
+        (trend_up and directional_progress > 0) or (trend_down and directional_progress < 0)
+    ):
         return MomentumPhase.EXPANDING
     if (trend_up and rsi >= 55) or (trend_down and rsi <= 45):
         return MomentumPhase.BUILDING
