@@ -273,7 +273,7 @@ def test_execution_hard_spread_and_drift_limits_block_current_intent() -> None:
     assert drift.reason == "PRICE_DRIFT"
 
 
-def test_two_controllers_have_one_winner_and_takeover_gets_new_epoch() -> None:
+def test_two_controllers_require_reconciliation_after_expired_lease_takeover() -> None:
     clock = [NOW]
     store = InMemoryCoordinationStore(lambda: clock[0])
     first = ControllerLeaseManager(store, "scope", new_controller_id())
@@ -281,14 +281,27 @@ def test_two_controllers_have_one_winner_and_takeover_gets_new_epoch() -> None:
 
     first_status = first.acquire()
     assert first_status.decision is HardDecision.PASS
+    assert first_status.lease is not None
     assert second.acquire().reason == "ANOTHER_ACTIVE_CONTROLLER"
 
     first_epoch = first_status.lease.epoch
     clock[0] += timedelta(seconds=31)
     second_status = second.acquire()
-    assert second_status.decision is HardDecision.PASS
+    assert second_status.decision is HardDecision.BLOCK
+    assert second_status.reason == "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED"
+    assert second_status.lease is not None
     assert second_status.lease.epoch > first_epoch
+    assert second.takeover_reconciliation_required
+    assert (
+        second.verify_write_authority(clock[0]).reason
+        == "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED"
+    )
     assert first.verify_write_authority(clock[0]).reason == "ANOTHER_ACTIVE_CONTROLLER"
+
+    reconciled = second.complete_takeover_reconciliation(clock[0])
+    assert reconciled.decision is HardDecision.PASS
+    assert not second.takeover_reconciliation_required
+    assert second.verify_write_authority(clock[0]).decision is HardDecision.PASS
 
 
 def test_precheck_reject_causes_zero_order_send_attempts(tmp_path) -> None:
