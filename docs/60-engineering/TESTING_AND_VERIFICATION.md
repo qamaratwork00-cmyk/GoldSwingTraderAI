@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 0.6-design  
+**Version:** 0.7-design  
 **Authority:** Test taxonomy, executable proof requirements, replay/live parity, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
@@ -17,7 +17,7 @@ Testing must prove documented invariants. `VERIFIED` is reserved for behaviour t
 Unit / Contract Tests
 → Component Tests
 → Deterministic Replay Tests
-→ Research Ablation / Outcome Tests
+→ Research Ablation / Outcome / Management Replay Tests
 → Integration Tests
 → Fault / Crash Injection
 → Persistence / Migration Tests
@@ -38,15 +38,24 @@ Must prove:
 - Fibonacci anchors use only already-confirmed structural swings;
 - POC/volume profile uses only volume/candle history available at that replay point;
 - replay chronology matches documented information availability;
-- post-hoc future outcome labels cannot feed backward into the original historical decision/plan.
+- post-hoc future outcome labels cannot feed backward into the original historical decision/plan;
+- management action for one completed M5 can affect only the following bar or later, never the already-completed bar that generated it.
 
 Future-data leakage is release-blocking.
 
 ## Replay/live parity
 
-Where parity is claimed, replay and live paths should reuse the same decision semantics. Feed identical snapshots/events into shared logic and compare outputs.
+Where parity is claimed, replay and live paths should reuse the same production semantics. Feed identical snapshots/events into shared logic and compare outputs.
 
-Do not claim intrabar parity without sufficient historical data. Current decision replay is explicitly `BAR_CLOSE`; initial stop/target outcome labeling is explicitly bar-high/low modeling rather than tick-perfect execution.
+Current realism labels must remain explicit:
+
+```text
+Decision replay          BAR_CLOSE
+Initial bracket outcomes BAR_HIGH_LOW
+Trade Manager replay     BAR_CLOSE_IDEALIZED + active bar-high/low barriers
+```
+
+Do not claim tick/broker parity without sufficient historical/live evidence.
 
 ## Strategy/decision tests
 
@@ -79,7 +88,7 @@ Tests must prove:
 - production confluence configuration defaults all implemented sources ON;
 - research may disable individual confluence sources without introducing a penalty/hard gate.
 
-A positive-only family uplift does not imply monotonically higher fused Opportunity Score because both BUY and SELL may gain support and conflict may rise. Tests/research must measure the final signed effect instead of asserting automatic improvement.
+A positive-only family uplift does not imply monotonically higher fused Opportunity Score because both BUY and SELL may gain support and conflict may rise. Tests/research measure the final signed effect rather than assuming automatic improvement.
 
 ## Research ablation tests
 
@@ -103,26 +112,50 @@ Decision-level ablation must prove/report:
 - POC marginal effect through `ALL - DIRECTIONAL_COMBINED`;
 - no fabricated Net R/Profit Factor/win rate from decision events alone.
 
-When the bracket outcome layer is attached, tests must preserve the distinction between analytical decision evidence and explicit initial Trade Plan path evidence.
+Initial-bracket and manager ablation must preserve the distinction between analytical decision evidence and modeled outcome evidence.
 
 ## Research Trade Plan outcome tests
 
 Initial post-hoc outcome modeling must prove:
 
-- production Trade Plan geometry is built from the historical snapshot/intelligence available at the ENTER timestamp;
+- production Trade Plan geometry is built from historical snapshot/intelligence available at ENTER time;
 - later candles are used only after that decision/plan is frozen;
 - BUY and SELL stop/target touch logic is symmetric;
 - MFE/MAE are normalized by immutable original R;
-- target-before-stop produces the broker target RR for the initial bracket model;
+- target-before-stop produces broker-target RR for the initial bracket model;
 - stop-before-target produces `-1R` for the initial bracket model;
 - stop and target touched in the same M5 is `BOTH_TOUCHED_AMBIGUOUS`, never favorable guessed order;
 - neither touched within configured horizon remains `HORIZON_UNRESOLVED`;
 - ambiguous/unresolved cases do not enter resolved bracket Net R/PF/drawdown;
 - resolved coverage is always reported;
 - 2R/3R/4R reach metrics may use observed MFE without pretending those levels were necessarily realized;
-- `resolved_bracket_*` metrics are not labeled full production/broker P&L.
+- `resolved_bracket_*` metrics are not labeled full production/broker P/L.
 
-Full Trade Manager/runner replay remains separate validation before management parity can be claimed.
+## Research Trade Manager replay tests
+
+The idealized chronological manager layer must prove:
+
+- historical READY Trade Plan creates the research `ManagedTrade` without changing production code;
+- the **currently active** stop and broker TP are checked before a new management action on each M5;
+- a tightened stop can realize positive R rather than reverting to original `-1R` assumptions;
+- active stop + active TP touched in the same M5 remains `BOTH_TOUCHED_AMBIGUOUS`;
+- a bar that survives active barriers is completed before `evaluate_trade_manager()` sees it;
+- HOLD/PROTECT/TRAIL/RUNNER/EXIT come from the production Trade Manager, not a separate backtest policy;
+- manager modification requested at one completed-bar boundary applies only to the following bar or later;
+- RUNNER changes the active objective only through the production manager state transition;
+- manager EXIT records current modeled R and reason;
+- `HORIZON_OPEN` and ambiguous outcomes remain outside resolved manager Net R/PF/drawdown;
+- Capture Efficiency and profit giveback are derived only from modeled path facts;
+- confluence management ablation uses identical decision chronology and correct signed deltas versus BASE;
+- `BAR_CLOSE_IDEALIZED` is visible in documentation/evidence and never described as broker-realized P/L.
+
+Still required before broker-parity claims:
+
+- historical PRE_CLOSE/session-policy integration;
+- stop/TP modification delay/failure stress;
+- fill/slippage stress;
+- tick/intrabar comparison where needed;
+- controlled DEMO replay-versus-broker evidence.
 
 ## Entry lifecycle tests
 
@@ -183,31 +216,11 @@ verified connected DEMO account → DEMO_GUARD PASS
 DEMO status not verified        → broker-write permission not granted
 ```
 
-Prove:
-
-- verified DEMO + other hard authorities PASS can produce execution ALLOW;
-- DEMO status comes from environment/account authority, not UI/strategy;
-- unknown DEMO status cannot silently become PASS;
-- V1 does not invent separate REAL authorization/hard-block workflow;
-- verified DEMO can perform real-time create/modify/close when ordinary checks pass.
+Prove verified DEMO + other hard authorities can ALLOW, DEMO status comes from account/environment authority, unknown DEMO cannot become PASS, and V1 does not invent a separate REAL authorization workflow.
 
 ## Centralized Execution Permission Gate tests
 
-Prove the gate consumes authoritative:
-
-```text
-DEMO guard
-account identity
-market/data/quote integrity
-news/session safety
-risk
-position/ownership/capacity
-order lifecycle/reconciliation
-controller ownership
-fresh execution checks
-```
-
-and returns deterministic `ALLOW / BLOCK / UNKNOWN` plus stable reasons.
+Prove the gate consumes authoritative DEMO/account/data/news/risk/position/order/controller/fresh-execution results and returns deterministic `ALLOW / BLOCK / UNKNOWN` plus stable reasons.
 
 Any bypass is release-blocking.
 
@@ -217,7 +230,7 @@ Cover:
 
 - healthy baseline excludes stale/news/reopen abnormal samples;
 - `SpreadRatio <=1.50` NORMAL;
-- `>1.50–2.25` ELEVATED + full revalidation, not automatic block;
+- `>1.50–2.25` ELEVATED + full revalidation;
 - `>2.25` prevents current entry;
 - spread >25% of approved SL distance prevents entry;
 - adverse drift `<=10%` normal revalidation;
@@ -239,176 +252,75 @@ Critical invariants:
 - manual/foreign ownership protection;
 - modify/close ambiguity reconciliation.
 
-Fake broker adapters should count send calls and simulate acceptance with lost responses.
-
 ## Controller / multi-instance tests
 
-Prove:
-
-- simultaneous acquisition produces exactly one PRIMARY;
-- second laptop remains Observer while valid holder exists;
-- renewal/TTL follows current contract;
-- every write checks non-expired holder + matching fencing epoch;
-- stale epoch cannot write after takeover;
-- coordination uncertainty blocks irreversible writes;
-- lease expiry alone does not make standby execution-ready;
-- takeover obtains new epoch + completes reconciliation;
-- old primary cannot write after failover;
-- planned handoff avoids duplicate exposure.
-
-A deterministic in-memory backend proves semantics only; controlled cross-machine certification needs a real shared atomic backend.
+Prove one PRIMARY, observer-only second controller while lease valid, lease/epoch freshness before each write, stale epoch denial, coordination uncertainty blocking, takeover reconciliation and old-primary write denial. Controlled cross-machine certification needs a real shared atomic backend.
 
 ## Session / news tests
 
-Cover:
-
-- Tier 1 `-15/+15`, Tier 2 `-5/+5`, Tier 3 no hard blackout;
-- linked Tier-1 cluster through final item +15;
-- required event truth failure → `NEWS_SAFETY_UNKNOWN`;
-- scheduled news alone does not force-close managed trade;
-- severe post-news recovery needs clean M5 + normalized conditions;
-- daily PRE_CLOSE no-entry T-20 / flatten T-10;
-- weekend no-entry T-60 / flatten T-30;
-- verified broker schedule authority;
-- daily reopen ≥1 clean M5;
-- weekend reopen gap assessment + ≥2 clean M5;
-- ambiguous/unavailable close persists/reconciles rather than faking flat.
+Cover Tier1/Tier2/Tier3 windows, required calendar truth, post-news warmup, daily/weekend PRE_CLOSE timing, verified broker schedule, reopen clean-M5 rules and ambiguous-close reconciliation.
 
 ## Crash/fault injection
 
-Simulate failure around:
-
-- before/after intent persistence;
-- during/after send;
-- broker fill before local save;
-- SL/TP modification;
-- close;
-- PRE_CLOSE flatten;
-- daily loss lock;
-- controller renewal/takeover;
-- atomic state write.
-
-Recovery must be deterministic or safely BLOCK with explicit reason — never duplicate exposure.
+Simulate failure around intent persistence/send/fill, SL/TP modification, close, PRE_CLOSE flatten, daily lock, controller takeover and atomic state writes. Recovery must never duplicate exposure.
 
 ## Persistence and corruption tests
 
-Cover:
-
-- truncated/checksum-invalid state;
-- old/incompatible schema;
-- atomic-write interruption;
-- critical state does not reset to defaults;
-- opportunity revalidation after downtime;
-- original R/open-trade persistence;
-- risk-day/reset/cooldown/episode persistence;
-- unresolved `SUBMITTING/ACCEPTED_UNKNOWN` recovery;
-- Candidate/Promotion/Research journal persistence where implemented.
+Cover checksum/schema/truncation failure, atomic interruption, opportunity revalidation, original-R/trade/risk state persistence, unresolved ExecutionIntent recovery and candidate/promotion/research persistence.
 
 ## Laptop migration and backup tests
 
-Fresh-machine restore must preserve/recover:
-
-- Strategy IDs/versions;
-- Champion/Challenger state;
-- entry/exit learning;
-- autonomous candidates/genealogy/rejected memory;
-- promotion history;
-- important risk/order/trade/opportunity context.
-
-Public artifacts must exclude financial-authority credentials/tokens/keys. Restored state never overrides fresh broker truth.
+Fresh-machine restore must preserve Strategy IDs/versions, Champion/Challenger state, learning, autonomous genealogy/rejected memory, promotion history and important risk/order/trade/opportunity context. Public artifacts exclude financial-authority secrets; restored state never overrides broker truth.
 
 ## Dashboard/diagnostic tests
 
-Test semantic rendering:
-
-- normal WAIT is not system error;
-- hard block exact reason;
-- DEMO guard accurate;
-- controller role/epoch/reconcile accurate;
-- PRE_CLOSE/reopen/news accurate;
-- Execution Permission reason correct;
-- backup/controller health correct;
-- optional Trendline/Fib/POC absent does not render as hard failure;
-- Discovery Health/candidate/suppression state can be surfaced once runtime DTO wiring exists;
-- emoji/text fallback cannot affect logic.
+Test semantic rendering for WAIT vs fault, exact hard reason, DEMO guard, controller/epoch/reconcile, PRE_CLOSE/news, execution permission, backup/controller health, optional confluence absence and Discovery Health. Emoji/text fallback cannot affect logic.
 
 ## Learning tests
 
-Prove:
-
-- small samples have low confidence;
-- StrategyMemory influence bounded;
-- entry/exit research creates challengers rather than live mutation;
-- learning outage can degrade safely when baseline independent;
-- evidence versions/environments isolated;
-- risk/safety mutation denied.
+Prove small-sample low confidence, bounded StrategyMemory influence, challenger rather than silent live mutation, safe optional degradation, evidence-version isolation and risk/safety mutation denial.
 
 ## Discovery / autonomous invention tests
 
-Prove:
-
-- only approved declarative primitives accepted;
-- Trendline/Fibonacci/POC labels map to explicit audited primitives;
-- arbitrary executable-code candidates rejected;
-- independent episode IDs prevent duplicate evidence inflation;
-- eligible recurring evidence creates candidate **or explicit suppression reason**;
-- eligible evidence without either outcome surfaces degraded liveness;
-- variants versus new families classified;
-- genealogy/rejected memory survives restart;
-- substantially duplicate/rejected ideas suppressed after restart;
-- candidates cannot call broker or self-promote.
+Prove approved primitives only, Trendline/Fib/POC mapping, arbitrary-code rejection, independent episode IDs, candidate-or-suppression liveness, degraded state on silent eligible-evidence loss, durable rejected/genealogy memory and no broker/self-promotion authority.
 
 ## Promotion tests
 
-Cover:
-
-- required stage ordering;
-- locked fingerprint semantics;
-- final-holdout one-shot/consumed state;
-- Shadow zero broker authority;
-- DEMO Canary still uses normal Risk + Execution Gate;
-- open-trade policy version retained;
-- rollback/history persistence;
-- unsafe schema migration blocks promotion.
+Cover lifecycle order, locked fingerprint, one-shot holdout, Shadow zero broker authority, Canary normal Risk+Execution path, policy-version retention, rollback/history persistence and unsafe schema migration block.
 
 ## Public repository secret scanning
 
-Before public backup/release scan for actual financial-authority secrets such as MT5 passwords, broker/API tokens, paid-service secrets, GitHub PATs and private/signing keys.
-
-Strategies, learning parameters and research are not automatically secrets under current policy.
-
-If authority-bearing credential was exposed publicly, removal alone is not enough; revoke/rotate it.
+Before public backup/release scan for financial-authority secrets. If a credential was exposed publicly, revoke/rotate it; deletion alone is insufficient.
 
 ## CI versus controlled DEMO tests
 
-Public CI should run tests requiring no live financial credentials: unit/contract/replay/research/persistence/governance/secret-scan/static checks.
-
-Actual MT5 DEMO execution tests run in controlled environment with credentials supplied outside repository.
+Public CI runs credential-free unit/contract/replay/research/persistence/governance/secret-scan/static checks. Actual MT5 DEMO execution tests run in a controlled environment with credentials outside the repository.
 
 ## End-to-end DEMO certification
 
-Before DEMO verification, execute controlled lifecycle covering startup, data, intelligence/confluence, strategy/opportunity/timing, Trade Plan, risk, DEMO guard, centralized permission, submit, position management, scheduled-close behaviour, close, journal/research feed, restart/recovery and selected fault scenarios.
+Before DEMO verification, execute controlled startup/data/intelligence/strategy/timing/TradePlan/risk/permission/submit/management/close/journal/research/restart/fault lifecycle.
 
 ## Evidence reporting
 
 Example:
 
 ```text
-Unit                    PASS / count
-Replay chronology        PASS / count
-Confluence causality     PASS / count
-Confluence ablation      PASS / count
-Bracket outcome model    PASS / count / coverage
-Discovery liveness       PASS / count
-Execution gate           PASS / count
-Controller/failover      PASS / count
-Crash recovery           PASS / count
-Migration                PASS / count
-DEMO execution           PENDING/PASS
-Long forward sample      PENDING/PASS
+Unit                      PASS / count
+Replay chronology          PASS / count
+Confluence causality       PASS / count
+Confluence ablation        PASS / count
+Bracket outcome model      PASS / count / coverage
+Trade Manager replay       PASS / count / coverage / realism
+Discovery liveness         PASS / count
+Execution gate             PASS / count
+Controller/failover        PASS / count
+Crash recovery             PASS / count
+Migration                  PASS / count
+DEMO execution             PENDING/PASS
+Long forward sample        PENDING/PASS
 ```
 
-Do not mark pending evidence as PASS. Do not convert ambiguous/unresolved bracket outcomes into synthetic resolved P/L.
+Do not mark pending evidence as PASS. Do not convert ambiguous/unresolved/open replay outcomes into synthetic resolved P/L.
 
 ## Release-blocking failures
 
@@ -423,29 +335,25 @@ At minimum:
 - controller split-brain/stale-epoch write;
 - daily-loss bypass;
 - original-R corruption;
-- critical state loss on restart;
-- scheduled-close state falsely marked flat;
-- required backup restore failure;
+- critical restart-state loss;
+- scheduled-close false-flat state;
+- required recovery restore failure;
 - public financial credential leakage;
 - autonomous self-promotion/broker bypass;
-- eligible discovery evidence silently disappearing without candidate/suppression reason;
-- optional confluence accidentally acting as an undocumented hard gate;
-- research outcome model favorably resolving unknown same-bar stop/target ordering.
+- eligible discovery evidence silently disappearing;
+- optional confluence acting as undocumented hard gate;
+- research favorably resolving unknown same-bar stop/target ordering;
+- replay applying a management modification retroactively to the bar that generated it.
 
 ## Explicit non-goals
 
-Testing must not:
-
-- claim profitability from software correctness;
-- mark docs VERIFIED because Markdown is complete;
-- hide failing/pending evidence;
-- present resolved initial-bracket modeling as full Trade Manager/broker P/L;
-- replace live DEMO proof with only mocks where live proof is required.
+Testing must not claim profitability from software correctness, mark docs VERIFIED because Markdown is complete, hide pending evidence, present idealized replay as broker-realized P/L, or replace required live DEMO proof with only mocks.
 
 ## Open questions
 
 - final CI coverage/static/security thresholds;
-- full Trade Manager replay/forward-evidence parity requirements;
+- historical PRE_CLOSE/session integration into manager replay;
+- execution modification failure/latency/slippage stress assumptions;
 - final controlled DEMO certification sample/steps;
 - long-duration forward-evidence requirement;
 - final historical/DEMO evidence threshold for retaining each optional confluence feature.
