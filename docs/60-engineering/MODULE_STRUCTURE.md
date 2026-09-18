@@ -1,24 +1,18 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 0.5-implementation-map  
+**Version:** 0.6-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
-## Purpose
-
-This is the file-oriented map of the actual and planned package. Behaviour remains owned by the topic documents under `00-foundation/`, `10-market-intelligence/`, `20-trading-decisions/`, `30-risk-execution/` and `40-research-learning/`.
-
-Core engineering rule:
+## Core engineering rule
 
 > **One primary owner per responsibility; facts flow forward; irreversible broker authority stays narrow and last.**
 
-## Current package shape — implemented through Phase 3
+## Current package shape — implemented through Phase 4
 
 ```text
 src/goldswingtraderai/
-├── __init__.py
-├── __main__.py
 ├── app/
 │   └── main.py
 ├── config/
@@ -34,21 +28,26 @@ src/goldswingtraderai/
 ├── market_data/
 │   ├── mt5_reader.py
 │   └── snapshot.py
-└── intelligence/
-    ├── indicators.py
-    ├── candle_structure.py
-    ├── technical.py
-    ├── liquidity.py
-    ├── session.py
-    ├── news.py
+├── intelligence/
+│   ├── indicators.py
+│   ├── candle_structure.py
+│   ├── technical.py
+│   ├── liquidity.py
+│   ├── session.py
+│   ├── news.py
+│   └── snapshot.py
+├── strategies/
+│   └── floor.py
+└── decisions/
+    ├── fusion.py
+    ├── opportunity.py
+    ├── timing.py
     └── snapshot.py
 ```
 
-Planned packages are created only when their real phase begins:
+Planned packages are created only when their real phase starts:
 
 ```text
-strategies/     Phase 4
-decisions/      Phase 4–5
 risk/           Phase 5
 persistence/    Phase 6
 execution/      Phase 7
@@ -57,184 +56,89 @@ operator/       Phase 9
 research/       Phase 10
 ```
 
-Do not create empty architecture merely to mirror this plan.
+`decisions/` will gain Trade Plan ownership in Phase 5.
 
 ## Dependency direction now
 
 ```text
 config/domain
-    ↓
-market_data/mt5_reader.py
-    ↓
-market_data/snapshot.py → MarketSnapshot
-    ↓
-intelligence/snapshot.py
-    ├─ indicators.py
-    ├─ candle_structure.py
-    ├─ technical.py
-    ├─ liquidity.py
-    ├─ session.py
-    └─ news.py (optional normalized external facts)
-    ↓
-IntelligenceSnapshot
-    ↓
-Phase 4 strategies/decisions
+→ market_data/mt5_reader.py
+→ market_data/snapshot.py → MarketSnapshot
+→ intelligence/snapshot.py → IntelligenceSnapshot
+→ strategies/floor.py → StrategyFloorReport
+→ decisions/fusion.py → DecisionBoard
+→ decisions/opportunity.py
+→ decisions/timing.py
+→ decisions/snapshot.py → DecisionSnapshot
+→ Phase 5 Trade Plan / Risk
 ```
 
-No intelligence module calls MT5 or owns broker-write permission.
+No current strategy/decision/intelligence module calls MT5 or owns broker-write permission.
 
-## `app/`
+## Existing ownership
 
-Current owner: startup/readiness orchestration only.
+### `market_data/`
 
-`app/main.py` currently performs configuration load, MT5 read-only readiness, DEMO verification, optional account/server pinning and snapshot logging. It does not contain strategy, risk or order-send logic.
+`mt5_reader.py` is the read-only MetaTrader5 boundary. `snapshot.py` converts broker facts into normalized `MarketSnapshot` with completed H4/H1/M15/M5 chronology and explicit data quality.
 
-As later phases arrive, keep the coordinator thin; it should call owners rather than absorb their algorithms.
+### `intelligence/`
 
-## `config/`
+`indicators.py` owns chronological EMA/RSI/ATR and quant states. `candle_structure.py` owns causal swings/structure/break hierarchy. `technical.py` owns adaptive zones/location/target room. `liquidity.py` owns pools/sweeps/FVG/qualified OB/path. `session.py` owns soft timezone-safe session context. `news.py` normalizes supplied scheduled-event facts. `intelligence/snapshot.py` computes/reuses these once per market snapshot.
 
-`config/settings.py` owns non-secret runtime settings.
+### `strategies/floor.py`
 
-Current important rule: V1 positive DEMO requirement is not exposed as a disableable configuration switch.
+Owns six direct family evaluators. Every family consumes the same `IntelligenceSnapshot` and publishes BUY + SELL `DirectionalFamilyCase`. There is no inheritance/factory framework and no sequential “try next strategy if previous fails” chain.
 
-Credentials/tokens/private keys with financial authority stay outside tracked configuration.
+### `decisions/fusion.py`
 
-## `domain/`
+Owns independent BUY/SELL thesis fusion, bounded top-family synergy, conflict, evidence coverage/confidence and Red-Team analytical objections. Hard safety/risk are excluded.
 
-Domain objects are pure contracts with no MT5/network/database calls.
+### `decisions/opportunity.py`
 
-Current ownership:
+Owns in-memory Opportunity/Episode identity and allowed lifecycle transitions. A surviving thesis preserves IDs. MISSED re-arm requires a fresh structural/timing event assertion. Phase 6 will add durable persistence.
 
-- `enums.py` — stable states/vocabulary;
-- `ids.py` — durable typed entity IDs;
-- `models.py` — cross-subsystem contracts such as permission/demo/intent/controller structures;
-- `market.py` — normalized account, symbol, quote, candle, series and MarketSnapshot types.
+### `decisions/timing.py`
 
-New domain types should be added only where they protect semantics across subsystem boundaries.
+Owns M5 analytical timing: `ENTER_BUY/ENTER_SELL/WAIT/MISSED/INVALID`. Strong opportunity with severe current extension becomes WAIT rather than thesis deletion. It does not own hard `BLOCKED`.
 
-## `market_data/`
+### `decisions/snapshot.py`
 
-### `mt5_reader.py`
-
-Read-only MetaTrader5 boundary for:
-- terminal initialize/shutdown;
-- account facts and account mode;
-- positive DEMO verification;
-- XAUUSDm/XAUUSD resolution;
-- symbol specifications;
-- Bid/Ask;
-- completed candle retrieval.
-
-Raw MT5 structures should not leak beyond this boundary.
-
-### `snapshot.py`
-
-Builds one normalized `MarketSnapshot` with H4/H1/M15/M5 completed candles and explicit data-quality state.
-
-Forming candles are not structural history. Stale/insufficient/corrupt data remains explicit rather than silently repaired into healthy truth.
-
-## `intelligence/`
-
-All current intelligence functions operate on normalized completed-candle/MarketSnapshot facts and have zero broker authority.
-
-### `indicators.py`
-
-Owns lightweight chronological:
-- EMA20/EMA50 baseline;
-- RSI14 baseline;
-- ATR14 baseline;
-- volatility ratio/state;
-- momentum phase;
-- extension state.
-
-`IndicatorSeries` is computed once per timeframe by the unified intelligence pipeline and reused.
-
-### `candle_structure.py`
-
-Owns:
-- candle anatomy/sequence state;
-- causal confirmed swings;
-- distinct `pivot_time` and `confirmed_at`;
-- protected swings;
-- per-timeframe structure state;
-- PROBE / QUALIFIED_BREAK / CONFIRMED_BOS / MSS_CANDIDATE / CONFIRMED_MSS / FAILED_BREAK events.
-
-It accepts precomputed ATR so normal runtime does not duplicate the Quant desk calculation. Standalone/replay calls may still compute ATR internally.
-
-### `technical.py`
-
-Consumes Structure + Quant. Owns adaptive support/resistance zones, location category, target-room and structural conflict facts. It does not redefine BOS/MSS.
-
-### `liquidity.py`
-
-Consumes candles + Structure + Quant. Owns clustered liquidity pools, pool lifecycle/event interpretation, sweep versus accepted break, FVG, qualified OB and path evidence. Correlated facts remain bounded rather than automatically multiplied into certainty.
-
-### `session.py`
-
-Owns soft Asia/London/New York/overlap context using standard-library `zoneinfo`. London and New York classification is DST-aware. It does not own broker OPEN/CLOSED/PRE_CLOSE permission.
-
-Current baseline local windows are implementation/research parameters, not hard execution safety.
-
-### `news.py`
-
-Provider-neutral scheduled-event fact normalization:
-- provider health/freshness;
-- TIER 1 / TIER 2 / TIER 3 baseline mapping;
-- factual pre/post windows;
-- linked/overlapping event-window merging;
-- explicit unavailable/stale truth.
-
-It does not output `NEWS_BLACKOUT` permission; that belongs to the later hard state machine.
-
-Production provider credentials/mapping remain future configuration work.
-
-### `snapshot.py`
-
-Primary Phase-3 orchestration owner.
+Thin Phase-4 orchestration owner:
 
 ```text
-MarketSnapshot
-→ IndicatorSeries once per timeframe
-→ QuantReport
-→ StructureReport using shared ATR
-→ TechnicalReport
-→ LiquidityReport
-→ SessionReport from M5
-→ optional NewsFacts
-→ IntelligenceSnapshot
+IntelligenceSnapshot
+→ StrategyFloor
+→ Fusion
+→ Opportunity
+→ Timing
+→ DecisionSnapshot
 ```
 
-Later strategy code should consume this snapshot rather than independently recomputing market facts.
+It must stay read-only and must not absorb Trade Plan, risk or execution algorithms.
 
-## Future `strategies/` — Phase 4
+## Phase 5 planned ownership
 
-Own the six strategy-family desks from `20-trading-decisions/STRATEGY_FLOOR.md`. Each should consume audited intelligence and emit bounded BUY/SELL family evidence. No MT5 reads/writes and no monetary sizing.
+### `decisions/trade_plan.py`
 
-## Future `decisions/` — Phase 4–5
+Should own structural entry reference, invalidation/SL, target hierarchy, immutable original R and plan geometry. It consumes an analytically ready `DecisionSnapshot` plus existing market/intelligence facts; it must not size monetary risk.
 
-Own BUY thesis, SELL thesis, Red Team/conflict, evidence coverage, Opportunity lifecycle, Entry Timing and later structural Trade Plan.
+### `risk/`
 
-## Future `risk/`, `persistence/`, `execution/`
-
-These remain intentionally absent until their phases. Their exact behaviour is already documented in `30-risk-execution/`; implementation must not be pre-empted by scattered helper logic in current modules.
-
-All irreversible create/modify/close calls must eventually exist behind one governed execution path only.
+Should own account profile, all-in monetary risk, lot sizing, min-lot affordability, margin facts, daily Account Safety P/L and frozen risk bands/ceilings. It consumes Trade Plan + broker/account specs but never calls `order_send`.
 
 ## Runtime efficiency rule
 
-Normal direction is:
-
 ```text
-one broker read snapshot
+one broker snapshot
 → one shared intelligence derivation
-→ many read-only consumers
+→ parallel strategy family consumers
+→ one fusion/lifecycle/timing derivation
+→ later plan/risk consumers
 ```
 
-Do not re-read MT5 or recalculate EMA/RSI/ATR/structure independently inside each strategy.
+Do not re-read MT5 or recalculate indicators/structure independently inside strategy or risk code. Fresh execution-time revalidation is a deliberate later exception.
 
-Fresh execution-time revalidation is a deliberate later exception where safety requires current quote/account/controller facts.
-
-## Current test map
+## Current tests
 
 ```text
 tests/test_settings.py
@@ -245,29 +149,24 @@ tests/test_app_readiness.py
 tests/test_indicators_structure.py
 tests/test_technical_liquidity.py
 tests/test_intelligence_snapshot.py
+tests/test_strategy_decisions.py
 ```
 
-Current deterministic CI gates:
+`test_strategy_decisions.py` protects six-family parallel evaluation, BUY/SELL conflict visibility, Opportunity identity, WAIT/MISSED/re-arm semantics, coherent DecisionSnapshot and absence of raw broker-write access.
 
-```text
-ruff
-pytest
-financial-secret scanner
-```
-
-The latest Phase-3 unified intelligence batch passed all three gates. This does not substitute for future live MT5/DEMO certification.
+CI gates remain Ruff, Pytest and financial-secret scan. The Phase-4 code/test checkpoint passed all three; live MT5/DEMO certification is a later separate gate.
 
 ## Prohibited dependencies
 
 ```text
-intelligence → raw MT5 order_send       NO
-strategy     → raw MT5 order_send       NO
-research     → raw MT5 order_send       NO
-dashboard    → raw MT5 order_send       NO
-market_data  → strategy decision        NO
-news facts   → self-owned hard blackout NO
+intelligence → order_send                   NO
+strategies   → MT5/order_send/risk reset    NO
+decisions    → MT5/order_send               NO
+news facts   → self-owned hard blackout     NO
+risk         → order_send                    NO (future)
+research/UI  → raw broker write              NO (future)
 ```
 
-## Phase completion update rule
+## Phase completion rule
 
-At the end of each large phase, update this file to show actual created modules and dependency paths; remove speculative names that were not used. Keep behaviour/value authority in the topic docs rather than copying competing versions here.
+After each large phase, replace planned names with the files actually created, record the real dependency path/tests, and keep behavioural/value authority in the topic docs rather than duplicating competing rules here.
