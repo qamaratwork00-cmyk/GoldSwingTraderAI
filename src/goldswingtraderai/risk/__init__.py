@@ -1,4 +1,4 @@
-"""Monetary risk policy, daily safety state and cooldown contracts."""
+"""Monetary risk, daily safety state, cooldown and hard permission contracts."""
 
 from goldswingtraderai.risk.engine import (
     AccountProfile,
@@ -12,6 +12,17 @@ from goldswingtraderai.risk.engine import (
     evaluate_risk,
     profile_policy,
     resolve_account_profile,
+)
+from goldswingtraderai.risk.permissions import (
+    BrokerSessionFacts,
+    ClosureKind,
+    MarketPermission,
+    NewsPermission,
+    NewsRecoveryFacts,
+    SessionNewsPermission,
+    combine_session_news_permission,
+    evaluate_market_permission,
+    evaluate_news_permission,
 )
 from goldswingtraderai.risk.state import (
     ClosedTradeOutcome,
@@ -33,11 +44,16 @@ from goldswingtraderai.risk.state import (
 
 __all__ = [
     "AccountProfile",
+    "BrokerSessionFacts",
     "ClosedTradeOutcome",
+    "ClosureKind",
     "CooldownDecision",
     "CooldownState",
     "EpisodeRiskState",
     "ExposureSnapshot",
+    "MarketPermission",
+    "NewsPermission",
+    "NewsRecoveryFacts",
     "ProfilePolicy",
     "RiskBand",
     "RiskContext",
@@ -45,9 +61,13 @@ __all__ = [
     "RiskDayState",
     "RiskEvaluation",
     "RiskFriction",
+    "SessionNewsPermission",
     "SizingMode",
     "can_enter_episode",
+    "combine_session_news_permission",
     "cooldown_decision",
+    "evaluate_market_permission",
+    "evaluate_news_permission",
     "evaluate_risk",
     "manual_reset_loss_lock",
     "new_risk_day",
