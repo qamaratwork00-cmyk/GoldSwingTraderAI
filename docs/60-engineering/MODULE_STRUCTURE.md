@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 0.8-implementation-map  
+**Version:** 1.0-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -9,7 +9,7 @@
 
 > **One primary owner per responsibility; facts flow forward; irreversible broker authority stays narrow and last.**
 
-## Current package shape — implemented through Phase 6
+## Current package shape — implemented through Phase 8
 
 ```text
 src/goldswingtraderai/
@@ -45,163 +45,111 @@ src/goldswingtraderai/
 │   ├── snapshot.py
 │   └── trade_plan.py
 ├── risk/
-│   ├── __init__.py
 │   ├── engine.py
 │   ├── state.py
 │   └── permissions.py
-└── persistence/
-    ├── __init__.py
+├── persistence/
+│   ├── store.py
+│   └── runtime_state.py
+├── execution/
+│   ├── models.py
+│   ├── intent_store.py
+│   ├── gate.py
+│   ├── checks.py
+│   ├── controller.py
+│   ├── mt5_writer.py
+│   ├── service.py
+│   └── reconcile.py
+└── management/
+    ├── models.py
+    ├── manager.py
     ├── store.py
-    └── runtime_state.py
+    └── execution.py
 ```
 
-Planned packages are created only when their real phase starts:
+Planned packages are created only when their phase starts:
 
 ```text
-execution/      Phase 7
-management/     Phase 8
 operator/       Phase 9
 research/       Phase 10
 ```
 
-## Dependency direction now
+## Dependency direction
 
 ```text
 config/domain
-→ market_data/mt5_reader.py
-→ market_data/snapshot.py → MarketSnapshot
-→ intelligence/snapshot.py → IntelligenceSnapshot
-→ strategies/floor.py → StrategyFloorReport
-→ decisions/fusion.py → DecisionBoard
-→ decisions/opportunity.py
-→ decisions/timing.py
-→ decisions/snapshot.py → DecisionSnapshot
-→ decisions/trade_plan.py → TradePlan
-→ risk/engine.py + risk/state.py → RiskEvaluation / risk lifecycle
-→ risk/permissions.py → hard session/news permission
-→ persistence/ → durable critical context
-→ Phase 7 centralized execution gate + broker lifecycle
+→ market_data → MarketSnapshot
+→ intelligence → IntelligenceSnapshot
+→ strategies → StrategyFloorReport
+→ decisions/fusion → DecisionBoard
+→ decisions/opportunity + timing → DecisionSnapshot
+→ decisions/trade_plan → TradePlan
+→ risk engine/state + hard session/news permissions
+→ persistence for critical local state
+→ execution gate / intent / broker write / reconciliation
+→ management for verified bot-owned open trades
+→ operator/dashboard next
 ```
 
-No current intelligence/strategy/decision/risk/persistence module can send an MT5 order.
+The execution package is the only code allowed to contain irreversible raw MT5 writes.
 
-## Existing ownership
+## Responsibility ownership
 
 ### `market_data/`
-
-`mt5_reader.py` is the read-only MetaTrader5 boundary. `snapshot.py` converts broker facts into normalized `MarketSnapshot` with completed H4/H1/M15/M5 chronology and explicit data quality.
+Read-only MetaTrader5 boundary plus normalized completed-candle/account/symbol/quote snapshots.
 
 ### `intelligence/`
+Shared causal market facts: EMA/RSI/ATR, structure, technical zones/location, liquidity/SMC, session and normalized news facts. No broker authority.
 
-`indicators.py` owns chronological EMA/RSI/ATR and quant states. `candle_structure.py` owns causal swings/structure/break hierarchy. `technical.py` owns adaptive zones/location/target room. `liquidity.py` owns pools/sweeps/FVG/qualified OB/path. `session.py` owns soft timezone-safe session context. `news.py` normalizes supplied scheduled-event facts. `intelligence/snapshot.py` computes/reuses these once per market snapshot.
+### `strategies/`
+Six direct parallel strategy-family evaluators. No sequential fallback pipeline and no hard safety ownership.
 
-### `strategies/floor.py`
+### `decisions/`
+BUY/SELL thesis fusion, Opportunity lifecycle, M5 timing and structural Trade Plan. Trade Plan owns structural invalidation/SL/objectives and immutable original-R price distance before monetary sizing.
 
-Owns six direct family evaluators. Every family consumes the same `IntelligenceSnapshot` and publishes BUY + SELL evidence. There is no inheritance/factory framework and no sequential “try next strategy if previous fails” chain.
+### `risk/`
+`engine.py` owns monetary sizing/actual minimum-lot affordability/profile limits/capacity. `state.py` owns daily-loss/cooldown/episode transitions. `permissions.py` owns hard PRE_CLOSE/reopen/news entry permission.
 
-### `decisions/fusion.py`
+SMALL covers any positive day-start equity below `$300`; no arbitrary `$100` eligibility floor exists.
 
-Owns independent BUY/SELL thesis fusion, bounded top-family synergy, conflict, evidence coverage/confidence and Red-Team analytical objections. Hard safety/risk are excluded.
+### `persistence/`
+Standard-library SQLite only for current V1 foundation. Canonical JSON, checksums, schema versions, transactional writes and event rows. Critical corruption does not silently become blank state.
 
-### `decisions/opportunity.py`
-
-Owns Opportunity/Episode identity and lifecycle transitions. A surviving thesis preserves IDs. MISSED re-arm requires fresh structural/timing evidence. Phase 6 persistence now stores the active Opportunity identity rather than recreating it after restart.
-
-### `decisions/timing.py`
-
-Owns M5 analytical timing: `ENTER_BUY/ENTER_SELL/WAIT/MISSED/INVALID`. Strong opportunity with severe current extension becomes WAIT rather than thesis deletion. It does not own hard `BLOCKED`.
-
-### `decisions/snapshot.py`
-
-Thin read-only orchestration owner:
+### `execution/`
+Single irreversible broker-write authority.
 
 ```text
-IntelligenceSnapshot
-→ StrategyFloor
-→ Fusion
-→ Opportunity
-→ Timing
-→ DecisionSnapshot
+ExecutionPermission Gate
+→ durable ExecutionIntent
+→ order_check/pre-submit validation
+→ fresh controller/fencing check
+→ persist SUBMITTING
+→ one order_send only
+→ classify ACK
+→ broker reconciliation
 ```
 
-### `decisions/trade_plan.py`
+Ownership details:
+- `models.py` — action/lifecycle/permission contracts;
+- `intent_store.py` — durable intent identity/history and lifecycle clearance;
+- `gate.py` — all hard authorities composed as PASS/BLOCK/UNKNOWN;
+- `checks.py` — fresh spread/drift/quote execution checks;
+- `controller.py` — lease/fencing contract and deterministic test backend;
+- `mt5_writer.py` — **only raw MT5 irreversible write adapter**;
+- `service.py` — persist-before-send one-shot orchestration;
+- `reconcile.py` — broker positions/orders/deals reconciliation.
 
-Owns pre-risk structural geometry only:
+Known boundary: the current in-memory coordination backend is test infrastructure only. A production shared cross-laptop backend satisfying atomic lease + authoritative expiry + fencing is still required before failover certification.
 
-- Signal Price and Approved Entry Reference;
-- family-aware structural invalidation;
-- volatility/noise buffer and broker tick normalization;
-- Initial SL and Stop Quality;
-- Immediate / Primary / Expansion / Runner objectives;
-- frozen RR classification and marginal-expansion exception;
-- immutable original-R price distance;
-- Plan Quality and READY/DEGRADED/INVALID state.
+### `management/`
+Second decision floor for verified bot-owned open trades.
 
-A low-quality nearby obstacle may remain `Immediate Obstacle` instead of automatically killing meaningful target room. INVALID plans use explicit `None` geometry instead of fake SL/R numbers.
+- `models.py` — durable ManagedTrade/original-R/objective state and management result contracts;
+- `manager.py` — pure continuation/reversal scoring plus HOLD/PROTECT/TRAIL/RUNNER/EXIT selection;
+- `store.py` — restart-safe managed-trade persistence;
+- `execution.py` — maps management actions to governed MODIFY/CLOSE ExecutionIntents and updates local state only after broker verification.
 
-### `risk/state.py`
-
-Pure state transitions for:
-
-- UTC risk-day reference and cash-flow-adjusted Account Safety P/L;
-- manual reset semantics;
-- consecutive-loss cooldown;
-- Market Episode entry/re-entry/loss lock.
-
-### `risk/engine.py`
-
-Owns monetary evaluation:
-
-- SMALL = any positive day-start equity below `$300`; MEDIUM `$300–$999.99`; NORMAL `$1,000+`;
-- frozen target/elevated bands, hard ceilings and daily locks;
-- broker min/max/step volume normalization;
-- practical minimum-lot evaluation;
-- structural risk plus slippage/commission reserve exactly once;
-- spread diagnostic without double-counting Bid/Ask geometry;
-- capacity/external-exposure checks;
-- optional exact broker-required margin authority.
-
-A generic margin estimate is diagnostic only. Phase 7 must obtain/revalidate exact broker margin before irreversible execution.
-
-### `risk/permissions.py`
-
-Owns hard market-session/news permission, not soft market scoring.
-
-Inputs/outputs:
-
-```text
-BrokerSessionFacts → MarketPermission
-NewsFacts + NewsRecoveryFacts → NewsPermission
-MarketPermission + NewsPermission → SessionNewsPermission
-```
-
-It implements daily/weekend PRE_CLOSE, reopen warmup, holiday caution, news blackout, required-news-truth unknown and post-news warmup. It has no broker-write authority.
-
-### `persistence/store.py`
-
-Small standard-library SQLite state store. It owns:
-
-- canonical JSON records;
-- SHA-256 checksums;
-- database/record schema versions;
-- `WAL` + `synchronous=FULL` durability;
-- transactional current-state updates;
-- optional append-only event rows;
-- integrity verification.
-
-No ORM/service framework is used.
-
-### `persistence/runtime_state.py`
-
-Owns explicit typed adapters for current critical restart state:
-
-- `RiskDayState`;
-- `CooldownState`;
-- `EpisodeRiskState`;
-- active `Opportunity`;
-- active `TradePlan`.
-
-`RecoveryBundle` validates Opportunity/Market-Episode/Trade-Plan lineage. Broker order/position truth is not invented here; Phase 7 reconciliation consumes this local context.
+Management does **not** call raw MT5 directly. Primary target remains a checkpoint. Structural protection/trailing requires a valid protected swing; profit alone cannot create a runner or breakeven move. PRE_CLOSE can force EXIT through the governed execution path.
 
 ## Runtime efficiency rule
 
@@ -211,74 +159,61 @@ one broker snapshot
 → parallel strategy consumers
 → one decision/timing derivation
 → one structural Trade Plan
-→ one monetary RiskEvaluation
-→ one session/news permission result
-→ later one centralized execution gate
+→ one RiskEvaluation + hard permission set
+→ one centralized execution path when needed
+→ one post-entry management decision per fresh management cycle
 ```
 
-Do not re-read MT5 or recalculate indicators/structure in strategy/plan/risk code. Fresh execution-time quote/spec/account/margin/controller checks are deliberate Phase-7 exceptions where safety requires current broker truth.
+No subsystem should reread MT5 or recompute indicators merely to reproduce an already verified shared fact. Fresh broker checks immediately before irreversible writes are intentional safety exceptions.
 
-## Current tests
+## Prohibited dependency directions
 
-Phase-6 additions:
+```text
+intelligence → order_send                  NO
+strategies   → order_send/risk reset       NO
+decisions    → raw order_send              NO
+risk         → raw order_send              NO
+persistence  → trading decision            NO
+management   → raw order_send              NO
+operator/UI  → raw order_send              NO
+research     → production broker write     NO
+```
+
+`management/execution.py` may create governed `ExecutionIntent` values and consume verified execution outcomes; only `execution/mt5_writer.py` owns the raw terminal call.
+
+## Current deterministic tests
+
+Major suites now include:
 
 ```text
 tests/test_session_news_permissions.py
 tests/test_persistence_recovery.py
+tests/test_execution_safety.py
+tests/test_trade_manager.py
+tests/test_management_execution.py
 ```
 
-They add coverage for:
+Together with earlier phase suites they protect:
+- no-lookahead market intelligence;
+- non-restrictive parallel strategy logic;
+- structural Trade Plan/RR rules;
+- positive SMALL balances below `$100` remaining eligible for risk evaluation;
+- daily-loss/cooldown/episode state;
+- session/news hard permissions;
+- durable critical state;
+- one-shot execution and ambiguity reconciliation;
+- stale fencing rejection;
+- Primary target not auto-exiting;
+- structure-earned protection/trailing;
+- runner needing continuation + real objective;
+- no local stop/TP/close mutation before broker verification.
 
-- daily `T-20/T-10` and weekend `T-60/T-30` PRE_CLOSE rules;
-- one/two clean-M5 reopen requirements;
-- holiday caution not becoming a fake closure;
-- required session/news truth fail-safe behaviour;
-- Tier-1/Tier-2 blackout and post-news severe-dislocation recovery;
-- SQLite round-trip and event journal;
-- checksum corruption rejection;
-- restart-safe risk/cooldown/episode/opportunity/TradePlan state;
-- lineage mismatch rejection;
-- active-plan cleanup without erasing risk history.
+CI gates remain Ruff, Pytest and financial-secret scan. Current Phase-8 deterministic checkpoint passes all three; this is not live DEMO certification or profitability proof.
 
-Earlier phase suites continue protecting no-lookahead, six-family parallel logic, Trade Plan/RR rules, practical minimum-lot risk, positive SMALL balances below `$100`, daily lock/cooldown and exact broker-margin authority.
+## Next package — `operator/`
 
-CI gates remain Ruff, Pytest and financial-secret scan. Current Phase-6 deterministic checkpoint passes all three; this is not live DEMO certification.
-
-## Phase 7 planned ownership
-
-### `execution/`
-
-Phase 7 will add the only irreversible broker-write boundary and must consume, not duplicate, the existing authorities:
-
-```text
-positive DEMO guard
-+ account identity
-+ fresh data/quote/specs
-+ RiskEvaluation
-+ SessionNewsPermission
-+ position ownership/capacity
-+ durable Execution Intent/order lifecycle
-+ controller lease/fencing ownership
-+ exact broker margin/order validation
-→ centralized ALLOW / BLOCK / UNKNOWN
-→ one governed MT5 write
-→ reconciliation
-```
-
-Execution must persist intent before send, never blind-retry ambiguous acknowledgement and must not allow strategy/dashboard/research code direct write access.
-
-## Prohibited dependencies
-
-```text
-intelligence → order_send                   NO
-strategies   → MT5/order_send/risk reset    NO
-decisions    → MT5/order_send               NO
-risk         → order_send                    NO
-persistence  → trading decision/order_send  NO
-news facts   → self-owned hard blackout     NO
-research/UI  → raw broker write              NO (future)
-```
+Phase 9 owns compact dashboard/operator presentation. It may consume authoritative runtime states but must not recreate strategy/risk/execution decisions or gain raw broker-write access.
 
 ## Phase completion rule
 
-At the end of each large phase, replace planned names with files actually created, record real dependency paths/tests, and keep behavioural/value authority in topic docs rather than copying competing versions here.
+At each large phase exit, record the actual files/dependencies/tests here and in `docs/CODER_GUIDE.md`. Behavioural thresholds remain owned by their authoritative topic documents.
