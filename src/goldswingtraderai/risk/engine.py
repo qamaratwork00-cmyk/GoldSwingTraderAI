@@ -2,7 +2,7 @@
 
 The engine sizes from account equity and the already-approved structural Trade Plan.
 It never tightens the stop, never uses strategy score to raise risk, and evaluates
-broker minimum volume rather than rejecting a raw size merely because it is <0.01.
+broker minimum volume rather than rejecting a trade because the account is small.
 """
 
 from __future__ import annotations
@@ -158,13 +158,13 @@ _POLICIES = {
 
 
 def resolve_account_profile(equity: float) -> AccountProfile | None:
-    """Resolve frozen V1 profiles; below-$100 policy remains explicitly deferred."""
+    """Resolve V1 profiles without an arbitrary positive-equity minimum floor."""
 
     if equity >= 1000.0:
         return AccountProfile.NORMAL
     if equity >= 300.0:
         return AccountProfile.MEDIUM
-    if equity >= 100.0:
+    if equity > 0:
         return AccountProfile.SMALL
     return None
 
@@ -186,10 +186,11 @@ def evaluate_risk(
         return _result(HardDecision.UNKNOWN, "ACCOUNT_EQUITY_INVALID")
 
     # Profile is fixed for the UTC risk day instead of changing with intraday
-    # floating P/L. This keeps daily-lock semantics stable near profile boundaries.
+    # floating P/L. SMALL covers every positive day-start equity below $300;
+    # the actual minimum-lot risk geometry remains the authority on affordability.
     profile = resolve_account_profile(context.risk_day.day_start_equity)
     if profile is None:
-        return _result(HardDecision.UNKNOWN, "ACCOUNT_PROFILE_BELOW_100_DEFERRED")
+        return _result(HardDecision.UNKNOWN, "ACCOUNT_PROFILE_INVALID")
     policy = profile_policy(profile)
 
     if context.risk_day.utc_day != market.meta.as_of_utc.date():
@@ -265,6 +266,14 @@ def evaluate_risk(
     spec = market.symbol_spec
     entry = plan.approved_entry_reference
     stop = plan.initial_stop
+    if stop is None:
+        return _result(
+            HardDecision.UNKNOWN,
+            "STRUCTURAL_STOP_UNAVAILABLE",
+            profile=profile,
+            policy=policy,
+            day=day,
+        )
     stop_ticks = abs(entry - stop) / spec.tick_size
     if stop_ticks <= 0 or spec.tick_value <= 0:
         return _result(
