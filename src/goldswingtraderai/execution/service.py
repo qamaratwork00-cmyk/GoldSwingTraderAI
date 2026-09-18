@@ -18,25 +18,27 @@ from goldswingtraderai.execution.models import (
     IntentState,
     approve_intent,
     mark_accepted_unknown,
-    mark_accepted_verified,
     mark_failed,
     mark_submitting,
 )
 from goldswingtraderai.execution.mt5_writer import BrokerSubmitClass, MT5Writer
+from goldswingtraderai.execution.reconcile import MT5Reconciler
 
 
 class ExecutionService:
-    """Persist → precheck → fresh controller verify → persist SUBMITTING → send once."""
+    """Persist → precheck → controller verify → send once → broker reconciliation."""
 
     def __init__(
         self,
         repository: ExecutionIntentRepository,
         writer: MT5Writer,
         controller: ControllerLeaseManager,
+        reconciler: MT5Reconciler,
     ) -> None:
         self.repository = repository
         self.writer = writer
         self.controller = controller
+        self.reconciler = reconciler
 
     def execute(
         self,
@@ -94,15 +96,6 @@ class ExecutionService:
         self.repository.save(submitting, event_type="INTENT_SUBMITTING")
 
         result = self.writer.send_once(check.request)
-        if result.classification is BrokerSubmitClass.ACCEPTED:
-            accepted = mark_accepted_verified(
-                submitting,
-                broker_ticket=result.broker_ticket or result.deal_ticket,
-                broker_retcode=result.retcode,
-                message=result.comment,
-            )
-            self.repository.save(accepted, event_type="INTENT_ACCEPTED_VERIFIED")
-            return accepted
         if result.classification is BrokerSubmitClass.REJECTED:
             failed = mark_failed(
                 submitting,
@@ -112,13 +105,19 @@ class ExecutionService:
             self.repository.save(failed, event_type="INTENT_BROKER_REJECTED")
             return failed
 
-        unknown = mark_accepted_unknown(
+        pending = mark_accepted_unknown(
             submitting,
-            message=result.comment or "broker acknowledgement is ambiguous",
+            message=result.comment or "broker acknowledgement requires verification",
             broker_retcode=result.retcode,
+            broker_ticket=result.broker_ticket or result.deal_ticket,
         )
-        self.repository.save(unknown, event_type="INTENT_ACCEPTED_UNKNOWN")
-        return unknown
+        self.repository.save(pending, event_type="INTENT_ACK_PENDING_VERIFICATION")
+
+        # Even a broker success retcode is verified against positions/orders/deals.
+        # If broker history is not visible yet, ACCEPTED_UNKNOWN remains durable and
+        # new sends stay blocked until a later reconciliation pass resolves it.
+        evidence = self.reconciler.reconcile(pending, now_utc)
+        return self.reconciler.apply(self.repository, pending, evidence)
 
 
 def _precheck_message(reason: str, comment: str | None) -> str:
