@@ -4,14 +4,19 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import inspect
 
+import pytest
+
 import goldswingtraderai.decisions.fusion as fusion_module
 import goldswingtraderai.decisions.opportunity as opportunity_module
+import goldswingtraderai.decisions.snapshot as decision_snapshot_module
 import goldswingtraderai.decisions.timing as timing_module
 import goldswingtraderai.strategies.floor as strategy_module
 from goldswingtraderai.decisions import (
     TimingAction,
+    build_decision_snapshot,
     evaluate_entry_timing,
     fuse_decision,
+    rearm_missed_opportunity,
     update_opportunity,
 )
 from goldswingtraderai.domain.enums import (
@@ -170,6 +175,20 @@ def test_fusion_keeps_strong_opposition_visible_as_conflict() -> None:
     assert clear.directional_edge > conflicted.directional_edge
 
 
+def test_surviving_opportunity_preserves_ids() -> None:
+    now = datetime(2026, 7, 1, 12, 30, tzinfo=timezone.utc)
+    intel = _intelligence(now)
+    board = fuse_decision(_floor(88.0, 25.0), intel)
+    first = update_opportunity(board, now)
+    assert first is not None
+
+    second = update_opportunity(board, now + timedelta(minutes=5), previous=first)
+    assert second is not None
+    assert second.opportunity_id == first.opportunity_id
+    assert second.episode_id == first.episode_id
+    assert second.updated_at_utc > first.updated_at_utc
+
+
 def test_severe_extension_waits_without_deleting_opportunity_identity() -> None:
     now = datetime(2026, 7, 1, 12, 30, tzinfo=timezone.utc)
     intel = _intelligence(now)
@@ -203,9 +222,46 @@ def test_severe_extension_waits_without_deleting_opportunity_identity() -> None:
     assert missed.opportunity.stage is OpportunityStage.MISSED
     assert missed.opportunity.opportunity_id == opportunity.opportunity_id
 
+    with pytest.raises(ValueError, match="fresh structural"):
+        rearm_missed_opportunity(
+            missed.opportunity,
+            now + timedelta(minutes=62),
+            fresh_structural_event=False,
+        )
+
+    rearmed = rearm_missed_opportunity(
+        missed.opportunity,
+        now + timedelta(minutes=62),
+        fresh_structural_event=True,
+    )
+    assert rearmed.stage is OpportunityStage.RE_ARMED
+    assert rearmed.opportunity_id == opportunity.opportunity_id
+    assert rearmed.episode_id == opportunity.episode_id
+
+
+def test_decision_snapshot_is_coherent_read_only_endpoint() -> None:
+    now = datetime(2026, 7, 1, 12, 30, tzinfo=timezone.utc)
+    result = build_decision_snapshot(_intelligence(now), now)
+
+    assert len(result.strategies.families) == 6
+    assert 0 <= result.board.buy.score <= 100
+    assert 0 <= result.board.sell.score <= 100
+    if result.opportunity is None:
+        assert result.timing is None
+    else:
+        assert result.opportunity.episode_id == (
+            result.timing.opportunity.episode_id if result.timing is not None else result.opportunity.episode_id
+        )
+
 
 def test_strategy_and_decision_modules_have_no_broker_write_boundary() -> None:
-    modules = (strategy_module, fusion_module, opportunity_module, timing_module)
+    modules = (
+        strategy_module,
+        fusion_module,
+        opportunity_module,
+        timing_module,
+        decision_snapshot_module,
+    )
     source = "\n".join(inspect.getsource(module) for module in modules)
 
     assert "order_send" not in source
