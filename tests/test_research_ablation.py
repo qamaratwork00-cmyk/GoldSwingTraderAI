@@ -7,6 +7,7 @@ from goldswingtraderai.research.ablation import (
     ConfluenceAblationVariant,
     run_confluence_ablation,
     run_confluence_bracket_ablation,
+    run_confluence_management_ablation,
 )
 from goldswingtraderai.research.replay import ReplayDataset
 from goldswingtraderai.strategies.confluence import ConfluenceBonusConfig
@@ -201,3 +202,47 @@ def test_bracket_ablation_reports_only_explicit_resolved_path_evidence() -> None
         metrics = row.outcome_metrics
         assert metrics.target_first + metrics.stop_first <= metrics.ready_plans
         assert 0.0 <= metrics.resolved_coverage <= 1.0
+
+
+def test_management_ablation_reports_managed_capture_without_fake_broker_parity() -> None:
+    report = run_confluence_management_ablation(
+        _dataset(),
+        start_utc=END - timedelta(minutes=45),
+        end_utc=END,
+        horizon_m5_bars=12,
+        minimum_bars=_MINIMUM_BARS,
+    )
+
+    base = report.row(ConfluenceAblationVariant.BASE)
+    all_sources = report.row(ConfluenceAblationVariant.ALL)
+    assert all(
+        row.decision_metrics.events == base.decision_metrics.events
+        for row in report.rows
+    )
+    assert all_sources.managed_trade_delta_vs_base == (
+        all_sources.management_metrics.managed_trades
+        - base.management_metrics.managed_trades
+    )
+    assert all_sources.resolved_coverage_delta_vs_base == (
+        all_sources.management_metrics.resolved_coverage
+        - base.management_metrics.resolved_coverage
+    )
+    assert all_sources.resolved_net_r_delta_vs_base == (
+        all_sources.management_metrics.resolved_net_r
+        - base.management_metrics.resolved_net_r
+    )
+    assert all_sources.average_capture_efficiency_delta_vs_base == (
+        all_sources.management_metrics.average_capture_efficiency
+        - base.management_metrics.average_capture_efficiency
+    )
+    assert all_sources.average_profit_giveback_r_delta_vs_base == (
+        all_sources.management_metrics.average_profit_giveback_r
+        - base.management_metrics.average_profit_giveback_r
+    )
+
+    for row in report.rows:
+        metrics = row.management_metrics
+        assert 0.0 <= metrics.resolved_coverage <= 1.0
+        assert metrics.stop_exits + metrics.target_exits + metrics.manager_exits <= (
+            metrics.managed_trades
+        )
