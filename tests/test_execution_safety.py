@@ -30,6 +30,7 @@ from goldswingtraderai.execution import (
     ExecutionAction,
     ExecutionIntent,
     ExecutionIntentRepository,
+    ExecutionPermission,
     ExecutionService,
     GateInputs,
     InMemoryCoordinationStore,
@@ -143,7 +144,7 @@ def _quote(*, bid: float = 99.8, ask: float = 100.0) -> Quote:
     return Quote(symbol=SYMBOL, bid=bid, ask=ask, time_utc=NOW)
 
 
-def _all_pass_permission() -> object:
+def _all_pass_permission() -> ExecutionPermission:
     def trace(name: str) -> AuthorityTrace:
         return AuthorityTrace(name, HardDecision.PASS, f"{name.upper()}_PASS")
 
@@ -193,6 +194,14 @@ def _intent(controller_id, epoch: int, *, action: ExecutionAction = ExecutionAct
         position_ticket=position_ticket,
         filling_mode=1 if action in {ExecutionAction.OPEN, ExecutionAction.CLOSE} else None,
     )
+
+
+def _service(tmp_path, fake: FakeMT5, controller: ControllerLeaseManager):
+    repository = ExecutionIntentRepository(StateStore(tmp_path / "state.db"), "scope")
+    writer = MT5Writer(fake, WRITE_CONFIG)
+    reconciler = MT5Reconciler(fake, WRITE_CONFIG)
+    service = ExecutionService(repository, writer, controller, reconciler)
+    return repository, writer, reconciler, service
 
 
 def test_gate_requires_every_hard_authority_without_weighting() -> None:
@@ -288,8 +297,7 @@ def test_precheck_reject_causes_zero_order_send_attempts(tmp_path) -> None:
     fake = FakeMT5()
     fake.check_retcode = 10013
     fake.check_comment = "Invalid request"
-    repository = ExecutionIntentRepository(StateStore(tmp_path / "state.db"), "scope")
-    service = ExecutionService(repository, MT5Writer(fake, WRITE_CONFIG), controller)
+    _, _, _, service = _service(tmp_path, fake, controller)
 
     result = service.execute(_intent(controller_id, epoch), _all_pass_permission(), _quote(), NOW)
 
@@ -298,23 +306,70 @@ def test_precheck_reject_causes_zero_order_send_attempts(tmp_path) -> None:
     assert fake.send_calls == 0
 
 
-def test_successful_execution_persists_before_one_send_and_rejects_id_reuse(tmp_path) -> None:
+def test_success_retcode_without_broker_evidence_stays_unknown(tmp_path) -> None:
     clock = [NOW]
     _, controller, controller_id, epoch = _controller(clock)
     fake = FakeMT5()
-    repository = ExecutionIntentRepository(StateStore(tmp_path / "state.db"), "scope")
-    service = ExecutionService(repository, MT5Writer(fake, WRITE_CONFIG), controller)
+    repository, _, _, service = _service(tmp_path, fake, controller)
     intent = _intent(controller_id, epoch)
+
+    result = service.execute(intent, _all_pass_permission(), _quote(), NOW)
+
+    assert result.state is IntentState.ACCEPTED_UNKNOWN
+    assert result.submit_attempts == 1
+    assert result.broker_ticket == 777
+    assert fake.send_calls == 1
+    assert repository.load() == result
+
+
+def test_success_is_verified_only_after_matching_broker_truth(tmp_path) -> None:
+    clock = [NOW]
+    _, controller, controller_id, epoch = _controller(clock)
+    fake = FakeMT5()
+    repository, writer, _, service = _service(tmp_path, fake, controller)
+    intent = _intent(controller_id, epoch)
+    fake.positions = (
+        SimpleNamespace(
+            ticket=555,
+            symbol=SYMBOL,
+            magic=WRITE_CONFIG.magic,
+            comment=writer.intent_comment(intent),
+            volume=0.01,
+            type=fake.POSITION_TYPE_BUY,
+        ),
+    )
 
     result = service.execute(intent, _all_pass_permission(), _quote(), NOW)
 
     assert result.state is IntentState.ACCEPTED_VERIFIED
     assert result.submit_attempts == 1
+    assert result.broker_ticket == 555
     assert fake.send_calls == 1
     assert repository.load() == result
+
+
+def test_reused_intent_id_can_never_send_again(tmp_path) -> None:
+    clock = [NOW]
+    _, controller, controller_id, epoch = _controller(clock)
+    fake = FakeMT5()
+    repository, writer, _, service = _service(tmp_path, fake, controller)
+    intent = _intent(controller_id, epoch)
+    fake.positions = (
+        SimpleNamespace(
+            ticket=555,
+            symbol=SYMBOL,
+            magic=WRITE_CONFIG.magic,
+            comment=writer.intent_comment(intent),
+            volume=0.01,
+            type=fake.POSITION_TYPE_BUY,
+        ),
+    )
+    assert service.execute(intent, _all_pass_permission(), _quote(), NOW).state is IntentState.ACCEPTED_VERIFIED
+
     with pytest.raises(PermissionError, match="already been used"):
         service.execute(intent, _all_pass_permission(), _quote(), NOW)
     assert fake.send_calls == 1
+    assert repository.intent_id_seen(intent.intent_id)
 
 
 def test_ambiguous_ack_is_persisted_and_never_blind_retried(tmp_path) -> None:
@@ -322,8 +377,7 @@ def test_ambiguous_ack_is_persisted_and_never_blind_retried(tmp_path) -> None:
     _, controller, controller_id, epoch = _controller(clock)
     fake = FakeMT5()
     fake.send_result = None
-    repository = ExecutionIntentRepository(StateStore(tmp_path / "state.db"), "scope")
-    service = ExecutionService(repository, MT5Writer(fake, WRITE_CONFIG), controller)
+    _, _, _, service = _service(tmp_path, fake, controller)
     intent = _intent(controller_id, epoch)
 
     result = service.execute(intent, _all_pass_permission(), _quote(), NOW)
@@ -341,8 +395,7 @@ def test_stale_fencing_epoch_blocks_before_order_send(tmp_path) -> None:
     clock = [NOW]
     _, controller, controller_id, epoch = _controller(clock)
     fake = FakeMT5()
-    repository = ExecutionIntentRepository(StateStore(tmp_path / "state.db"), "scope")
-    service = ExecutionService(repository, MT5Writer(fake, WRITE_CONFIG), controller)
+    _, _, _, service = _service(tmp_path, fake, controller)
 
     result = service.execute(
         _intent(controller_id, epoch + 1),
@@ -357,14 +410,12 @@ def test_stale_fencing_epoch_blocks_before_order_send(tmp_path) -> None:
     assert fake.send_calls == 0
 
 
-def test_open_unknown_reconciles_from_tagged_broker_position(tmp_path) -> None:
+def test_open_unknown_reconciles_from_tagged_position_later(tmp_path) -> None:
     clock = [NOW]
     _, controller, controller_id, epoch = _controller(clock)
     fake = FakeMT5()
     fake.send_result = None
-    repository = ExecutionIntentRepository(StateStore(tmp_path / "state.db"), "scope")
-    writer = MT5Writer(fake, WRITE_CONFIG)
-    service = ExecutionService(repository, writer, controller)
+    repository, writer, reconciler, service = _service(tmp_path, fake, controller)
     intent = _intent(controller_id, epoch)
     unknown = service.execute(intent, _all_pass_permission(), _quote(), NOW)
 
@@ -378,7 +429,6 @@ def test_open_unknown_reconciles_from_tagged_broker_position(tmp_path) -> None:
             type=fake.POSITION_TYPE_BUY,
         ),
     )
-    reconciler = MT5Reconciler(fake, WRITE_CONFIG)
     evidence = reconciler.reconcile(unknown, NOW + timedelta(minutes=1))
     resolved = reconciler.apply(repository, unknown, evidence)
 
@@ -387,13 +437,12 @@ def test_open_unknown_reconciles_from_tagged_broker_position(tmp_path) -> None:
     assert resolved.broker_ticket == 555
 
 
-def test_complete_broker_truth_can_prove_unknown_open_was_not_created(tmp_path) -> None:
+def test_complete_broker_truth_can_prove_unknown_open_not_created(tmp_path) -> None:
     clock = [NOW]
     _, controller, controller_id, epoch = _controller(clock)
     fake = FakeMT5()
     fake.send_result = None
-    repository = ExecutionIntentRepository(StateStore(tmp_path / "state.db"), "scope")
-    service = ExecutionService(repository, MT5Writer(fake, WRITE_CONFIG), controller)
+    repository, _, reconciler, service = _service(tmp_path, fake, controller)
     unknown = service.execute(
         _intent(controller_id, epoch),
         _all_pass_permission(),
@@ -401,7 +450,6 @@ def test_complete_broker_truth_can_prove_unknown_open_was_not_created(tmp_path) 
         NOW,
     )
 
-    reconciler = MT5Reconciler(fake, WRITE_CONFIG)
     evidence = reconciler.reconcile(
         unknown,
         NOW + timedelta(minutes=2),
@@ -414,7 +462,7 @@ def test_complete_broker_truth_can_prove_unknown_open_was_not_created(tmp_path) 
     assert resolved.submit_attempts == 1
 
 
-def test_modify_reconciliation_uses_position_levels_not_comment_tag(tmp_path) -> None:
+def test_modify_reconciliation_uses_actual_position_levels(tmp_path) -> None:
     controller_id = new_controller_id()
     intent = replace(
         _intent(controller_id, 1, action=ExecutionAction.MODIFY),
