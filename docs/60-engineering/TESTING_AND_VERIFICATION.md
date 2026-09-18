@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 1.5-design  
-**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research data/evidence integrity, historical session-policy replay, portable runtime recovery, crash/restart, migration, learning-governance and release verification.  
+**Version:** 1.6-design  
+**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research data/evidence integrity, historical session-policy replay, portable runtime recovery, local backup catalog/retention, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
 ## Purpose
@@ -19,7 +19,7 @@ Unit / Contract
 → Deterministic Replay
 → Research Ablation / Outcomes / Manager / Historical Session / Stress / Walk-Forward
 → Dataset / Acquisition / Evidence / Package Integrity
-→ Persistence / Runtime Checkpoint / Restore / Fault Injection
+→ Persistence / Runtime Checkpoint / Backup Catalog / Restore / Fault Injection
 → Controlled Windows MT5 / Fresh Machine / DEMO
 → Learning / Discovery / Promotion Governance
 → End-to-End DEMO Certification
@@ -41,39 +41,45 @@ Research tests cover content-addressed identities, portable dataset round-trip/t
 
 ## Runtime persistence integrity
 
-`StateStore` tests must prove:
-
-- current record canonical JSON/checksum integrity;
-- append-only event payload checksum/JSON/timestamp integrity;
-- database schema-version enforcement;
-- event ordering is durable;
-- corruption never becomes empty/default runtime state;
-- snapshot export includes all current records and ordered event history;
-- snapshot restore requires an empty target store.
+`StateStore` tests prove current-record and append-only-event checksum/JSON/timestamp integrity, schema enforcement, durable event ordering, corruption fail-closed behaviour, deterministic snapshot export and empty-target-only snapshot restore.
 
 ## Portable runtime checkpoint tests
 
 `persistence/checkpoint.py` must prove:
 
-- checkpoint uses exactly `checkpoint_manifest.json`, `records.jsonl`, `events.jsonl`;
-- checkpoint destination is write-new and never overwritten;
-- source `StateStore.integrity_check()` occurs before export;
-- current records and append-only events both round-trip;
-- record/event original checksums, timestamps and event IDs are preserved;
-- file hashes and `checkpoint_sha256` detect tamper;
-- file counts match manifest counts;
-- unsupported schema/canonical filename/file-set/symlink violations fail;
-- structured payload scan blocks authority-bearing password/token/key fields with `FINANCIAL_SECRET_DETECTED`;
-- failed secret export leaves no completed checkpoint artifact;
-- repository text scanner remains fixture-safe while structured artifact scanner is strict;
-- restore requires a non-existing destination database;
-- restore builds/validates a temporary StateStore before atomic handoff;
-- restored database passes full integrity check;
-- typed `RuntimeStateRepository` state remains readable after fresh-database restore;
-- generic additional namespaces such as learning state survive without a second per-feature backup schema;
-- restore result explicitly reports `broker_reconciliation_required=True`.
+- exact canonical file set `checkpoint_manifest.json`, `records.jsonl`, `events.jsonl`;
+- write-new/no-overwrite export;
+- source integrity check before export;
+- records/events round-trip preserving checksums/timestamps/event IDs;
+- file hashes/counts/`checkpoint_sha256` tamper detection;
+- schema/filename/file-set/symlink rejection;
+- structured payload secret block with `FINANCIAL_SECRET_DETECTED`;
+- failed secret export leaves no completed artifact;
+- fresh non-existing restore destination only;
+- temporary restore + integrity verification before atomic handoff;
+- typed and generic namespaces remain readable after restore;
+- restore reports `broker_reconciliation_required=True`.
 
-A deterministic checkpoint restore is **not** permission to trade. Real broker reconciliation must occur before READY.
+A deterministic checkpoint restore is **not** permission to trade.
+
+## Automatic local backup / catalog tests
+
+`persistence/backup.py` must prove:
+
+- first due backup creates a fully verified checkpoint + hashed catalog entry;
+- a call before configured interval returns `SKIPPED_NOT_DUE` without creating a new checkpoint;
+- at the exact due boundary a new checkpoint may be created;
+- retention keeps only the configured newest count;
+- pruning happens only after a new verified checkpoint and catalog exist;
+- `backup_catalog.json` hash detects catalog tamper;
+- catalog entries are chronological and checkpoint names cannot escape `checkpoints/`;
+- catalog verification re-imports each referenced checkpoint and checks checkpoint SHA + record/event counts;
+- tampering a referenced checkpoint makes `load_backup_catalog(..., verify_checkpoints=True)` fail closed;
+- `latest_verified_checkpoint()` never returns a tampered/unverified checkpoint;
+- a new backup that fails because of `FINANCIAL_SECRET_DETECTED` leaves the old catalog and previous known-good checkpoint unchanged;
+- non-positive cadence/retention configuration is rejected.
+
+Initial 15-minute / keep-96 values are a configurable engineering baseline. Tests protect configured semantics, not those values as trading-policy constants.
 
 ## Risk / execution / session tests
 
@@ -89,25 +95,26 @@ Discovery accepts audited declarative primitives and enforces candidate-or-suppr
 
 ## CI versus controlled broker evidence
 
-Public CI is credential-free software evidence. Windows MT5 acquisition, real historical broker-session evidence, fresh-machine broker reconciliation, cross-machine coordination and DEMO execution need controlled environment evidence with credentials outside the repository.
+Public CI is credential-free software evidence. Authenticated GitHub backup publication, Windows MT5 acquisition, real historical broker-session evidence, fresh-machine broker reconciliation, cross-machine coordination and DEMO execution need controlled environments/credentials outside repository state.
 
 ## Evidence reporting
 
 ```text
 Deterministic CI               PASS / count
-StateStore record integrity    PASS
-StateStore event integrity     PASS
+StateStore integrity           PASS
 Runtime checkpoint export      PASS / checkpoint SHA
+Local backup catalog           PASS / catalog SHA / retained count
+Latest verified checkpoint     PASS / path + checkpoint SHA
 Runtime checkpoint restore     PASS / fresh DB
+Remote backup publication      PENDING/PASS
 Broker reconcile after restore PENDING/PASS
 Historical PRE_CLOSE software  PASS
 Research evidence packages     PASS
-Windows MT5 real history       PENDING/PASS
 Shared controller failover     PENDING/PASS
 DEMO execution                 PENDING/PASS
 ```
 
-Current deterministic checkpoint after portable runtime recovery foundation: **195 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic checkpoint after local backup cadence/retention/catalog: **202 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Release-blocking failures
 
@@ -122,8 +129,10 @@ At minimum:
 - dataset/evidence/package hash inconsistency accepted;
 - historical acquisition silently shrinking sample or inventing spread;
 - current-record or event-history corruption accepted;
-- checkpoint manifest/file/record/event tamper accepted;
-- financial-authority secret included in public checkpoint;
+- checkpoint/catalog tamper accepted;
+- catalog points at an unverified/mismatched checkpoint;
+- failed new backup destroys the previous known-good backup;
+- financial-authority secret included in public checkpoint/catalog flow;
 - stale checkpoint merged over live DB;
 - restored local state treated as broker truth;
 - centralized execution/DEMO guard bypass;
@@ -133,13 +142,12 @@ At minimum:
 
 ## Explicit non-goals
 
-Software correctness is not profitability proof. Synthetic fixtures/schedules are not real-market validation. Portable checkpoints are not broker statements and do not grant execution authority.
+Software correctness is not profitability proof. Synthetic fixtures/schedules are not real-market validation. Checkpoints/catalogs are not broker statements and do not grant execution authority. Local backup tests do not prove remote GitHub publication or real-machine recovery.
 
 ## Open questions
 
 - final CI coverage/static/security thresholds;
-- automatic checkpoint cadence/retention tests;
-- public-safe checkpoint publication/catalog tests;
+- authenticated public-safe GitHub publication test matrix;
 - real fresh-machine + broker reconciliation certification matrix;
 - production shared-controller failover matrix;
 - controlled Windows/MT5 historical acquisition matrix;
