@@ -1,9 +1,9 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 1.5-design
+**Version:** 1.6-design
 
-This file now separates remaining items into three classes so implementation is not delayed by values that should be learned from evidence.
+This file separates remaining items into four classes so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
 ```text
 FIX BEFORE BUILD       = required architecture/safety decision still missing
@@ -16,7 +16,11 @@ A `CALIBRATE IN RESEARCH` item is **not permission to guess silently**. Initial 
 
 ## Current freeze status
 
-No major trading/risk/execution subsystem is missing. Core V1 architecture is sufficiently defined to proceed once the final documentation/contradiction audit and build/recovery guide are complete.
+At behavioural-contract level there are currently **no `FIX BEFORE BUILD` items**. The major trading, risk, session, execution, persistence, learning and recovery architecture is sufficiently defined for implementation to begin in the large phases defined by `../CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`.
+
+The design close-out pass has synchronized the System Contract, Architecture, Trade Plan/Manager direction, Risk/Session/Execution contracts, docs-root User/Setup/Coder guides, Testing/Release docs, Design Decisions ledger and Final Build Prompt candidate.
+
+Remaining items below are research calibration, ordinary implementation choices, operator details or later-version work; they must not silently change frozen behavioural invariants.
 
 ## Market intelligence
 
@@ -37,7 +41,7 @@ No major trading/risk/execution subsystem is missing. Core V1 architecture is su
 
 ### FROZEN PRINCIPLE
 
-Completed candles own structural confirmation. Any forming-candle/intrabar information is telemetry only unless a later explicit contract grants it structural authority.
+Completed candles own structural confirmation. Forming-candle/intrabar information is telemetry only unless a later explicit contract grants it structural authority.
 
 ## Strategy / scoring / entry
 
@@ -52,7 +56,7 @@ Initial strategy floor contains six parallel families:
 5. Failed Breakout Reversal
 6. Compression Expansion
 
-Opportunity and Entry Timing remain separate; BUY and SELL theses are independent; safety is outside weighted scoring.
+Opportunity and Entry Timing remain separate; BUY and SELL theses are independent; safety remains outside weighted scoring.
 
 ### CALIBRATE IN RESEARCH
 
@@ -65,7 +69,7 @@ Opportunity and Entry Timing remain separate; BUY and SELL theses are independen
 - minimum Evidence Coverage;
 - chase/extension tolerance;
 - ideal-entry zone and setup-expiry values;
-- exact Market Episode duplicate/opportunity heuristics beyond frozen re-entry limit.
+- exact Market Episode duplicate/opportunity heuristics beyond the frozen re-entry limit.
 
 ### DEFER LATER
 
@@ -145,9 +149,9 @@ TIER 3 CONTEXT   → no automatic hard blackout
 Severe post-news dislocation requires normalized conditions plus one clean completed M5.
 
 ```text
-Daily break:   T-20m no new entry, T-10m mandatory flatten
-Daily reopen:  normalized conditions + 1 clean completed M5
-Weekend:       T-60m no new entry, T-30m mandatory flatten
+Daily break:    T-20m no new entry, T-10m mandatory flatten
+Daily reopen:   normalized conditions + 1 clean completed M5
+Weekend:        T-60m no new entry, T-30m mandatory flatten
 Weekend reopen: gap assessment + normalized conditions + 2 clean completed M5
 ```
 
@@ -171,18 +175,18 @@ Weekend reopen: gap assessment + normalized conditions + 2 clean completed M5
 Spread:
 
 ```text
-SpreadRatio <=1.50        → NORMAL
->1.50–2.25                → ELEVATED + full revalidation
->2.25                     → current entry prevented
-spread >25% of SL distance→ current entry prevented
+SpreadRatio <=1.50         → NORMAL
+>1.50–2.25                 → ELEVATED + full revalidation
+>2.25                      → current entry prevented
+spread >25% of SL distance → current entry prevented
 ```
 
 Adverse price drift:
 
 ```text
-<=10% of planned SL distance   → normal revalidation
->10–20%                        → elevated full revalidation
->20%                           → current intent prevented / WAIT if thesis survives
+<=10% of planned SL distance → normal revalidation
+>10–20%                      → elevated full revalidation
+>20%                         → current intent prevented / WAIT if thesis survives
 ```
 
 Controller:
@@ -224,7 +228,7 @@ None at behavioural-contract level. Broker truth remains authoritative for live 
 
 ### IMPLEMENTATION CHOICE
 
-Initial implementation may choose the storage stack, schema layout, checkpoint format, migration mechanism, backup cadence/retention and export packaging provided it satisfies:
+Initial implementation may choose storage stack, schema layout, checkpoint format, migration mechanism, backup cadence/retention and export packaging provided it satisfies:
 
 - atomic/durable critical state;
 - schema versioning;
@@ -287,6 +291,8 @@ Research is automatic where practical but cannot self-promote production, bypass
 - controlled MT5 DEMO certification;
 - no-lookahead replay proof;
 - duplicate-write/fault-injection proof;
+- controller split-brain/fencing proof;
+- scheduled PRE_CLOSE/reopen proof;
 - restart/reconciliation proof;
 - fresh-machine recovery proof;
 - financial-secret scan;
@@ -294,4 +300,8 @@ Research is automatic where practical but cannot self-promote production, bypass
 
 ## Governance conclusion
 
-The design phase should no longer wait for research-calibration numbers or ordinary library/file choices. Those are explicitly classified above. The next design work is the final contradiction/coverage audit, `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`, final synchronization of `FINAL_BUILD_PROMPT.md`, User Manual, Setup/Run Guide and Coder Guide, then implementation may begin in large phases.
+The behavioural design close-out and cross-document consistency pass are complete enough for implementation to begin. No major subsystem or `FIX BEFORE BUILD` item is currently known.
+
+Research-calibration values and ordinary library/file choices remain explicit work for implementation/replay and should not stall Phase 1.
+
+Documents remain honestly `DRAFT/PROVISIONAL` where implementation or executable verification does not yet exist. They must not be relabeled `IMPLEMENTED` or `VERIFIED` until the required code/tests/evidence actually exist.
