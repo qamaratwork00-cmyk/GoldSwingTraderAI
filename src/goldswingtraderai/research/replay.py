@@ -16,7 +16,6 @@ from goldswingtraderai.domain.enums import DataQuality, OpportunityStage, Timefr
 from goldswingtraderai.domain.ids import EntityId, new_snapshot_id
 from goldswingtraderai.domain.market import (
     AccountFacts,
-    Candle,
     CandleSeries,
     MarketSnapshot,
     Quote,
@@ -25,7 +24,6 @@ from goldswingtraderai.domain.market import (
 from goldswingtraderai.domain.models import MarketSnapshotMeta
 from goldswingtraderai.intelligence.snapshot import (
     IntelligenceConfig,
-    IntelligenceSnapshot,
     build_intelligence_snapshot,
 )
 
