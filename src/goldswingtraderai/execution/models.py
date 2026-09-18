@@ -155,6 +155,32 @@ def mark_failed(
     )
 
 
+def reconcile_accepted(
+    intent: ExecutionIntent,
+    *,
+    broker_ticket: int | None,
+    message: str,
+) -> ExecutionIntent:
+    """Resolve a crash/ambiguous acknowledgement to confirmed broker exposure."""
+
+    if intent.state not in {IntentState.SUBMITTING, IntentState.ACCEPTED_UNKNOWN}:
+        raise ValueError("only ambiguous/submitting intent can reconcile as accepted")
+    return replace(
+        intent,
+        state=IntentState.ACCEPTED_VERIFIED,
+        broker_ticket=broker_ticket,
+        result_message=message,
+    )
+
+
+def reconcile_not_created(intent: ExecutionIntent, *, message: str) -> ExecutionIntent:
+    """Finalize a consumed attempt only after broker truth proves no exposure."""
+
+    if intent.state not in {IntentState.SUBMITTING, IntentState.ACCEPTED_UNKNOWN}:
+        raise ValueError("only ambiguous/submitting intent can reconcile as not created")
+    return replace(intent, state=IntentState.FAILED, result_message=message)
+
+
 @dataclass(frozen=True, slots=True)
 class AuthorityTrace:
     authority: str
