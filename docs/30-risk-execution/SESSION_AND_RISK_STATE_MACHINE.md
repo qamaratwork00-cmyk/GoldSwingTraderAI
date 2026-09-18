@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Session and Risk State Machine
 
 **Status:** PROVISIONAL  
-**Version:** 0.6-design  
+**Version:** 0.7-implementation  
 **Authority:** Hard market/session permission states, risk/system permission composition, news-safety states and state transitions.  
 **Depends on:** `RISK_CONTRACT.md`, `EXECUTION_AND_BROKER_SAFETY.md`, `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`, `../10-market-intelligence/SESSION_CONTEXT.md`
 
@@ -10,6 +10,39 @@
 Market state, risk state and system/execution safety are separate authorities. The market can be open while risk is locked, and a holiday can reduce participation while XAU remains genuinely tradeable.
 
 This document owns **permission states**, not session-analysis quality, event-fact sourcing or daily-loss arithmetic.
+
+## Phase 6 implementation checkpoint
+
+Hard session/news permission is implemented in `src/goldswingtraderai/risk/permissions.py` and deterministic CI is green.
+
+Implemented contracts:
+
+```text
+BrokerSessionFacts
+→ evaluate_market_permission()
+→ MarketPermission
+
+NewsFacts + NewsRecoveryFacts
+→ evaluate_news_permission()
+→ NewsPermission
+
+MarketPermission + NewsPermission
+→ combine_session_news_permission()
+→ SessionNewsPermission
+```
+
+Important implementation behaviour:
+
+- daily PRE_CLOSE uses the frozen `T-20m` no-new-entry and `T-10m` flatten thresholds;
+- weekend PRE_CLOSE uses `T-60m` and `T-30m`;
+- daily reopen requires one clean completed M5 plus normalized conditions;
+- weekend reopen requires two clean completed M5 candles, gap assessment and normalized conditions;
+- holiday context remains `HOLIDAY_CAUTION` and does not manufacture a market closure;
+- missing/unverified required broker session schedule becomes `UNKNOWN`, not an invented close time;
+- unavailable/stale required news truth becomes `NEWS_SAFETY_UNKNOWN`, not silent clear;
+- Tier-1/Tier-2 windows block new entry according to the frozen windows already normalized by the News desk;
+- severe post-news dislocation requires normalized execution conditions plus one clean completed M5;
+- this layer has no broker-write authority. Phase 7 will combine it with account/data/risk/controller/execution checks in the centralized write gate.
 
 ## Market/session permission states
 
@@ -41,9 +74,9 @@ T-0       → expected CLOSED
 
 Trade Manager may protect/exit earlier for structural reasons, but may not intentionally carry a bot-managed position through the scheduled daily XAU break or weekend closure.
 
-Reason codes should distinguish `SESSION_PRE_CLOSE` from `PRE_CLOSE_FLATTEN`.
+Reason codes distinguish `SESSION_PRE_CLOSE` from `PRE_CLOSE_FLATTEN`.
 
-If the broker's session schedule cannot be verified close enough to a known closure, the system must not invent a close time; execution/session health should degrade/block appropriately until reliable session truth is available.
+If the broker's session schedule cannot be verified, the system must not invent a close time. New-entry permission remains unknown until reliable session truth is available.
 
 ### CLOSED
 
@@ -83,7 +116,7 @@ A completed-candle requirement is a minimum freshness rule, not permission to ig
 
 ### HOLIDAY_CAUTION
 
-Holiday context may imply unusual participation/liquidity, but broker tradeability/live data remain authority for actual OPEN/CLOSED state.
+Holiday context may imply unusual participation/liquidity, but broker tradeability/live data remain authority for actual OPEN/CLOSED state. Holiday caution is context, not an automatic hard block.
 
 ## News-safety states
 
@@ -189,6 +222,8 @@ HOLIDAY_CAUTION + NEWS_CLEAR + NORMAL + READY → may trade with caution context
 OPEN + NEWS_CLEAR + NORMAL + BLOCKED → no new entries
 ```
 
+Phase 6 implements the session/news portion of this composition. The full account/data/risk/controller/broker-write composition belongs to the centralized Phase-7 Execution Permission Gate.
+
 ## UTC risk-day relationship
 
 Daily-loss accounting/reset boundary is owned by `RISK_CONTRACT.md`: UTC calendar risk day (`00:00 UTC`). This state machine consumes the resulting risk-state transitions without maintaining a competing formula.
@@ -209,35 +244,24 @@ Show at least Market State, News Safety State, next event/tier, blackout countdo
 
 ## Tests required
 
-- OPEN/PRE_CLOSE/CLOSED transitions;
-- daily break no-new-entry begins at broker-close `T-20m`;
-- daily break mandatory flatten begins at `T-10m`;
-- weekend no-new-entry begins at broker-close `T-60m`;
-- weekend mandatory flatten begins at `T-30m`;
-- PRE_CLOSE close timing is derived from verified broker session schedule rather than fixed local time;
-- no intentional carry through scheduled daily XAU break/weekend;
-- close ambiguity is persisted/reconciled;
-- daily REOPEN_WARMUP requires one clean completed M5 plus normalized conditions;
-- weekend REOPEN_WARMUP requires gap assessment and two clean completed M5 candles plus normalized conditions;
-- abnormal conditions keep warmup active even after minimum candles;
+Implemented deterministic coverage includes:
+
+- daily `T-20/T-10` transitions;
+- weekend `T-60/T-30` transitions;
+- CLOSED and unverified-schedule fail-safe states;
+- daily one-M5 and weekend two-M5/gap-assessment reopen rules;
 - holiday caution not market closure;
-- TIER 1 `-15/+15` and linked-cluster blackout;
-- TIER 2 `-5/+5` blackout;
-- TIER 3 no automatic hard blackout;
-- provider failure/fallback and `NEWS_SAFETY_UNKNOWN`;
-- post-news normalization/clean-M5 severe-dislocation rule;
-- scheduled news does not auto-close managed trade;
-- one ordinary loss does not enter global cooldown;
-- 3 consecutive closed losses enter 30-minute minimum cooldown;
-- cooldown cannot release on timer alone;
-- same-episode second loss locks episode;
-- manual reset default OFF and cannot bypass BLOCKED;
-- permission-composition truth table;
-- broker state overrides calendar assumptions.
+- Tier-1/Tier-2 blackout and clear path;
+- required news truth failure;
+- severe post-news one-clean-M5 rule;
+- session/news permission composition and PRE_CLOSE flatten propagation.
+
+Later integration/fault tests must additionally prove broker-session sourcing, actual scheduled close/reopen behaviour and interaction with the Phase-7 execution gate.
 
 ## Open questions
 
 - final production event provider(s), freshness TTL and provider-specific mapping details;
+- verified broker-session schedule sourcing/adapter details for the actual MT5/broker environment;
 - future research-backed changes to initial news tiers/windows;
 - exact keyboard confirmation timing for `R,R` as an operator UX detail;
 - future research-backed changes, if any, to initial pre-close/reopen timing.
