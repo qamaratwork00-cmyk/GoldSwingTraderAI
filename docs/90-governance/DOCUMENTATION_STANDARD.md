@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Documentation Standard
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-design  
+**Version:** 0.3-design  
 **Authority:** Documentation placement, ownership, status and change-control rules.
 
 ## 1. Purpose
@@ -12,18 +12,18 @@ Core rule:
 
 > **One behavioural rule has one authoritative home. Other documents link to it; they do not restate a competing version.**
 
-## 2. Repository-root documents
+## 2. Repository root and docs-root meta documents
 
-Root-level documents are reserved for repository entry/handoff artifacts, not detailed subsystem contracts.
+Repository root is reserved for repository entry/runtime artifacts. `README.md` remains the primary project introduction/navigation file. Future root artifacts such as `CHANGELOG.md`, `VERSION`, release manifests, dependency/runtime files and source folders may exist when implementation begins.
 
-Current root roles:
+Detailed behavioural documentation belongs under `docs/`.
 
-- `README.md` — project introduction and navigation.
-- `FINAL_BUILD_PROMPT.md` — final implementation handoff; DRAFT until design freeze.
+A small number of **whole-project handoff/meta guides** may live directly in `docs/` rather than a numbered subsystem folder when they coordinate the entire build and are not themselves a topic authority. Current/reserved roles are:
 
-Future root-level artifacts such as `CHANGELOG.md`, `VERSION` or release manifests may exist when implementation/release work begins.
+- `docs/FINAL_BUILD_PROMPT.md` — final implementation handoff; DRAFT until design freeze.
+- `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` — final build-phase/recovery navigation guide, created at the end of design when the actual phase plan is stable.
 
-Detailed behavioural documents belong under `docs/`.
+These meta guides summarize/navigate authoritative contracts; they do not create competing trading, risk, execution or research rules.
 
 ## 3. Folder ownership
 
@@ -117,7 +117,7 @@ Owns design governance:
 - this documentation standard;
 - future change-control records if needed.
 
-The final build prompt does **not** live here; it lives at repository root.
+Whole-project handoff/meta guides do **not** live here; they live directly in `docs/`.
 
 ## 4. Status lifecycle
 
@@ -226,7 +226,7 @@ A phase is not complete while code and its authoritative documentation knowingly
 
 ## 10. Final Build Prompt rule
 
-`FINAL_BUILD_PROMPT.md` is a handoff summary. It may reference frozen design documents and implementation sequence, but it must not become a shadow specification that contradicts them.
+`docs/FINAL_BUILD_PROMPT.md` is a handoff summary. It may reference frozen design documents and implementation sequence, but it must not become a shadow specification that contradicts them.
 
 Before it can become FROZEN:
 
@@ -235,6 +235,22 @@ Before it can become FROZEN:
 - cross-document contradiction audit must be complete;
 - implementation phases and validation expectations must be explicit.
 
-## 11. Reference-project rule
+## 11. ChatGPT Project Build and Recovery Guide rule
+
+`docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` is created at the end of the design phase after the build structure is stable. It is a navigation/recovery meta-guide for completing the project in large phases.
+
+It should define:
+
+- large implementation phases and their deliverables;
+- required checks before moving to the next phase;
+- how to reconstruct project state after conversation/context loss;
+- how to resume after failed/incomplete code, missing files, docs/code mismatch, failed tests or interrupted work;
+- how to recover on a new machine from repository/state backups;
+- how to identify the last verified phase rather than restarting blindly;
+- final completion/audit flow.
+
+It must point back to authoritative documents instead of inventing behavioural rules.
+
+## 12. Reference-project rule
 
 External/prior repositories may be studied for lessons, but GoldSwingTraderAI documentation must describe GoldSwingTraderAI itself. Do not copy prior project identity, legacy compatibility constraints or file architecture merely because they existed in a reference project.
