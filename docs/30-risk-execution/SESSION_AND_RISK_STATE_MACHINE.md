@@ -1,57 +1,89 @@
 # GoldSwingTraderAI — Session and Risk State Machine
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
-**Authority:** Market/session state and risk/system permission states
+**Version:** 0.2-design  
+**Authority:** Hard market/session permission states, risk/system permission composition, news-safety states and state transitions.  
+**Depends on:** `RISK_CONTRACT.md`, `EXECUTION_AND_BROKER_SAFETY.md`, `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`, `../10-market-intelligence/SESSION_CONTEXT.md`
 
 ## Core principle
 
-Market state and risk/system state are separate. The market can be open while trading is loss-locked, or a holiday can reduce liquidity while the market remains genuinely tradeable.
+Market state, risk state and system/execution safety are separate authorities. The market can be open while risk is locked, and a holiday can reduce participation while XAU remains genuinely tradeable.
 
-## Market/session states
+This document owns **permission states**, not session-analysis quality or daily-loss arithmetic.
+
+## Market/session permission states
 
 ### OPEN
 
-Normal market operation. New trades may be considered if risk, safety and execution authorities also permit them.
+Broker/live market is functioning and new trades may be considered if risk, news, system and execution authorities also permit them.
 
-### PRE-CLOSE
+### PRE_CLOSE
 
 Scheduled XAU closure is approaching.
 
-- New entries: blocked by default.
-- Open-trade management: remains active.
-- Position flatten/overnight policy: not yet frozen for this project.
+- New entries: blocked by default unless a later frozen policy explicitly allows otherwise.
+- Open-trade management: remains active where broker actions are available.
+- Flatten/holding policy: not yet frozen.
 
 ### CLOSED
 
-Broker-confirmed XAU closure, weekend or scheduled rollover break.
+Broker-confirmed XAU closure/weekend/scheduled break.
 
 - New entries: blocked.
-- Open-trade broker actions depend on market availability; reconciliation/state maintenance continues.
+- Reconciliation/state maintenance continues where possible.
 - Research/background analysis may continue.
 
 ### REOPEN_WARMUP
 
-The first returned quote after a closure does not automatically mean the system is ready to trade.
+The first returned quote after closure is not sufficient for trade readiness.
 
-The system should verify:
+Evidence may include:
 
-- fresh quotes;
-- valid symbol tradeability;
-- acceptable spread behaviour;
+- fresh valid quotes;
+- symbol tradeability;
+- normalized spread;
 - candle continuity;
-- no unexplained open-market gaps;
-- enough fresh data for the required timeframe decisions.
+- unexplained gap/dislocation assessment;
+- sufficient fresh data for required timeframe decisions.
 
-Warmup should be evidence-driven rather than an unnecessarily long fixed delay. Exact fresh-candle requirements remain open.
+Warmup is intended to be evidence-driven rather than an unnecessarily long fixed delay. Exact requirements remain open.
 
 ### HOLIDAY_CAUTION
 
-A calendar holiday does not automatically mean Gold is closed.
+Holiday calendar context indicates potentially unusual participation/liquidity, but the market may remain open. Broker tradeability and live market data remain authority for actual OPEN/CLOSED status.
 
-If XAU is genuinely open and market data is healthy, trading may remain allowed. Holiday context may influence soft session/liquidity evidence, but broker tradeability and actual market data are authoritative for market-open state.
+## News-safety states
 
-A US holiday with an open, functioning Gold market is therefore not automatically `CLOSED`.
+Market Intelligence publishes event facts/provider health. This state machine derives hard permission according to the frozen event policy.
+
+Suggested states:
+
+```text
+NEWS_CLEAR
+NEWS_BLACKOUT
+NEWS_SAFETY_UNKNOWN
+POST_NEWS_WARMUP
+```
+
+### NEWS_CLEAR
+
+Required event-safety information is verified and no configured hard blackout is active.
+
+### NEWS_BLACKOUT
+
+A verified scheduled event falls inside a configured hard no-new-entry window.
+
+This is an expected safety state, not a system fault.
+
+### NEWS_SAFETY_UNKNOWN
+
+Required scheduled-event safety cannot be verified. New entries fail closed where policy requires event verification.
+
+### POST_NEWS_WARMUP
+
+After a major event, new entries remain paused until the configured evidence of market normalization is satisfied. The intended design is not timer-only if spread/quotes/volatility remain dislocated.
+
+Exact event tiers/windows/recovery criteria remain open.
 
 ## Risk/system states
 
@@ -61,30 +93,31 @@ No special risk lock is active.
 
 ### LOSS_LOCKED
 
-The configured daily loss limit has been reached.
+The Risk Contract reports that the daily loss budget is exhausted.
 
-- New entries: blocked.
-- Open-trade management: remains active.
-- Manual governed reset: retained as a supported operator feature under the Risk Contract.
+- New entries/re-entry/add-ons blocked.
+- Open-trade management remains active where safely possible.
+- Governed manual reset may transition the risk state only according to `RISK_CONTRACT.md`.
+
+This document does **not** redefine daily P/L calculation/reset-reference semantics.
 
 ### COOLDOWN
 
-Temporary pause after defined adverse behaviour such as a loss sequence or other future policy trigger.
-
-Open-trade management remains active. Exact cooldown trigger/duration and whether a fresh market event is required in addition to time remain open.
+Temporary pause after a frozen adverse-behaviour/churn trigger. Exact trigger/release rules belong to Risk Contract and remain open.
 
 ### BLOCKED
 
-Critical truth/safety is unavailable or invalid. Examples may include:
+Critical truth/safety is unavailable or invalid, for example:
 
 - broker/account identity uncertainty;
-- stale/corrupt market data;
+- stale/corrupt required market data;
 - unresolved order lifecycle;
-- unverified financial state;
-- persistence corruption;
-- hard news-safety uncertainty where verification is required.
+- unknown required financial state;
+- critical persistence corruption;
+- unknown required news safety;
+- execution-controller ownership uncertainty.
 
-No operator shortcut should silently bypass a genuine `BLOCKED` state.
+No operator shortcut may silently bypass a genuine `BLOCKED` state.
 
 ## Permission composition
 
@@ -92,8 +125,9 @@ Final entry permission is composed from at least:
 
 ```text
 Market State
++ News Safety State
 + Risk State
-+ System/Safety State
++ System/Data State
 + Execution Readiness
 = Entry Permission
 ```
@@ -101,25 +135,60 @@ Market State
 Examples:
 
 ```text
-OPEN + NORMAL + READY → entries may be evaluated
-OPEN + LOSS_LOCKED + READY → no new entries; management active
-HOLIDAY_CAUTION + NORMAL + READY → entries allowed with caution context
-OPEN + NORMAL + BLOCKED → no new entries
+OPEN + NEWS_CLEAR + NORMAL + READY → entries may be evaluated
+OPEN + NEWS_CLEAR + LOSS_LOCKED + READY → no new entries
+OPEN + NEWS_BLACKOUT + NORMAL + READY → no new entries; expected safety block
+OPEN + NEWS_SAFETY_UNKNOWN + NORMAL + READY → no new entries if verification required
+HOLIDAY_CAUTION + NEWS_CLEAR + NORMAL + READY → may trade with caution context
+OPEN + NEWS_CLEAR + NORMAL + BLOCKED → no new entries
 ```
 
-## Daily loss reset and risk-cycle boundary
+## UTC risk-day relationship
 
-The project retains daily loss locking and governed manual reset. The exact automatic reset boundary must be frozen separately because the design discussion has considered both traditional risk-day rollover and XAU reopen/session-aware semantics.
+Daily-loss accounting/reset boundary is owned by `RISK_CONTRACT.md`. The current provisional decision is a **UTC calendar risk day (`00:00 UTC`)** rather than XAU reopen semantics.
 
-Until resolved, implementation must not guess this boundary.
+This state machine simply consumes the resulting risk-state transition; it does not maintain a competing reset formula.
+
+## Broker truth over calendar
+
+A calendar may suggest expected open/closed/holiday conditions, but actual broker tradeability and valid live quotes determine whether XAU can be executed.
+
+Calendar says open + broker unavailable → not executable.
+
+Holiday says caution + broker/live market healthy → not automatically CLOSED.
+
+## Open-trade priority
+
+A hard new-entry block should not automatically stop safe management of an already-open managed position. Trade Manager/execution remain active where required and broker operations are safely available.
 
 ## Dashboard requirements
 
-The operator should be able to distinguish at a glance:
+Operator should distinguish at a glance:
 
-- market state;
-- risk state;
-- system/safety state;
-- reason for any block;
-- next expected market transition where known;
-- manual-reset usage/audit state.
+- Market State;
+- News Safety State;
+- Risk State;
+- System/Execution State;
+- exact primary/secondary block reason;
+- next expected transition where knowable;
+- manual-reset state as published by Risk Contract.
+
+## Tests required
+
+- OPEN/PRE_CLOSE/CLOSED transitions;
+- REOPEN_WARMUP evidence;
+- holiday caution not market closure;
+- NEWS_CLEAR/BLACKOUT/UNKNOWN/WARMUP transitions;
+- daily-loss state consumed from Risk Contract without duplicate accounting;
+- BLOCKED state cannot be overridden by manual reset;
+- permission composition truth table;
+- broker state overrides calendar assumptions.
+
+## Open questions
+
+- exact PRE_CLOSE no-new-entry window;
+- overnight/daily-break/weekend position-holding policy;
+- exact REOPEN_WARMUP evidence/fresh-candle requirements;
+- exact event tiers/blackout windows;
+- exact POST_NEWS_WARMUP normalization rules;
+- final cooldown transition rules (owned numerically by Risk Contract).
