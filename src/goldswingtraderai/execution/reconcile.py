@@ -15,6 +15,7 @@ from goldswingtraderai.execution.models import (
     ExecutionAction,
     ExecutionIntent,
     IntentState,
+    mark_accepted_unknown,
     reconcile_accepted,
     reconcile_not_created,
 )
@@ -70,17 +71,19 @@ class MT5Reconciler:
                 "RECONCILIATION_TRUTH_INCOMPLETE",
             )
 
-        match = self._find_match(intent, (*positions, *orders, *deals))
-        if match is not None:
+        accepted = self._accepted_evidence(intent, positions, orders, deals)
+        if accepted is not None:
+            row, reason = accepted
             return ReconciliationResult(
                 ReconciliationStatus.VERIFIED_ACCEPTED,
-                "BROKER_EXPOSURE_MATCHED",
-                broker_ticket=_ticket(match),
+                reason,
+                broker_ticket=_ticket(row) or intent.position_ticket,
             )
-        if allow_verified_not_created:
+
+        if allow_verified_not_created and self._can_prove_not_created(intent, positions):
             return ReconciliationResult(
                 ReconciliationStatus.VERIFIED_NOT_CREATED,
-                "BROKER_PROVED_NO_MATCHING_EXPOSURE",
+                "BROKER_PROVED_INTENT_NOT_APPLIED",
             )
         return ReconciliationResult(
             ReconciliationStatus.UNRESOLVED,
@@ -106,15 +109,91 @@ class MT5Reconciler:
             repository.save(resolved, event_type="INTENT_RECONCILED_NOT_CREATED")
             return resolved
         if intent.state is IntentState.SUBMITTING:
-            # A recovered process that finds SUBMITTING but cannot establish broker
-            # truth converts it to explicit ambiguity; the consumed attempt stays 1.
-            from goldswingtraderai.execution.models import mark_accepted_unknown
-
             unresolved = mark_accepted_unknown(intent, message=result.reason)
             repository.save(unresolved, event_type="INTENT_RECONCILIATION_UNRESOLVED")
             return unresolved
         repository.save(intent, event_type="INTENT_RECONCILIATION_UNRESOLVED")
         return intent
+
+    def _accepted_evidence(
+        self,
+        intent: ExecutionIntent,
+        positions: Sequence[Any],
+        orders: Sequence[Any],
+        deals: Sequence[Any],
+    ) -> tuple[Any, str] | None:
+        if intent.action is ExecutionAction.MODIFY:
+            position = _by_ticket(positions, intent.position_ticket)
+            if position is not None and _levels_match(position, intent):
+                return position, "BROKER_POSITION_LEVELS_MATCH_MODIFY_INTENT"
+            return None
+
+        if intent.action is ExecutionAction.CLOSE:
+            tagged_deal = self._find_tagged(intent, deals, closing=True)
+            if tagged_deal is not None:
+                return tagged_deal, "BROKER_CLOSE_DEAL_MATCHED"
+            return None
+
+        tagged = self._find_tagged(intent, (*positions, *orders, *deals), closing=False)
+        if tagged is not None:
+            return tagged, "BROKER_OPEN_EXPOSURE_MATCHED"
+        return None
+
+    def _can_prove_not_created(
+        self,
+        intent: ExecutionIntent,
+        positions: Sequence[Any],
+    ) -> bool:
+        if intent.action is ExecutionAction.OPEN:
+            return True
+        position = _by_ticket(positions, intent.position_ticket)
+        if intent.action is ExecutionAction.MODIFY:
+            # If the exact managed position still exists and its SL/TP differ from
+            # the requested levels, complete broker truth can prove modify did not apply.
+            return position is not None and not _levels_match(position, intent)
+        if intent.action is ExecutionAction.CLOSE:
+            # If the exact position still exists, the close was not applied. If it
+            # vanished without our tagged deal, attribution is ambiguous (e.g. manual close).
+            return position is not None
+        return False
+
+    def _find_tagged(
+        self,
+        intent: ExecutionIntent,
+        rows: Sequence[Any],
+        *,
+        closing: bool,
+    ) -> Any | None:
+        tag = f"{self.config.comment_prefix}:{intent.intent_id.value[:12]}"
+        for row in rows:
+            if _text(row, "symbol") not in {None, intent.symbol}:
+                continue
+            if _int(row, "magic") not in {None, self.config.magic}:
+                continue
+            if tag not in (_text(row, "comment") or ""):
+                continue
+            volume = _float(row, "volume")
+            if volume is not None and not isclose(volume, intent.volume, rel_tol=0.0, abs_tol=1e-8):
+                continue
+            if not self._direction_matches(intent, row, closing=closing):
+                continue
+            if closing and intent.position_ticket is not None:
+                position_id = _int(row, "position_id")
+                if position_id not in {None, intent.position_ticket}:
+                    continue
+            return row
+        return None
+
+    def _direction_matches(self, intent: ExecutionIntent, row: Any, *, closing: bool) -> bool:
+        row_type = _int(row, "type")
+        if row_type is None:
+            return True
+        buy_type = getattr(self._mt5, "POSITION_TYPE_BUY", getattr(self._mt5, "ORDER_TYPE_BUY", 0))
+        sell_type = getattr(self._mt5, "POSITION_TYPE_SELL", getattr(self._mt5, "ORDER_TYPE_SELL", 1))
+        expected = intent.direction
+        if closing:
+            expected = Direction.SELL if intent.direction is Direction.BUY else Direction.BUY
+        return row_type == (int(buy_type) if expected is Direction.BUY else int(sell_type))
 
     def _positions(self, symbol: str) -> tuple[Any, ...] | None:
         getter = getattr(self._mt5, "positions_get", None)
@@ -137,34 +216,24 @@ class MT5Reconciler:
         value = getter(start_utc, end_utc)
         return None if value is None else tuple(value)
 
-    def _find_match(self, intent: ExecutionIntent, rows: Sequence[Any]) -> Any | None:
-        tag = f"{self.config.comment_prefix}:{intent.intent_id.value[:12]}"
-        for row in rows:
-            if _text(row, "symbol") not in {None, intent.symbol}:
-                continue
-            if _int(row, "magic") not in {None, self.config.magic}:
-                continue
-            comment = _text(row, "comment") or ""
-            if tag not in comment:
-                continue
-            volume = _float(row, "volume")
-            if volume is not None and not isclose(volume, intent.volume, rel_tol=0.0, abs_tol=1e-8):
-                continue
-            if not self._direction_matches(intent, row):
-                continue
-            return row
-        return None
 
-    def _direction_matches(self, intent: ExecutionIntent, row: Any) -> bool:
-        row_type = _int(row, "type")
-        if row_type is None:
-            return True
-        buy_type = getattr(self._mt5, "POSITION_TYPE_BUY", getattr(self._mt5, "ORDER_TYPE_BUY", 0))
-        sell_type = getattr(self._mt5, "POSITION_TYPE_SELL", getattr(self._mt5, "ORDER_TYPE_SELL", 1))
-        expected = intent.direction
-        if intent.action is ExecutionAction.CLOSE:
-            expected = Direction.SELL if intent.direction is Direction.BUY else Direction.BUY
-        return row_type == (int(buy_type) if expected is Direction.BUY else int(sell_type))
+def _levels_match(row: Any, intent: ExecutionIntent) -> bool:
+    for field, expected in (("sl", intent.stop_loss), ("tp", intent.take_profit)):
+        if expected is None:
+            continue
+        actual = _float(row, field)
+        if actual is None or not isclose(actual, expected, rel_tol=0.0, abs_tol=1e-8):
+            return False
+    return True
+
+
+def _by_ticket(rows: Sequence[Any], ticket: int | None) -> Any | None:
+    if ticket is None:
+        return None
+    for row in rows:
+        if _ticket(row) == ticket:
+            return row
+    return None
 
 
 def _field(row: Any, name: str, default: Any = None) -> Any:
