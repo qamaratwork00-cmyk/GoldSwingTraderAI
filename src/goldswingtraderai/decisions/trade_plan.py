@@ -1,8 +1,8 @@
 """Structural Trade Plan built before monetary sizing.
 
-The planner converts one READY opportunity into deterministic entry, invalidation,
-stop and objective geometry. It does not size lots or place orders. Internal/noisy
-obstacles remain visible without automatically becoming the Primary objective.
+The planner converts a READY opportunity into deterministic entry, invalidation,
+stop and objective geometry. It does not size lots or place orders. Nearby noisy
+obstacles stay visible without automatically becoming the Primary objective.
 """
 
 from __future__ import annotations
@@ -67,16 +67,15 @@ class PlanTarget:
     rr: float
 
     def __post_init__(self) -> None:
-        if self.price <= 0:
-            raise ValueError("target price must be positive")
+        if self.price <= 0 or self.rr <= 0:
+            raise ValueError("target price/RR must be positive")
         if not 0 <= self.quality <= 100:
             raise ValueError("target quality must be between 0 and 100")
-        if self.rr <= 0:
-            raise ValueError("target RR must be positive")
 
 
 @dataclass(frozen=True, slots=True)
 class TradePlanConfig:
+    # Research-calibratable baselines. Frozen RR thresholds below are policy.
     atr_buffer_fraction: float = 0.12
     minimum_buffer_ticks: int = 4
     fragile_risk_atr: float = 0.20
@@ -134,12 +133,12 @@ class TradePlan:
     state: PlanState
     signal_price: float
     approved_entry_reference: float
-    invalidation_level: float
+    invalidation_level: float | None
     invalidation_source: str
-    initial_stop: float
-    stop_buffer: float
+    initial_stop: float | None
+    stop_buffer: float | None
     stop_quality: StopQuality
-    original_r_price: float
+    original_r_price: float | None
     immediate_obstacle: PlanTarget | None
     primary_target: PlanTarget | None
     expansion_target: PlanTarget | None
@@ -155,16 +154,25 @@ class TradePlan:
         _require_utc(self.created_at_utc)
         if self.direction is Direction.NONE:
             raise ValueError("Trade Plan direction must be BUY or SELL")
+        if self.signal_price <= 0 or self.approved_entry_reference <= 0:
+            raise ValueError("signal/entry prices must be positive")
         for value in (
-            self.signal_price,
-            self.approved_entry_reference,
             self.invalidation_level,
             self.initial_stop,
             self.stop_buffer,
             self.original_r_price,
         ):
-            if value <= 0:
-                raise ValueError("Trade Plan prices/distances must be positive")
+            if value is not None and value <= 0:
+                raise ValueError("Trade Plan geometry must be positive when present")
+        if self.state is not PlanState.INVALID and None in (
+            self.invalidation_level,
+            self.initial_stop,
+            self.stop_buffer,
+            self.original_r_price,
+        ):
+            raise ValueError("non-INVALID Trade Plan requires complete stop geometry")
+        if self.state is PlanState.READY and self.broker_tp_target is None:
+            raise ValueError("READY Trade Plan requires a broker target")
         if not 0 <= self.path_quality <= 100 or not 0 <= self.plan_quality <= 100:
             raise ValueError("plan/path quality must be between 0 and 100")
 
@@ -187,15 +195,16 @@ def build_trade_plan(
     now_utc: datetime,
     config: TradePlanConfig | None = None,
 ) -> TradePlan:
-    """Build structural geometry for one READY opportunity.
+    """Build structural geometry for one analytically READY opportunity.
 
-    Current snapshot Bid/Ask supplies the approved plan reference only. Phase 7
-    still performs a fresh executable-quote revalidation before any broker write.
+    Snapshot Bid/Ask is the approved plan reference. Phase 7 still performs fresh
+    executable-quote, margin and broker-rule revalidation before a write.
     """
 
     _require_utc(now_utc)
     if opportunity.stage is not OpportunityStage.READY:
         raise ValueError("Trade Plan requires a READY opportunity")
+
     cfg = config or TradePlanConfig()
     direction = opportunity.direction
     family = opportunity.source_families[0]
@@ -208,25 +217,24 @@ def build_trade_plan(
         return _invalid_plan(
             opportunity,
             family,
-            direction,
             signal,
             entry,
             now_utc,
-            reason="NO_STRUCTURAL_INVALIDATION",
+            "NO_STRUCTURAL_INVALIDATION",
         )
+
     invalidation_level, invalidation_source, reference_frame = invalidation
     atr = reference_frame.quant.atr or intelligence.for_timeframe(Timeframe.M5).quant.atr
     if atr is None or atr <= 0:
         return _invalid_plan(
             opportunity,
             family,
-            direction,
             signal,
             entry,
             now_utc,
-            reason="ATR_UNAVAILABLE_FOR_STOP_BUFFER",
-            invalidation_level=invalidation_level,
-            invalidation_source=invalidation_source,
+            "ATR_UNAVAILABLE_FOR_STOP_BUFFER",
+            invalidation_level,
+            invalidation_source,
         )
 
     buffer = max(tick * cfg.minimum_buffer_ticks, atr * cfg.atr_buffer_fraction)
@@ -237,27 +245,26 @@ def build_trade_plan(
         return _invalid_plan(
             opportunity,
             family,
-            direction,
             signal,
             entry,
             now_utc,
-            reason="INVALID_STOP_GEOMETRY",
-            invalidation_level=invalidation_level,
-            invalidation_source=invalidation_source,
+            "INVALID_STOP_GEOMETRY",
+            invalidation_level,
+            invalidation_source,
         )
 
     broker_min_distance = market.symbol_spec.stops_level_points * market.symbol_spec.point
     if broker_min_distance > 0 and original_r < broker_min_distance:
+        # Do not widen a market-derived stop merely to satisfy broker geometry.
         return _invalid_plan(
             opportunity,
             family,
-            direction,
             signal,
             entry,
             now_utc,
-            reason="BROKER_STOP_DISTANCE_DISTORTS_PLAN",
-            invalidation_level=invalidation_level,
-            invalidation_source=invalidation_source,
+            "BROKER_STOP_DISTANCE_DISTORTS_PLAN",
+            invalidation_level,
+            invalidation_source,
         )
 
     stop_quality = _stop_quality(original_r, buffer, atr, cfg)
@@ -272,10 +279,9 @@ def build_trade_plan(
     path_quality = _path_quality(direction, intelligence)
 
     if primary is None:
-        return _completed_plan(
+        return _complete_plan(
             opportunity,
             family,
-            direction,
             signal,
             entry,
             invalidation_level,
@@ -316,10 +322,7 @@ def build_trade_plan(
             state = PlanState.DEGRADED
             reason = "MARGINAL_RR_NEEDS_CREDIBLE_EXPANSION"
 
-    broker_tp = expansion if expansion is not None else primary
-    if state is not PlanState.READY:
-        broker_tp = None
-
+    broker_tp = (expansion or primary) if state is PlanState.READY else None
     plan_quality = _plan_quality(
         stop_quality,
         primary,
@@ -328,10 +331,9 @@ def build_trade_plan(
         intelligence,
         direction,
     )
-    return _completed_plan(
+    return _complete_plan(
         opportunity,
         family,
-        direction,
         signal,
         entry,
         invalidation_level,
@@ -376,6 +378,7 @@ def _find_invalidation(
         protected = frame.structure.protected_low if direction is Direction.BUY else frame.structure.protected_high
         if protected is not None and _level_is_beyond_entry(protected.price, entry, direction):
             return protected.price, f"{timeframe}:PROTECTED_{wanted_side}", frame
+
         swing = next(
             (
                 item
@@ -407,36 +410,40 @@ def _target_candidates(
     target_side = ZoneSide.RESISTANCE if direction is Direction.BUY else ZoneSide.SUPPORT
     pool_side = LiquiditySide.BUY_SIDE if direction is Direction.BUY else LiquiditySide.SELL_SIDE
     swing_side = SwingSide.HIGH if direction is Direction.BUY else SwingSide.LOW
+    tf_bonus = {
+        Timeframe.M5: 0.0,
+        Timeframe.M15: 5.0,
+        Timeframe.H1: 10.0,
+        Timeframe.H4: 15.0,
+    }
 
     for timeframe in (Timeframe.M5, Timeframe.M15, Timeframe.H1, Timeframe.H4):
         frame = intelligence.for_timeframe(timeframe)
-        tf_bonus = {Timeframe.M5: 0.0, Timeframe.M15: 5.0, Timeframe.H1: 10.0, Timeframe.H4: 15.0}[timeframe]
+        bonus = tf_bonus[timeframe]
         for zone in frame.technical.zones:
             if zone.side is target_side and _target_is_ahead(zone.midpoint, entry, direction):
                 raw.append(
                     _TargetCandidate(
                         price=zone.midpoint,
-                        quality=min(100.0, zone.quality + tf_bonus),
+                        quality=min(100.0, zone.quality + bonus),
                         source=f"{timeframe}:ZONE",
                     )
                 )
         for pool in frame.liquidity.pools:
             if pool.side is pool_side and _target_is_ahead(pool.midpoint, entry, direction):
-                quality = min(100.0, 40.0 + pool.significance * 15.0 + tf_bonus)
                 raw.append(
                     _TargetCandidate(
                         price=pool.midpoint,
-                        quality=quality,
+                        quality=min(100.0, 40.0 + pool.significance * 15.0 + bonus),
                         source=f"{timeframe}:LIQUIDITY",
                     )
                 )
         for swing in frame.structure.swings:
             if swing.side is swing_side and _target_is_ahead(swing.price, entry, direction):
-                quality = min(100.0, 35.0 + swing.significance_atr * 15.0 + tf_bonus)
                 raw.append(
                     _TargetCandidate(
                         price=swing.price,
-                        quality=quality,
+                        quality=min(100.0, 35.0 + swing.significance_atr * 15.0 + bonus),
                         source=f"{timeframe}:SWING",
                     )
                 )
@@ -484,8 +491,9 @@ def _select_targets(
         if expansion_c is not None
         else None
     )
+
     anchor = expansion_c or primary_c
-    remaining = meaningful[meaningful.index(anchor) + 1 :] if anchor in meaningful else ()
+    remaining = meaningful[meaningful.index(anchor) + 1 :]
     runner_c = next(
         (
             item
@@ -551,6 +559,7 @@ def _plan_quality(
     rr_score = min(100.0, primary.rr / 2.0 * 85.0)
     if expansion is not None and expansion.rr >= 2.0:
         rr_score = min(100.0, rr_score + 10.0)
+
     m15 = intelligence.for_timeframe(Timeframe.M15)
     location = m15.technical.buy_location if direction is Direction.BUY else m15.technical.sell_location
     location_score = {
@@ -618,10 +627,9 @@ def _directional_distance(start: float, end: float, direction: Direction) -> flo
     return end - start if direction is Direction.BUY else start - end
 
 
-def _completed_plan(
+def _complete_plan(
     opportunity: Opportunity,
     family: StrategyFamily,
-    direction: Direction,
     signal: float,
     entry: float,
     invalidation_level: float,
@@ -647,7 +655,7 @@ def _completed_plan(
         opportunity_id=opportunity.opportunity_id,
         episode_id=opportunity.episode_id,
         family=family,
-        direction=direction,
+        direction=opportunity.direction,
         state=state,
         signal_price=signal,
         approved_entry_reference=entry,
@@ -673,32 +681,28 @@ def _completed_plan(
 def _invalid_plan(
     opportunity: Opportunity,
     family: StrategyFamily,
-    direction: Direction,
     signal: float,
     entry: float,
     now_utc: datetime,
-    *,
     reason: str,
     invalidation_level: float | None = None,
     invalidation_source: str = "UNAVAILABLE",
 ) -> TradePlan:
-    fallback_level = invalidation_level or entry
-    fallback_stop = max(1e-9, entry * (0.999 if direction is Direction.BUY else 1.001))
     return TradePlan(
         plan_id=new_trade_plan_id(),
         opportunity_id=opportunity.opportunity_id,
         episode_id=opportunity.episode_id,
         family=family,
-        direction=direction,
+        direction=opportunity.direction,
         state=PlanState.INVALID,
         signal_price=signal,
         approved_entry_reference=entry,
-        invalidation_level=max(1e-9, fallback_level),
+        invalidation_level=invalidation_level,
         invalidation_source=invalidation_source,
-        initial_stop=fallback_stop,
-        stop_buffer=max(1e-9, abs(fallback_stop - fallback_level)),
+        initial_stop=None,
+        stop_buffer=None,
         stop_quality=StopQuality.INVALID,
-        original_r_price=max(1e-9, abs(entry - fallback_stop)),
+        original_r_price=None,
         immediate_obstacle=None,
         primary_target=None,
         expansion_target=None,
