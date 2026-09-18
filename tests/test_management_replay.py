@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from goldswingtraderai.decisions.timing import TimingAction
 from goldswingtraderai.decisions.trade_plan import (
     PlanState,
     PlanTarget,
