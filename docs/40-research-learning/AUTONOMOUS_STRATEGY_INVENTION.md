@@ -1,162 +1,129 @@
 # GoldSwingTraderAI — Autonomous Strategy Invention
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
-**Authority:** Safe autonomous creation of declarative strategy hypotheses/candidates from audited primitives.  
+**Version:** 0.2-implementation  
+**Authority:** Safe automatic creation of declarative strategy hypotheses/candidates from audited research evidence.  
 **Depends on:** `GOVERNED_STRATEGY_DISCOVERY.md`, `RESEARCH_AND_VALIDATION.md`, `LEARNING_AND_AI_BOUNDARIES.md`
 
 ## Purpose
 
-Autonomous invention may propose new strategy recipes from recurring market evidence, but it may not self-write executable trading code or bypass the governed validation/promotion path.
+Autonomous invention turns recurring research evidence into bounded declarative candidates. It does not self-write executable trading code, change production strategy or acquire broker authority.
 
 > **Autonomy may invent hypotheses, not unrestricted authority.**
 
+## Working-path requirement
+
+A functioning invention feature requires all of the following, not merely a candidate class:
+
+```text
+outcome-labelled research episodes
+→ durable journal
+→ automatic approved-primitive mapping
+→ recurring evidence clustering
+→ candidate generation / explicit suppression reason
+→ durable registry
+→ validation/promotion pipeline
+```
+
+If the automatic feed is disconnected, eligible evidence silently disappears, or restart erases candidate/rejected memory, invention is considered degraded/not working.
+
 ## Approved primitive registry
 
-Autonomous candidates may use only approved audited primitives exposed by the documented system, such as:
+Candidates may use only audited primitives exposed by `research/discovery.py`, such as structure/break/MSS, rejection/displacement/compression, technical location, liquidity sweep/FVG/OB, EMA/RSI/ATR context, session, target path and entry timing.
 
-- structure/swing/BOS/MSS facts;
-- candle/rejection/displacement/compression evidence;
-- technical zones/location;
-- liquidity pools/sweeps/FVG/OB/premium-discount;
-- EMA/RSI/ATR/volatility/momentum evidence;
-- session/macro context;
-- target/path evidence;
-- approved timing/invalidation/target models.
-
-Unknown executable primitives are rejected.
+Unknown strings or generated executable primitives are rejected before candidate creation.
 
 ## Declarative candidate format
 
-A strategy candidate should describe, at minimum:
+Each candidate records a typed ID, type, optional parent family, required/optional approved primitives, preferred regime, timing profile, invalidation model, target model, evidence lineage, fingerprint, chronology and current state.
 
-```text
-Strategy/Candidate ID
-Name / narrative
-Parent/genealogy
-Required behaviours
-Optional supporting evidence
-Counter-evidence/conflicts
-Preferred regime
-Timing profile
-Invalidation model
-Target model
-Expiry/staleness logic
-Discovery reason/evidence
-```
-
-The production interpreter executes audited primitives; the candidate does not contain arbitrary executable source code.
+Candidate recipes contain data only. They cannot contain `eval`, `exec`, generated Python or an MT5 call.
 
 ## Evidence-driven invention
 
-Preferred invention flow:
+Initial automatic triggers include repeated meaningful missed moves, false-entry clusters, premature exits, high-capture sequences and later regime-deterioration research.
 
-```text
-repeated observation/cluster
-→ hypothesis
-→ declarative candidate
-→ research validation
-```
+Candidate creation requires repeated independent evidence. Duplicate copies of one episode do not count as multiple samples.
 
-The inventor should not generate thousands of random combinations without evidence.
-
-Useful triggers include:
-
-- large moves repeatedly missed by current families;
-- recurring failure patterns;
-- repeated high-capture market sequences;
-- unrepresented regime behaviour.
+The inventor groups evidence by coherent trigger/direction/regime rather than randomly combining every available primitive.
 
 ## New family versus variant
 
-Before declaring a new family, compare with the existing Strategy Floor.
+Similarity against the existing six-family Strategy Floor and the durable candidate registry determines whether a hypothesis is more appropriately a `VARIANT` or a `NEW_FAMILY` research candidate.
 
-A candidate that is effectively `Trend Pullback + extra RSI support` is a variant, not automatically a new production family.
+A trivial extra RSI/FVG condition must not be mislabeled a new family. Conversely, a materially different repeated primitive pattern can be retained as a new-family challenger for validation.
 
-A new family requires a materially distinct market narrative or timing/invalidation/target structure.
+## Liveness / health
+
+Each cycle publishes:
+
+```text
+IDLE       no eligible recurring evidence yet
+HEALTHY    candidate(s) created OR every eligible cluster has an explicit governed suppression reason
+DEGRADED   eligible evidence could not produce either outcome
+```
+
+The system must never report `HEALTHY` merely because the module imported successfully.
+
+## Duplicate and rejected-candidate memory
+
+Candidate fingerprints/similarity prevent repeated duplicate creation. Rejected candidates remain durable across restart/laptop recovery, and substantially similar rejected ideas are suppressed unless materially new evidence/versioning justifies another candidate.
 
 ## Complexity control
 
-Prefer a small number of primary behaviours plus optional support. Candidates that require many simultaneous conditions should receive stronger complexity penalties/evidence requirements.
-
-The autonomous system must not recreate filter soup.
+Initial recipes cap the number of required/optional primitives. Exact bounds are research-calibratable, but the invariant is stable: prefer a few coherent primary behaviours over filter soup.
 
 ## Risk/execution boundaries
 
-Autonomous strategies may describe structural invalidation and market targets, but may not:
+Autonomous candidates cannot set/raise account risk, bypass daily loss/news/account/session/controller safety, redefine original R, directly call MT5 or gain raw execution authority.
 
-- set/raise account risk;
-- bypass daily loss/news/account/broker safety;
-- change broker retry semantics;
-- directly call MT5;
-- acquire execution-controller authority.
-
-All candidates use the same Trade Plan → Risk → Execution pipeline as governed strategies.
-
-## No arbitrary code generation
-
-The production autonomous invention design prohibits candidate execution through arbitrary generated Python or equivalents such as unrestricted `eval`, `exec` or dynamic source compilation.
-
-A new primitive that requires new code is an engineering/design change and must be implemented/tested through normal governance.
-
-## Persistent candidate registry
-
-Autonomous candidates are durable and machine-independent. Persist:
-
-- Candidate ID and genealogy;
-- recipe/version;
-- created time/reason;
-- validation/promotion stage;
-- performance/evidence references;
-- rejection reason if failed.
-
-Restart/laptop migration must not erase autonomous work.
-
-## Rejected-candidate memory
-
-Rejected candidates remain stored so the inventor can detect substantially similar prior failures. A rejected idea may be reconsidered only when materially new evidence or changed primitives justify a new candidate/version.
+Every eventual DEMO candidate still uses the ordinary Trade Plan → Risk → centralized Execution path.
 
 ## Promotion boundary
 
-Autonomous invention cannot self-promote. The candidate must pass research, final holdout, stress, shadow and DEMO canary gates defined elsewhere.
+Invention creates `PROPOSED` research candidates only. It cannot call itself production.
+
+The governed lifecycle requires validation, locking, one-shot final holdout, stress, shadow, DEMO canary and `PROMOTION_READY` before explicit promotion approval. A locked candidate whose fingerprint changes must restart as a new candidate/version.
+
+## Current implementation checkpoint — 2026-09-18
+
+Implemented:
+
+```text
+research/episode_journal.py   durable automatic research feed
+research/discovery.py         primitives/recipes/similarity/registry
+research/invention.py         automatic cluster cycle + health
+research/promotion.py         governed post-discovery lifecycle
+```
+
+Deterministic tests prove candidate creation from recurring evidence, restart persistence, duplicate/rejected memory, new-family/variant/policy classification, arbitrary-primitive rejection, automatic journal feed and no self-promotion.
+
+This is software/liveness evidence; candidate market quality still requires chronological replay/validation/forward evidence.
 
 ## Dashboard visibility
 
-Compact example:
-
-```text
-Autonomous Lab   HEALTHY
-Candidate        AUTO-021
-Type             VARIANT / NEW FAMILY
-Stage            VALIDATING
-Broker Authority NONE
-```
+At minimum, surface discovery health, eligible clusters, candidate count/latest candidate, type/stage, last suppression reason and `Broker Authority: NONE` for research/shadow candidates.
 
 ## Tests required
 
-- unapproved primitive rejection;
-- arbitrary-code rejection;
-- duplicate-family/variant detection;
+- eligible recurring evidence actually reaches invention automatically;
+- unapproved primitive/arbitrary-code rejection;
+- duplicate-family/variant/new-family classification;
 - complexity limits;
-- risk/execution bypass attempts denied;
-- candidate persistence/genealogy across restart/migration;
-- rejected-candidate memory;
+- risk/execution bypass denial;
+- candidate/rejected-memory persistence across restart;
+- explicit suppression reasons and degraded-health detection;
+- locked-candidate immutability through final holdout;
 - self-promotion denial.
 
 ## Explicit non-goals
 
-Autonomous invention must not:
+Autonomous invention must not write/deploy arbitrary strategy Python, invent risk/broker permissions, silently mutate production, use final holdout for iterative search, or claim a new family for a trivial variant.
 
-- write/deploy arbitrary trading Python;
-- invent broker/risk permissions;
-- mutate production silently;
-- use final holdout for iterative search;
-- call itself a new family when it is only a trivial variant.
+## Open questions / calibration
 
-## Open questions
-
-- exact declarative recipe grammar/schema;
-- approved primitive registry versioning;
-- similarity threshold for duplicate/variant detection;
-- complexity bounds;
-- autonomous discovery compute/scheduling limits.
+- final primitive registry versioning policy;
+- final similarity/complexity thresholds;
+- per-trigger minimum evidence/sample requirements;
+- autonomous research scheduling/CPU budget;
+- richer market-behaviour clustering after the deterministic V1 baseline.
