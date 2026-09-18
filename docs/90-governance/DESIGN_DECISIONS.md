@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.6-design
+**Version:** 1.7-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -326,6 +326,12 @@ This ledger records accepted/provisional architectural decisions so future imple
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
 **Supersedes for V1:** DEC-031 environment-policy wording.  
 **Reason:** Keep the first implementation narrowly scoped to the user's requested DEMO guard without inventing unnecessary REAL-account policy.
+
+## DEC-063 — V1 implementation follows a frozen lightweight production-code standard
+
+**Decision:** V1 source code must follow `docs/60-engineering/CODING_STANDARD.md`: Python 3.11+; standard-library-first/minimal runtime dependencies; official MetaTrader5 boundary; pure functions for deterministic calculations where practical; classes only for genuine state/resource/lifecycle ownership; typed dataclasses/enums/IDs where they protect semantics; one verified snapshot/shared derived facts rather than duplicate MT5 reads/calculations; no giant all-in-one file and no unnecessary micro-file/framework/factory/service-manager architecture; concise comments/docstrings that explain why/safety/chronology; explicit non-silent error handling; structured secret-safe logging; heavier research dependencies isolated from normal runtime; and a code-quality review as part of every phase exit gate.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Keep the bot expert-level, optimized, clean and maintainable without allowing unnecessary code bulk/architecture to become an operational risk.
 
 ## Change rule
 
