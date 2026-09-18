@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Trade Plan
 
-**Status:** PROVISIONAL  
-**Version:** 0.2-design  
+**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
+**Version:** 0.3-implementation  
 **Authority:** Pre-entry structural entry reference, invalidation, initial SL geometry, target hierarchy, original R, RR and plan quality.  
 **Depends on:** `STRATEGY_FLOOR.md`, `ENTRY_TIMING.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md`, `../10-market-intelligence/LIQUIDITY_AND_SMC.md`
 
@@ -10,6 +10,48 @@
 The Trade Plan converts a valid market opportunity into an executable market-structure plan before monetary sizing or broker submission.
 
 > **Strategy decides whether the idea is worth pursuing. Trade Plan defines how that idea would be entered, invalidated and targeted. Risk then decides whether the account can safely afford it.**
+
+## Current implementation checkpoint
+
+Phase 5 implements this authority in:
+
+```text
+src/goldswingtraderai/decisions/trade_plan.py
+```
+
+Implemented deterministic flow:
+
+```text
+READY Opportunity
+→ Signal Price + Approved Entry Reference
+→ family-aware structural invalidation
+→ ATR/noise buffer + outward tick normalization
+→ Initial SL + Stop Quality
+→ Immediate / Primary / Expansion / Runner objectives
+→ frozen structural RR guard
+→ READY / DEGRADED / INVALID TradePlan
+```
+
+Current implementation/calibration baselines are explicit, not frozen profitability truth:
+
+```text
+ATR stop buffer            0.12 ATR, minimum 4 ticks
+Fragile risk distance      <0.20 ATR
+Acceptable-risk threshold  0.45 ATR
+Fragile buffer             <0.06 ATR
+Robust-buffer threshold    0.10 ATR
+Meaningful target quality  55/100
+Target merge tolerance     0.06 ATR
+Marginal path quality      55/100
+```
+
+These values remain `CALIBRATE IN RESEARCH` under `../90-governance/OPEN_QUESTIONS.md`. The frozen `1.20R / 1.50R / 2.00R` economics below are unchanged.
+
+A nearby low-quality internal objective may be retained as **Immediate Obstacle** while a farther meaningful structural/liquidity objective becomes **Primary Target**. This prevents a minor internal level from automatically killing an otherwise valid large-move setup while still exposing the obstacle to timing/management.
+
+If structural invalidation or required ATR geometry cannot be defined, an `INVALID` plan carries missing stop geometry explicitly as `None`; it never fabricates placeholder SL/R values. Risk/execution cannot treat such a plan as ready.
+
+The implementation contains no monetary sizing or broker-write call.
 
 ## Price identities
 
@@ -21,6 +63,8 @@ The system must distinguish:
 - Actual Fill Price.
 
 Execution/broker documents own the last two; they must not overwrite historical signal/plan fields.
+
+The current Phase-5 implementation uses snapshot Ask for a BUY planning reference and snapshot Bid for a SELL planning reference. This is **not** the final executable quote; Phase 7 must freshly revalidate quote, drift, risk and broker geometry before any irreversible submit.
 
 ## Structural invalidation first
 
@@ -39,6 +83,8 @@ Possible family-specific invalidation references include:
 
 The strategy family provides invalidation semantics. Trade Plan turns them into deterministic price geometry.
 
+Current baseline gives reversal families finer M5-first invalidation preference, while continuation/breakout families prefer M15 first; both may fall back through confirmed/protected structure and meaningful technical zones. Exact family refinements remain research-calibratable.
+
 ## Initial SL
 
 The initial broker SL should be based on:
@@ -51,11 +97,11 @@ structural invalidation
 
 The buffer may consider ATR, wick/noise distribution, zone width and symbol tick/point precision. ATR assists; it does not replace structure.
 
-If broker constraints would materially distort the structural plan, the plan becomes `UNEXECUTABLE` rather than silently inventing a new thesis.
+If broker constraints would materially distort the structural plan, the plan becomes `INVALID/UNEXECUTABLE` rather than silently inventing a new thesis or widening/tightening the stop.
 
 ## Stop quality
 
-Suggested states:
+States:
 
 ```text
 ROBUST
@@ -66,7 +112,7 @@ INVALID
 
 Stop quality considers whether ordinary market noise can hit the SL while the underlying thesis remains intact.
 
-A very tight SL with attractive theoretical RR is not automatically a good plan.
+A very tight SL with attractive theoretical RR is not automatically a good plan. In the current baseline, `FRAGILE` geometry degrades the entry to WAIT/rebuild rather than invalidating the underlying opportunity by itself.
 
 ## Account independence
 
@@ -143,7 +189,7 @@ Credible structural target room < 1.20R   → POOR / no new entry
 
 A marginal plan may proceed only when the normal opportunity/timing requirements pass **and** there is a credible larger expansion path rather than merely a nearby small target. Initial V1 expects the Expansion Target to provide at least about `2.0R` room with acceptable path quality for this exception.
 
-A plan with credible target room below `1.20R` is rejected for the current entry geometry rather than accepted merely because strategy score is high.
+A plan with credible target room below `1.20R` is rejected/degraded for the current entry geometry rather than accepted merely because strategy score is high.
 
 RR is still evaluated with Stop Quality, Target Quality, Path Quality, entry location and freshness. High theoretical RR cannot rescue a fragile stop or unrealistic path.
 
@@ -165,7 +211,7 @@ Execution must revalidate fresh quote, RR, target room, stop geometry and chase 
 
 ## Plan lifecycle
 
-Provisional states:
+States:
 
 ```text
 DRAFT
@@ -195,7 +241,7 @@ Hard risk/broker safety remains outside this soft plan-quality score.
 
 ## Output contract
 
-A TradePlan should retain at least:
+A TradePlan retains as applicable:
 
 - Trade Plan ID;
 - Opportunity ID;
@@ -240,30 +286,32 @@ Broker TP       EXPANSION
 Plan Quality    88
 ```
 
-If degraded or rejected, show the exact reason such as `PRICE_DRIFT` or `TARGET_ROOM_POOR`.
+If degraded or rejected, show the exact reason such as `PRICE_DRIFT`, `STOP_FRAGILE_WAIT_FOR_BETTER_GEOMETRY` or `TARGET_ROOM_POOR`.
 
 ## Replay and persistence
 
 Plan creation, degradation, objective extension and invalidation must be chronological. Active/open-trade plan context, original R and objective identities must survive restart through the persistence contract.
 
-## Tests required
+Phase 6 adds durable persistence; Phase 5 currently provides the immutable typed plan contract/state only.
 
-- family-specific invalidation geometry;
-- volatility-aware buffer;
-- broker normalization cannot silently redesign the thesis;
-- Stop Quality noise checks;
-- immutable original R;
-- Primary/Expansion/Runner RR;
-- target room `<1.20R` rejected;
-- `1.20R–<1.50R` conditional plan requires credible larger expansion path;
-- `1.50R+` good classification and `2.0R+` strong classification;
-- Primary target is not automatically forced full exit;
-- Expansion Target is default initial broker TP when valid;
-- objective extension requires a validated Runner Objective rather than profit-only TP movement;
-- price-drift degradation;
-- opportunity remains ARMED when only timing/plan entry degrades;
-- V1 remains correct with indivisible `0.01` position/no partial closes;
-- restart persistence of original plan/objective context.
+## Tests required / current evidence
+
+Current deterministic tests cover:
+
+- structural BUY/SELL stop geometry;
+- volatility-aware buffer baseline;
+- broker stop constraint cannot silently redesign the thesis;
+- invalid plans expose missing geometry explicitly;
+- Immediate Obstacle does not automatically become Primary target;
+- immutable plan R basis;
+- target room `<1.20R` degraded/rejected for current entry;
+- `1.20R–<1.50R` requires credible `~2R+` expansion path;
+- `1.50R+` GOOD and `2R+` STRONG classification;
+- Expansion Target selected as initial broker objective when valid;
+- structural stop remains unchanged when risk/min-lot cannot afford the plan;
+- V1 logic does not require partial closes.
+
+Later phases still must test fresh price-drift revalidation, persistence/restart and Trade Manager objective extension.
 
 ## Explicit non-goals
 
@@ -275,12 +323,14 @@ Trade Plan must not:
 - use fixed pip targets as market truth;
 - force full exit merely because Primary Target was touched;
 - endlessly extend targets without new structural evidence;
-- redefine original R after trailing.
+- redefine original R after trailing;
+- turn every nearby internal level into a hard trade veto.
 
-## Open questions
+## Open calibration work
 
-- exact family-specific invalidation models at V1 freeze;
-- exact volatility-buffer formula;
-- exact acceptable Stop Quality thresholds;
+- family-specific invalidation refinements;
+- volatility-buffer formula/thresholds;
+- Stop Quality thresholds;
+- target-significance/merge/path-quality thresholds;
 - family/regime-specific refinements to the frozen initial RR guard after research;
-- exact objective-quality thresholds for runner progression.
+- objective-quality thresholds for runner progression.
