@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from goldswingtraderai.app.main import run_readiness
 from goldswingtraderai.config.settings import Settings
@@ -98,19 +99,17 @@ class StubReader:
         return CandleSeries(timeframe=timeframe, candles=candles)
 
 
-def _settings(**overrides: object) -> Settings:
-    values: dict[str, object] = {
-        "environment": "test",
-        "preferred_symbol": "XAUUSDm",
-        "symbol_aliases": ("XAUUSDm", "XAUUSD"),
-        "manual_reset_enabled": False,
-        "state_dir": __import__("pathlib").Path(".state"),
-        "log_level": "INFO",
-        "allowed_account_login": None,
-        "allowed_server": None,
-    }
-    values.update(overrides)
-    return Settings(**values)  # type: ignore[arg-type]
+def _settings(*, allowed_account_login: int | None = None) -> Settings:
+    return Settings(
+        environment="test",
+        preferred_symbol="XAUUSDm",
+        symbol_aliases=("XAUUSDm", "XAUUSD"),
+        manual_reset_enabled=False,
+        state_dir=Path(".state"),
+        log_level="INFO",
+        allowed_account_login=allowed_account_login,
+        allowed_server=None,
+    )
 
 
 def test_readiness_passes_for_verified_demo_snapshot() -> None:
