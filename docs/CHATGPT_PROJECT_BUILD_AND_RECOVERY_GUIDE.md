@@ -1,16 +1,39 @@
 # GoldSwingTraderAI — ChatGPT Project Build and Recovery Guide
 
 **Status:** PROVISIONAL  
-**Version:** 1.1-design  
+**Version:** 1.2-implementation  
 **Authority:** Whole-project implementation sequencing, phase completion, resume/recovery and build-navigation process. This file does **not** redefine trading behaviour.
 
 ## Purpose
 
 This guide exists so ChatGPT or another implementation agent can complete GoldSwingTraderAI quickly in large coherent phases, recover after interruption/context loss, and avoid restarting or guessing when something goes wrong.
 
-Core rule:
+> **Recover project truth from the repository, repair the smallest broken layer, verify it, then continue from the last verified phase. Do not restart the whole project unless repository/state is genuinely unrecoverable.**
 
-> **Recover project truth from the repository, repair the smallest broken layer, verify it, then continue from the last verified phase. Do not restart the whole project unless the repository/state is genuinely unrecoverable.**
+## Current repository checkpoint — 2026-09-18
+
+Deterministic core implementation currently exists through the **Phase-10 foundation**:
+
+```text
+Phase 1  Foundation/config/domain/CI
+Phase 2  MT5 read layer + market snapshots
+Phase 3  Market intelligence + optional Trendline/Fibonacci/POC confluence
+Phase 4  Six strategies + fusion + Opportunity + Entry Timing
+Phase 5  Trade Plan + Risk
+Phase 6  Session/news permission + SQLite persistence/recovery
+Phase 7  Execution intent/gate/controller/write/reconciliation
+Phase 8  Trade Manager + management execution bridge
+Phase 9  Terminal dashboard renderer
+Phase 10 Replay/metrics/learning + durable discovery/invention/promotion foundation
+```
+
+Deterministic CI is not live DEMO certification.
+
+Important current integration gap:
+
+- `app/main.py` / `goldswing` remains the read-only MT5 readiness launcher;
+- final persistent runtime orchestration across the implemented subsystems is not yet complete;
+- production shared cross-laptop coordination backend, backup/fresh-machine drill and controlled Windows MT5 DEMO certification remain pending.
 
 ## Source-of-truth order
 
@@ -29,131 +52,129 @@ When starting, resuming or recovering work, read in this order:
 11. this guide
 12. current code, tests, state schema, latest commits and executable evidence
 
-If docs conflict, stop the affected implementation path and resolve the contradiction in the authoritative docs first. Do not silently pick whichever rule is easiest to code.
+If docs conflict, stop affected implementation path and resolve the contradiction in authoritative docs first. Do not silently pick whichever rule is easiest to code.
 
 ## Frozen implementation-quality rule
 
-Every implementation phase must obey `docs/60-engineering/CODING_STANDARD.md`.
+Every phase obeys `docs/60-engineering/CODING_STANDARD.md`.
 
-The build target is not merely code that works; it is **lightweight production-grade code** that is clear, auditable and efficient enough for the actual workload without unnecessary architecture.
+Target: **lightweight production-grade code** that is clear, auditable and efficient enough for the real workload without unnecessary architecture.
 
-Before a phase closes, review affected code for:
+Before a phase closes, review for:
 
 ```text
-duplicate MT5 reads / duplicate derived calculations
-unnecessary abstraction / speculative classes
+duplicate MT5 reads / derived calculations
+unnecessary abstractions / speculative classes
 mixed-responsibility oversized modules
 dead code
 scattered magic thresholds
 vague names
 missing safety/chronology comments
-broad or silent exception handling
+broad/silent exception handling
 needless runtime dependencies
-noisy or secret-leaking logs
+noisy/secret-leaking logs
 weak tests around frozen invariants
 ```
 
-Do not perform cosmetic rewrites for their own sake, but do not allow known avoidable bulk/complexity to accumulate phase after phase.
-
 ## Large implementation phases
-
-The project should be built in **large phases**, not dozens of tiny disconnected tasks.
 
 ### PHASE 1 — Foundation, package skeleton and contracts
 
-Build the real package layout, configuration system, IDs/enums/domain models, reason codes, immutable contracts, logging/journal foundation and DEMO guard input.
+Build package layout, config, IDs/enums/domain models, reason codes, logging, secret-safe config and tests.
 
-Deliverables:
-- runnable package skeleton;
-- configuration validation;
-- common domain models;
-- deterministic IDs/version metadata;
-- basic structured logging;
-- secret-safe config pattern;
-- initial unit-test harness;
-- frozen Coding Standard applied to the initial source skeleton.
+Exit: package imports/runs, config fails clearly, secrets excluded, contracts tested, Coding Standard review passes.
 
-Exit gate: package imports/runs, config errors fail clearly, secrets are not committed, core contracts have tests, and the initial code passes the Coding Standard quality review.
+### PHASE 2 — MT5 read layer, Gold facts and market data
 
-### PHASE 2 — MT5 read layer, Gold symbol facts and market data
+Build MT5 read adapter, XAUUSD/XAUUSDm resolution, account/symbol facts, Bid/Ask, H4/H1/M15/M5 completed-candle snapshots and data-quality checks.
 
-Build MT5 connection/read adapter, XAUUSD/XAUUSDm resolution, broker symbol facts, Bid/Ask, history loading, H4/H1/M15/M5 synchronization, completed-candle chronology and data-quality checks.
-
-Prefer one normalized verified snapshot and reusable derived inputs rather than repeated MT5 calls in downstream components.
-
-Exit gate: verified DEMO account/symbol facts, deterministic candle snapshots, stale/missing data states, no-lookahead data tests, no duplicate unnecessary MT5 read paths.
+Exit: deterministic read contracts, stale/missing states, no-lookahead history tests, no duplicate read paths. Live Windows MT5 proof remains separate evidence.
 
 ### PHASE 3 — Full market intelligence
 
-Build Candle Structure, Technical Structure/Levels, Liquidity/SMC, EMA/RSI/ATR/volatility, session context and fundamental/news fact adapters.
+Build Candle Structure, Technical Structure/Levels, Liquidity/SMC, EMA/RSI/ATR/volatility, session/news facts and **optional technical confluence**:
 
-Compute deterministic facts once per appropriate snapshot/scope and share typed results rather than re-running the same indicator/structure work independently in every strategy.
+- causal Trendlines from confirmed swings;
+- Fibonacci geometry from confirmed impulse anchors;
+- broker-local Volume Profile / POC using real volume where available, otherwise honestly labelled tick-volume approximation.
 
-Exit gate: every desk publishes typed evidence from the same snapshot; no desk gains broker authority; chronological replay parity tests pass for implemented logic; unnecessary duplicated calculations are removed.
+Confluence is soft/bonus-only. Missing Trendline/Fibonacci/POC must not reduce base strategy score or become a hard gate.
+
+Exit: typed evidence from one shared snapshot, no broker authority, no duplicate derived calculations, chronology/no-lookahead tests, confluence absence cannot restrict base strategies.
 
 ### PHASE 4 — Strategy floor, BUY/SELL theses and decision fusion
 
-Implement the six V1 strategy families in parallel, independent BUY and SELL theses, evidence coverage, conflict/Red-Team handling, Opportunity lifecycle and Entry Timing.
+Implement six V1 strategy families in parallel, independent BUY/SELL theses, conflict/Red-Team handling, Opportunity lifecycle and Entry Timing.
 
-Exit gate: no filter-soup pipeline; valid setup can remain ARMED/WAIT; reasons for WAIT/MISSED/INVALID are deterministic and testable; strategy code remains direct rather than framework-heavy.
+Optional confluence may add bounded positive support to compatible families but is not a seventh mandatory family.
+
+Exit: no filter soup; valid setup can remain ARMED/WAIT; deterministic reasons; one strong family may lead; optional evidence cannot become hidden hard gating.
 
 ### PHASE 5 — Trade Plan, targets and Risk Engine
 
-Implement structural invalidation/SL, volatility buffer, objective hierarchy, immutable original R, frozen RR guard, hybrid account-size sizing, minimum-lot handling, daily Account Safety P/L, loss lock, manual reset and cooldown.
+Implement structural invalidation/SL, objective hierarchy, immutable original R, frozen RR guard, hybrid profiles, min-lot handling, daily safety P/L, loss lock/reset/cooldown.
 
-Exit gate: structural stop is never distorted to fit risk; all-in risk is broker-aware; profile ceilings/daily locks and original R invariants pass tests; risk code remains explicit/auditable.
+Exit: structural stop never distorted to fit risk; actual executable lot/risk authority; no `$100` floor; profile ceilings/daily locks/original R tested.
 
 ### PHASE 6 — Session/news safety, persistence and recovery foundation
 
-Implement news states/windows, PRE_CLOSE/reopen rules, durable risk/order/trade/opportunity state, schema/versioning, atomic writes, restart reconstruction and broker reconciliation primitives.
+Implement news states/windows, PRE_CLOSE/reopen rules and lightweight durable persistence.
 
-Use the smallest persistence stack that safely satisfies the frozen requirements; do not introduce an ORM/service layer without a real need.
+Initial V1 local store is standard-library SQLite + canonical JSON/checksums/schema/event records + typed recovery adapters.
 
-Exit gate: restart does not erase risk/order state; scheduled close/reopen policy is testable; corrupt/unknown critical state fails safely.
+Exit: restart does not silently erase critical state; corrupt/unknown critical state fails explicitly.
 
 ### PHASE 7 — Central execution gate, controller lease and MT5 writes
 
-Implement one centralized Execution Permission Gate, positive DEMO guard, account identity pinning, spread/drift checks, margin/stop/volume checks, controller lease/fencing, durable Execution Intent, one-shot create/modify/close and ambiguous-result reconciliation.
+Implement centralized Execution Permission Gate, positive DEMO guard, account identity, spread/drift/margin/stop/volume checks, durable Execution Intent, controller lease/fencing, one-shot create/modify/close and broker reconciliation.
 
-Keep safety code intentionally direct and easy to audit.
+Exit: raw irreversible writes confined to governed boundary; same Intent ID cannot send twice; success-like ACK still needs broker verification; ambiguous acknowledgement never blind-retries.
 
-Exit gate: raw irreversible MT5 writes exist only behind the governed boundary; duplicate/fault-injection tests pass; second controller cannot write; DEMO execution works only when all required authorities pass.
+Before cross-laptop certification, replace/test any in-memory coordination test backend with a real shared atomic coordination backend.
 
 ### PHASE 8 — Trade Manager, structural protection and runner
 
-Implement HOLD/PROTECT/TRAIL/RUNNER/EXIT, structure-led trailing, objective progression, reversal evidence and mandatory PRE_CLOSE flatten integration.
+Implement HOLD/PROTECT/TRAIL/RUNNER/EXIT, structure-led trailing, objective progression and PRE_CLOSE override.
 
-Exit gate: profit is not cut by arbitrary tiny thresholds; stop never widens beyond original risk; runner extension needs fresh structural evidence; pre-close flatten overrides runner.
+Exit: small profit alone does not force breakeven/exit; runner needs fresh continuation + real objective; local managed state only updates after broker verification.
 
 ### PHASE 9 — Dashboard and operator workflows
 
-Implement the compact dashboard and preserve useful GoldScalperAI observability: mode, symbol, Bid/Ask, spread, M5 timer, trend/structure, EMA20/50, RSI, ATR, signal/reason, risk/lot, daily P/L/limit, loss streak, position 0/1 and open-trade context. Add Decision, Execution, Learning, Backup and Health visibility.
+Implement compact read-only dashboard preserving useful GoldScalperAI facts plus Decision/Execution/Learning/Discovery/Backup/Health.
 
-Update `docs/USER_MANUAL.md` and `docs/SETUP_AND_RUN_GUIDE.md` with real commands/keys only after they actually exist.
+Optional Trendline/Fibonacci/POC should be shown only as compact confluence/context. Dashboard must not turn them into permission gates.
 
-Dashboard refresh remains presentation work and must not duplicate strategy/order triggering.
-
-Exit gate: operator can understand exactly why the bot is WAIT/ENTER/BLOCKED and what state requires action.
+Exit: operator can see exactly why WAIT/ENTER/BLOCKED and whether discovery is IDLE/HEALTHY/DEGRADED.
 
 ### PHASE 10 — Replay, research, learning and governed invention
 
-Implement deterministic chronological replay, taken/missed/blocked/invalidated metrics, MFE/MAE/capture efficiency, Entry/Exit Learning, StrategyMemory, candidate registry, declarative strategy discovery/invention and promotion stages.
+Implement chronological replay, actual/counterfactual metric separation, MFE/MAE/Capture/Opportunity Recall, StrategyMemory, durable episode journal, approved-primitive discovery, candidate registry, invention and governed promotion lifecycle.
 
-Research may use heavier analytical libraries when justified, but these must remain isolated from normal production runtime dependencies.
+Discovery liveness invariant:
 
-Exit gate: no lookahead; learning cannot mutate hard safety; candidates cannot self-promote or execute arbitrary Python.
+```text
+eligible recurring evidence
+→ candidate created
+OR explicit governed suppression reason
+```
+
+Silent eligible-evidence loss is a defect and should surface `DISCOVERY_DEGRADED`.
+
+Trendline/Fibonacci/POC must be available as audited research primitives/context so ablation can test whether they improve quality without simply reducing trade frequency.
+
+Exit: no lookahead; candidates cannot arbitrary-code/self-promote/bypass safety; restart preserves rejected/duplicate memory; liveness end-to-end tests pass.
 
 ### PHASE 11 — Backup, migration and fault-recovery drill
 
-Implement portable state export/checkpoint, financial-secret scanner, backup verification, fresh-machine restore workflow and controller handoff/failover verification.
+Implement portable state export/checkpoint, backup verification, fresh-machine restore workflow and controller handoff/failover proof.
 
-Exit gate: a fresh machine can restore project intelligence, configure credentials separately, reconcile MT5 and safely resume without duplicate exposure.
+Exit: fresh machine can restore project intelligence, configure credentials separately, reconcile MT5 and safely resume without duplicate exposure.
 
 ### PHASE 12 — Full integration, DEMO certification and release audit
 
-Run end-to-end tests, replay, broker fault injection, restart tests, scheduled-close tests, news tests, controller split-brain tests, dashboard checks and controlled MT5 DEMO forward certification.
+Build final persistent runtime orchestration and run end-to-end tests, replay, broker fault injection, restart tests, scheduled-close/news/controller tests, dashboard/research health checks and controlled MT5 DEMO certification.
 
-Exit gate: required evidence exists in `TESTING_AND_VERIFICATION.md`, `RELEASE_CHECKLIST.md` and `FINAL_RELEASE_AUDIT.md`. Only then may implemented/verified statuses be promoted honestly.
+Exit: evidence recorded in Testing/Release/Final Audit. Only then promote statuses honestly.
 
 ## Phase completion rule
 
@@ -162,118 +183,123 @@ A phase is complete only when all five are true:
 ```text
 CODE EXISTS
 + REQUIRED TESTS PASS
-+ FROZEN CODING STANDARD QUALITY REVIEW PASSES
++ CODING STANDARD QUALITY REVIEW PASSES
 + DOCUMENTATION MATCHES CODE
 + NO KNOWN CRITICAL CONTRADICTION
 ```
 
-After every coherent phase update, as applicable:
-- authoritative topic document;
-- `docs/90-governance/DESIGN_DECISIONS.md`;
-- `docs/90-governance/OPEN_QUESTIONS.md`;
-- `docs/60-engineering/CODING_STANDARD.md` only if a governed engineering-standard change is explicitly approved;
-- `docs/60-engineering/MODULE_STRUCTURE.md`;
-- `docs/CODER_GUIDE.md`;
-- operator docs;
-- testing/release docs;
-- `docs/README.md`.
+After each coherent phase update, as applicable:
 
-Do not postpone known documentation mismatch to the end.
+- authoritative topic doc;
+- `DESIGN_DECISIONS.md`;
+- `OPEN_QUESTIONS.md`;
+- `MODULE_STRUCTURE.md`;
+- `CODER_GUIDE.md`;
+- User/Setup/Dashboard docs;
+- Testing/Release docs;
+- root/docs README if project state/navigation changed;
+- `FINAL_BUILD_PROMPT.md` when frozen requirements/architecture changed.
+
+Do not postpone a known documentation mismatch to the end.
 
 ## What to do if conversation/context is lost
-
-Do not ask the user to reconstruct the whole project from memory.
-
-Recovery sequence:
 
 ```text
 inspect repository tree
 → read docs/README.md
 → read SYSTEM_CONTRACT
-→ read DESIGN_DECISIONS
-→ read OPEN_QUESTIONS
-→ read CODING_STANDARD
-→ read MODULE_STRUCTURE + CODER_GUIDE
-→ read FINAL_BUILD_PROMPT + this guide
-→ inspect latest code/tests/commits
+→ relevant authority
+→ DESIGN_DECISIONS
+→ OPEN_QUESTIONS
+→ CODING_STANDARD
+→ MODULE_STRUCTURE + CODER_GUIDE
+→ FINAL_BUILD_PROMPT + this guide
+→ inspect current code/tests/commits
 → identify last phase whose exit gate is actually satisfied
 → continue from first incomplete phase
 ```
 
-Repository truth beats remembered conversation wording when the repository contains the later accepted decision.
+Repository truth beats remembered conversation wording when repository contains the later accepted decision.
 
-## What to do if code is incomplete or a phase was interrupted
+## Never-guess recovery rule
 
-1. Identify the active phase.
-2. Compare its required deliverables against repository files/tests.
-3. Mark each deliverable `DONE`, `PARTIAL`, `MISSING`, or `BROKEN` privately/in the work log.
-4. Finish the smallest missing dependency first.
+When confused or something appears missing:
+
+```text
+authoritative doc
+→ DESIGN_DECISIONS
+→ OPEN_QUESTIONS
+→ current code/tests
+→ identify smallest inconsistency
+→ repair
+→ verify
+→ resume same phase
+```
+
+Do not restart the whole project from zero unless repository/state is genuinely unrecoverable.
+
+## If code is incomplete / phase interrupted
+
+1. Identify active phase.
+2. Compare required deliverables against actual files/tests.
+3. Classify privately as DONE / PARTIAL / MISSING / BROKEN.
+4. Finish smallest missing dependency first.
 5. Run focused tests.
-6. Run that phase's integration tests.
-7. Run the Coding Standard quality review on affected code.
+6. Run phase/integration tests.
+7. Run code-quality review.
 8. Sync docs.
-9. Continue; do not rewrite already verified subsystems without cause.
+9. Continue without rewriting verified subsystems without cause.
 
-## What to do if something important was missed
-
-If a requirement is discovered late:
+## If something important was missed late
 
 ```text
 find authoritative home
-→ determine affected phases/modules
-→ add/adjust decision/open-question record if material
+→ determine affected modules/docs
+→ add/update decision/open-question if material
 → implement smallest correct cross-cutting change
-→ add regression test proving the miss cannot recur
-→ update operator/coder docs if visible
-→ rerun downstream affected tests
+→ add regression test
+→ update operator/coder/testing docs
+→ rerun downstream tests
 ```
 
-Never hide the miss by changing only the dashboard or comments.
+Never hide a missed requirement by changing only comments/dashboard.
 
-## What to do if docs and code disagree
+## If docs and code disagree
 
-Classify the mismatch:
+- **code bug** — frozen doc correct; fix code;
+- **doc stale** — code reflects explicitly accepted later decision; sync authoritative doc/ledger;
+- **true unresolved conflict** — stop affected feature, decide, then code.
 
-- **code bug** — frozen doc is correct; fix code;
-- **doc stale** — code implements an explicitly accepted later decision; update authoritative doc/ledger;
-- **true unresolved conflict** — stop affected feature, resolve decision, then code.
+Do not label behaviour VERIFIED while a known authoritative mismatch exists.
 
-Do not label code `VERIFIED` while a known authoritative mismatch exists.
+## If tests fail
 
-## What to do if tests fail
-
-Do not disable or weaken a safety test merely to make the suite green.
-
-Use this order:
+Do not weaken a safety test merely to get green.
 
 ```text
-reproduce deterministically
-→ identify authority/invariant being tested
-→ isolate smallest failing layer
+reproduce
+→ identify invariant
+→ isolate smallest layer
 → fix root cause
-→ add regression coverage
-→ run focused suite
-→ run phase suite
-→ run relevant cross-phase safety suite
+→ add regression
+→ focused suite
+→ phase suite
+→ relevant cross-phase suite
 ```
 
-A flaky broker/network test should be separated from deterministic logic tests, not deleted.
+A flaky broker/network test belongs outside deterministic logic tests, not deleted.
 
-A passing test suite is necessary but does not by itself prove the code is acceptably simple/maintainable; the Coding Standard quality review remains part of the phase gate.
+## If GitHub/local state differ
 
-## What to do if GitHub/local state differ
-
-1. Stop new irreversible broker actions if the running code/version is uncertain.
-2. Identify commit/version currently executing.
-3. Preserve uncommitted local changes/state/checkpoints.
-4. Compare local code to repository version.
+1. Stop new irreversible broker actions if running version is uncertain.
+2. Identify executing commit/version.
+3. Preserve uncommitted local state/checkpoints.
+4. Compare local code/repository.
 5. Never overwrite live mutable trading state blindly from Git.
-6. Reconcile broker truth after code/state restoration.
-7. Resume only from a known code + schema + state combination.
+6. Reconcile broker truth after restore.
+7. Resume only from known code + schema + state combination.
 
-## What to do if persistent state is missing/corrupt
-
-Critical order/risk/trade state must not silently reset to empty.
+## If persistent state is missing/corrupt
 
 ```text
 STATE CORRUPT/MISSING
@@ -283,15 +309,15 @@ STATE CORRUPT/MISSING
 → connect MT5
 → reconcile positions/orders/deals
 → rebuild market intelligence chronologically
-→ reconstruct only what broker/history + durable evidence can prove
+→ reconstruct only what broker/history + durable evidence prove
 → remain BLOCKED/RECONCILING for unresolved critical facts
 ```
 
-Optional learning state may fall back to frozen baseline behaviour only where the authoritative persistence/learning contracts allow it.
+Optional learning may fall back only where its authority permits it; critical financial/order state cannot silently default empty.
 
-## What to do after a crash during broker write
+## Crash during broker write
 
-If an Execution Intent was `SUBMITTING` or acknowledgement is ambiguous:
+If Execution Intent was `SUBMITTING` or acknowledgement ambiguous:
 
 ```text
 DO NOT RESEND
@@ -302,8 +328,6 @@ DO NOT RESEND
 → only then allow a fresh governed intent
 ```
 
-One-shot execution is more important than convenience.
-
 ## New-laptop / disaster recovery
 
 ```text
@@ -311,41 +335,36 @@ clone repository
 → install verified runtime/dependencies
 → restore portable state/checkpoint
 → configure financial credentials separately
-→ run financial-secret scan/integrity checks
-→ connect intended MT5 DEMO environment
+→ run secret/integrity checks
+→ connect intended MT5 DEMO
 → validate account/symbol
 → acquire controller lease/epoch
 → reconcile broker truth
 → rebuild market intelligence
 → verify risk/session/news state
-→ run startup self-tests
+→ startup self-tests
 → READY
 ```
 
-A backup never proves there is no open broker position. MT5/broker reconciliation is mandatory.
+A backup never proves there is no open broker position. MT5 reconciliation is mandatory.
 
 ## Fast-work rule
 
-To finish quickly without sacrificing correctness:
-
-- work in the large phases above;
+- work in large phases;
 - batch related files/tests/doc updates;
-- follow the frozen Coding Standard instead of repeatedly redesigning source style;
-- prefer the smallest implementation that fully satisfies the authoritative contract;
-- avoid repeated cosmetic refactors during implementation;
-- choose ordinary libraries/file layouts as implementation choices where `OPEN_QUESTIONS.md` permits it;
-- calibrate market thresholds through replay/research instead of blocking the build;
-- do not reopen already frozen decisions unless evidence or the user explicitly changes them.
+- do not repeatedly redesign frozen source style;
+- prefer smallest implementation satisfying authority;
+- avoid cosmetic refactors without benefit;
+- calibrate market thresholds with replay/research instead of stalling build;
+- do not reopen frozen decisions unless user/evidence requires governed revision.
 
 ## Definition of project complete
-
-GoldSwingTraderAI is not complete merely because `bot.py` runs.
 
 Project completion requires:
 
 - all required phases implemented;
 - authoritative docs synchronized;
-- frozen Coding Standard respected across production source;
+- Coding Standard respected;
 - no known safety bypass;
 - no-lookahead replay evidence;
 - risk/session/news/execution invariants tested;
@@ -353,6 +372,8 @@ Project completion requires:
 - controller/failover tested;
 - restart and fresh-machine recovery tested;
 - financial-secret scan passing;
+- discovery/invention proven live rather than decorative;
+- optional confluence evaluated by ablation/opportunity recall rather than assumed useful;
 - dashboard/operator workflow usable;
 - controlled DEMO certification completed;
 - final release audit evidence recorded.
