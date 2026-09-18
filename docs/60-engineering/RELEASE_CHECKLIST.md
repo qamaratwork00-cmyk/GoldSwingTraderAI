@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Release Checklist
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-design  
 **Authority:** DEMO release gates and sign-off checklist.  
 **Depends on:** `TESTING_AND_VERIFICATION.md`, `../90-governance/OPEN_QUESTIONS.md`, `../90-governance/DOCUMENTATION_STANDARD.md`
 
@@ -22,7 +22,7 @@ DESIGN
 → DEMO VERIFIED
 ```
 
-`REAL MONEY READY` is not an automatic next state and requires a separate future release decision.
+`REAL MONEY READY` is not an automatic next state and requires a separate future frozen release decision. That future mode must use the same risk/execution architecture rather than a second live engine.
 
 ## Design and documentation gates
 
@@ -50,6 +50,7 @@ DESIGN
 - [ ] Missing optional evidence is not score zero.
 - [ ] Correlated evidence double-count protection passes.
 - [ ] Opportunity/Entry dimensions remain separate.
+- [ ] Every WAIT/MISSED/INVALID/BLOCKED path has stable reason attribution.
 
 ## Entry / Trade Plan gates
 
@@ -66,6 +67,7 @@ DESIGN
 - [ ] Dynamic lot sizing/volume normalization passes.
 - [ ] Min-lot unaffordability blocks rather than changes SL.
 - [ ] Margin/aggregate exposure handling passes.
+- [ ] UTC risk-day rollover verified.
 - [ ] Daily loss lock persists across restart.
 - [ ] Governed manual reset audit/reference passes.
 - [ ] Manual reset cannot bypass unrelated hard blocks.
@@ -77,6 +79,19 @@ DESIGN
 - [ ] Required news-safety unknown state fails according to frozen policy.
 - [ ] Holiday does not equal broker market closure.
 - [ ] Post-news/reopen warmup follows frozen evidence rules.
+
+## Centralized broker-write permission gate
+
+- [ ] One primary `ExecutionPermissionGate`/equivalent exists.
+- [ ] Environment/account/data/news/risk/position/order/controller/fresh-execution results feed that gate rather than ad-hoc duplicated checks.
+- [ ] Gate returns explicit ALLOW/BLOCK/UNKNOWN plus primary/secondary reason(s).
+- [ ] Current DEMO-first environment policy is represented in that one authority.
+- [ ] REAL under DEMO-first policy is blocked explicitly; there is no hidden second LIVE engine.
+- [ ] Future REAL authorization can use the same gate/path by changing frozen environment policy.
+- [ ] Strategy, scoring, Entry Timing, Trade Plan, dashboard, research and learning cannot directly reach irreversible MT5 writes.
+- [ ] Create/modify/close all use the same governed broker-write boundary.
+
+Any bypass of this boundary is release-blocking.
 
 ## Execution gates — zero compromise
 
@@ -139,7 +154,7 @@ DESIGN
 - [ ] Final holdout use is one-shot for locked candidate.
 - [ ] Ablation/stress/regime/direction evidence exists as required.
 - [ ] Shadow has zero broker authority.
-- [ ] DEMO Canary uses normal Risk/Execution controls.
+- [ ] DEMO Canary uses normal Risk + centralized Execution Permission Gate.
 - [ ] Promotion/rollback/version history is auditable.
 - [ ] Claims do not exceed actual evidence.
 
@@ -147,10 +162,11 @@ DESIGN
 
 - [ ] Operator can identify market/decision/risk/execution/system states separately.
 - [ ] Every non-trade/block has a reason code and human explanation.
+- [ ] Central Execution Permission state/reason is visible when relevant.
 - [ ] `WAIT` is not shown as system failure.
 - [ ] Critical faults show subsystem, impact and recovery/action.
 - [ ] Backup/controller/learning health is visible.
-- [ ] Emoji fallback does not affect logic.
+- [ ] Restrained emoji markers have text fallback and do not affect logic.
 
 ## Controlled MT5 DEMO gate
 
@@ -164,6 +180,7 @@ DESIGN
 Do not sign off DEMO VERIFIED if any of these remain unresolved:
 
 - future-data leakage;
+- centralized execution-permission bypass;
 - duplicate-order risk;
 - wrong-account write possibility;
 - unknown exposure treated as zero;
