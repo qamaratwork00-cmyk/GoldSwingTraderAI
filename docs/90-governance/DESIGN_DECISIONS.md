@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.4-design
+**Version:** 0.5-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -214,8 +214,23 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-041 — Research documentation is consolidated by authority
 
 **Decision:** There is no separate authoritative `OFFLINE_RESEARCH.md`. Chronological/offline methodology belongs to `RESEARCH_AND_VALIDATION.md`; discovery, invention and promotion each have their own documents.  
-**Status:** PROVISIONAL  
-**Reason:** Avoid duplicate research contracts.
+**Status:** PROVISIONAL
+
+## DEC-042 — Account-size Gold risk profiles use hybrid sizing
+
+**Decision:** Initial V1 profile boundaries are `SMALL $100–$299`, `MEDIUM $300–$999`, and `NORMAL $1,000+`. SMALL normally treats broker minimum `0.01` as the practical base unit and validates its real all-in risk; MEDIUM uses stepped dynamic lots; NORMAL uses fully dynamic percentage sizing. A theoretical raw lot below broker minimum is not by itself a trade blocker.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Gold minimum-lot granularity can otherwise make small accounts artificially unable to trade.
+
+## DEC-043 — Execution friction is part of effective monetary risk exactly once
+
+**Decision:** Effective trade risk must account for executable entry/SL geometry plus spread, expected slippage reserve and commissions/fees according to broker semantics, without double-counting any cost already embedded in the executable quote/fill. A displayed Gold spread such as `$0.26` is converted through broker symbol/contract facts rather than assumed to equal the same account-currency cost.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+
+## DEC-044 — Minimum-lot excess may preserve the opportunity while current entry is blocked
+
+**Decision:** If broker minimum volume exceeds the profile hard risk ceiling at the current entry, the current plan is blocked, but the underlying opportunity may remain `ARMED` when the thesis is still valid and a naturally better structural entry could reduce risk. Structural SL is never artificially tightened to make the minimum lot fit.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## Change rule
 
