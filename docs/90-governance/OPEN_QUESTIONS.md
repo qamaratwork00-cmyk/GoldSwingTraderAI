@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 3.0-design
+**Version:** 3.1-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -16,7 +16,7 @@ At behavioural-contract level there are currently **no known `FIX BEFORE BUILD` 
 
 ## Current implementation status
 
-Deterministic core exists through Phase 10 plus current Phase-11 local backup foundation:
+Deterministic core exists through Phase 10 plus current Phase-11 backup/controller foundation:
 
 ```text
 1  Foundation/config/domain/CI
@@ -38,9 +38,11 @@ Deterministic core exists through Phase 10 plus current Phase-11 local backup fo
    + fresh-local-DB restore
    + automatic local checkpoint cadence
    + verified backup catalog + count-based retention
+   + durable SQLite controller coordination
+   + monotonic fencing + reconciliation-gated takeover
 ```
 
-Live DEMO release and real-data validation are not complete. Final runtime orchestration, authenticated remote publication, production shared cross-laptop coordination, real fresh-machine/broker drill, controlled Windows/MT5 evidence and DEMO certification remain pending.
+Live DEMO release and real-data validation are not complete. Final runtime orchestration, authenticated remote publication, controlled cross-laptop shared-coordination proof, real fresh-machine/broker drill, controlled Windows/MT5 evidence and DEMO certification remain pending.
 
 ## Frozen trading principles still in force
 
@@ -65,7 +67,7 @@ Deterministic foundation is implemented. External evidence still pending: contro
 
 ### Automatic local cadence / retention / catalog — CLOSED at software-foundation level
 
-`persistence/backup.py` now owns local verified rolling backups.
+`persistence/backup.py` owns local verified rolling backups.
 
 Initial configurable baseline:
 
@@ -114,17 +116,62 @@ This may be implemented as external CLI/CI/provider adapter; it must not move cr
 - no stale order replay;
 - fresh controller authority before any broker write.
 
-### Cross-laptop controller — pending
+## Cross-laptop controller — software semantics closed, deployment proof pending
 
-- production shared atomic coordination backend;
-- monotonic fencing across machines;
-- lease expiry/takeover/reconciliation proof;
-- split-brain denial under network/process failure.
+### Durable coordination backend — CLOSED at deterministic software level
 
-### Integrated startup — pending
+`execution/sqlite_coordination.py` now implements the frozen `CoordinationStore` contract using transactional SQLite state.
+
+Implemented guarantees:
+
+- one active lease row per scope;
+- `BEGIN IMMEDIATE` acquire/renew/release serialization;
+- one winner under deterministic multi-instance contention;
+- durable separate `last_epoch` ledger;
+- fencing epoch survives release/store reopen;
+- expiry takeover receives a strictly newer epoch;
+- stale holder cannot renew/release a newer lease;
+- lease/epoch integrity checks;
+- cross-machine deployment assertion defaults false.
+
+### Reconciliation-gated takeover — CLOSED at software-contract level
+
+`ControllerLeaseManager` no longer treats an expired-lease takeover as immediately write-ready.
+
+```text
+old lease expires
+→ standby atomically acquires higher epoch
+→ BLOCK: CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED
+→ restore/reconcile durable + broker truth
+→ fresh holder/epoch verification
+→ complete_takeover_reconciliation()
+→ CONTROLLER_PRIMARY may PASS
+```
+
+Renewal preserves the blocked takeover state. If another controller takes ownership during recovery, the stale takeover cannot complete reconciliation.
+
+### Still pending controlled cross-laptop evidence
+
+The exact shared deployment/filesystem must prove SQLite locking/durability across two machines. `shared_locking_verified=True` is an explicit deployment assertion, not self-certifying evidence.
+
+Still required:
+
+- two real machines/processes using the selected shared coordination storage;
+- one-winner contention under simultaneous startup;
+- primary process/laptop loss followed by TTL expiry;
+- standby obtains strictly newer epoch;
+- standby remains blocked through restore/broker reconciliation;
+- stale primary restart cannot write;
+- network/storage interruption fails closed;
+- no split-brain under the tested failure matrix.
+
+If the selected shared storage cannot guarantee SQLite locking/durability, replace the coordination backend rather than weaken the frozen fencing contract.
+
+## Integrated startup — pending
 
 - explicit restore/startup path;
 - automatic integrity/reconciliation sequence;
+- orchestrator-controlled call to `complete_takeover_reconciliation()` only after required durable/broker checks pass;
 - operator-visible backup/restore/controller health;
 - no READY state until broker/current-controller hard authorities verify.
 
@@ -132,7 +179,7 @@ This may be implemented as external CLI/CI/provider adapter; it must not move cr
 
 Current code rejects unsupported schemas. Real migration/rollback transforms should be implemented when a second schema actually exists, not guessed in advance.
 
-## Frozen backup/security principles
+## Frozen backup/security/controller principles
 
 - live SQLite DB is runtime state, not a Git merge artifact;
 - portable checkpoints/catalogs are canonical verified content;
@@ -142,6 +189,8 @@ Current code rejects unsupported schemas. Real migration/rollback transforms sho
 - account identifiers without authority are not hidden merely because they identify scope;
 - broker truth owns current exposure after restore;
 - restored laptop needs fresh controller authority before any broker write;
+- a higher fencing epoch alone is not write permission after takeover;
+- takeover reconciliation must complete before PRIMARY write authority;
 - two restored laptops cannot independently trade the same account;
 - remote publication credentials stay external to backup artifacts.
 
@@ -158,19 +207,19 @@ Current code rejects unsupported schemas. Real migration/rollback transforms sho
 
 ## Operator / runtime / release pending
 
-- authoritative dashboard runtime DTO + backup/recovery/Discovery Health display;
+- authoritative dashboard runtime DTO + backup/recovery/controller/Discovery Health display;
 - live provider/session adapters;
 - final persistent runtime orchestrator;
-- cross-laptop controller proof;
+- controlled cross-laptop controller proof;
 - controlled Windows/MT5 DEMO lifecycle/fault/restart certification;
 - final release/docs audit based on actual evidence.
 
 ## Current deterministic evidence
 
-Phase-11 backup tests cover portable state round-trip, event-history integrity, secret blocking, checkpoint tamper, no-overwrite restore, due/skip cadence, retention, catalog tamper, referenced-checkpoint tamper, latest verified selection and previous-known-good preservation after failed secret backup.
+Phase-11 tests cover portable state round-trip, event-history integrity, secret blocking, checkpoint tamper, no-overwrite restore, due/skip cadence, retention, catalog tamper, referenced-checkpoint tamper, latest verified selection, previous-known-good preservation, SQLite controller one-winner contention, durable monotonic epochs, stale-holder denial, reconciliation-gated takeover and authority-loss denial during takeover recovery.
 
-Current checkpoint: **202 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current checkpoint: **209 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Governance conclusion
 
-No major behavioural redesign item is known. Current work is primarily **remaining Phase-11 authenticated publication + real fresh-machine/broker reconciliation + shared-controller failover**, followed by runtime orchestration and controlled DEMO certification.
+No major behavioural redesign item is known. Current work is primarily **remaining Phase-11 integrated startup/fresh-machine recovery + controlled cross-laptop deployment proof + authenticated publication**, followed by runtime orchestration and controlled DEMO certification.
