@@ -1,68 +1,101 @@
 # GoldSwingTraderAI — Market Data and History
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE; LIVE MT5 DEMO EVIDENCE PENDING  
-**Version:** 0.3-implementation  
-**Authority:** Runtime market-history, normalized broker facts and candle-data handling
+**Status:** PROVISIONAL — IMPLEMENTED BASELINE + RECOVERY POSITION READS; LIVE MT5 DEMO EVIDENCE PENDING  
+**Version:** 0.4-implementation  
+**Authority:** Runtime market history, normalized broker read facts, current position facts and candle-data handling
 
 ## Core principle
 
-Historical candles are necessary for context, structure, timing and research, but raw candle history is not permanent decision authority. Runtime maintains enough rolling history to understand current market structure while deeper research history remains replaceable and refreshable.
+Historical candles are necessary for context, structure, timing and research, but raw candle history is not permanent decision authority.
 
-> **One normalized verified market snapshot is built from the MT5 read boundary and reused downstream. Completed candles own structural chronology; the currently forming MT5 bar is never included as a completed structural candle.**
+> **One narrow verified MT5 read boundary owns account, symbol, quote, completed candles and current open-position facts. Completed candles own structural chronology; unknown broker exposure is never converted into zero exposure.**
 
 ## Current implementation
-
-The read boundary lives in:
 
 ```text
 src/goldswingtraderai/domain/market.py
 src/goldswingtraderai/market_data/mt5_reader.py
 src/goldswingtraderai/market_data/snapshot.py
+src/goldswingtraderai/app/recovery_mt5.py
 src/goldswingtraderai/app/main.py
 ```
 
 Key contracts:
 
-- `AccountFacts` — login/server/currency/account mode and account monetary facts;
-- `SymbolSpec` — digits, point, tick size/value, contract size, volume limits/step and broker stop/freeze levels;
-- `Quote` — Bid/Ask/timestamp and price spread;
-- `Candle` / `CandleSeries` — UTC chronological completed OHLC data;
-- `MarketSnapshot` — one account/symbol/quote/multi-timeframe snapshot plus data-quality state;
-- `MT5Reader` — narrow read-only adapter around the official `MetaTrader5` module;
-- `MarketSnapshotBuilder` — normalized H4/H1/M15/M5 snapshot construction.
+- `AccountFacts` — login/server/currency/account mode and monetary facts;
+- `SymbolSpec` — digits, point, tick size/value, contract size, volume limits and broker stop/freeze levels;
+- `OpenPositionFacts` — normalized read-only current broker position facts;
+- `Quote` — Bid/Ask/timestamp and spread;
+- `Candle` / `CandleSeries` — UTC chronological completed OHLC;
+- `MarketSnapshot` — reusable account/symbol/quote/multi-timeframe snapshot;
+- `MT5Reader` — narrow read-only adapter around official `MetaTrader5`;
+- `MarketSnapshotBuilder` — normalized H4/H1/M15/M5 construction;
+- `build_mt5_recovery_truth()` — recovery adapter built on `MT5Reader`, not a second raw MT5 client.
 
-`MT5Reader` deliberately contains no irreversible broker-write call. Raw create/modify/close writes are confined to `execution/mt5_writer.py` behind the centralized execution path.
+`MT5Reader` contains no irreversible broker-write call. Raw create/modify/close writes remain confined to `execution/mt5_writer.py` behind the centralized execution path.
 
-The `MetaTrader5` import is lazy so deterministic Linux CI can run without a Windows MT5 terminal. Local terminal use still requires the official package and connected MT5 terminal.
+## Positive DEMO and account facts
 
-## Positive DEMO fact
-
-The read layer publishes account mode and can evaluate the V1 positive DEMO fact:
-
-```text
-positively verified DEMO → DEMO_GUARD PASS
-anything else            → no PASS
-```
-
-This does not create a separate REAL policy. The implemented centralized Execution Permission Gate consumes the DEMO result together with all other hard authorities before any broker write.
-
-Optional configured account login/server identity pins are compared by the app readiness path. A mismatch is surfaced explicitly and never becomes silent readiness.
+The read layer publishes account mode. Positively verified DEMO may produce DEMO PASS; anything else cannot. Optional configured login/server pins are checked by application/runtime authorities rather than silently ignored.
 
 ## Gold symbol resolution
-
-Current resolution order is deterministic:
 
 ```text
 preferred symbol
 → configured aliases in order
-→ explicit SYMBOL_NOT_FOUND if none exist
+→ explicit SYMBOL_NOT_FOUND
 ```
 
-Default configuration prefers `XAUUSDm` and falls back to `XAUUSD`. Broker symbol selection is performed only when a discovered configured symbol is not already visible.
+Default configuration prefers `XAUUSDm` and falls back to `XAUUSD`.
+
+## Current open-position truth — implemented
+
+`MT5Reader.open_positions(symbol)` calls the official read-only `positions_get(symbol=...)` through the existing boundary and normalizes each row to `OpenPositionFacts`:
+
+```text
+ticket
+symbol
+direction BUY / SELL
+volume
+price_open
+stop_loss / None
+take_profit / None
+magic / optional
+comment / optional
+```
+
+Rules:
+
+- a positive MT5 return of an empty collection means complete current zero-position truth for that symbol;
+- `positions_get(...) is None` is `DATA_UNAVAILABLE`, **not** an empty tuple;
+- missing read capability is `DATA_UNAVAILABLE`;
+- unsupported position direction, invalid numeric geometry, wrong returned symbol or duplicate position ticket is `DATA_CORRUPT`;
+- MT5 SL/TP value `0` is normalized to explicit `None`;
+- returned positions are sorted deterministically by ticket;
+- these facts describe broker exposure; they do not by themselves prove bot ownership.
+
+This closes the software gap where recovery needed current position facts without creating another MetaTrader5 client.
+
+## Live recovery truth adapter
+
+`app/recovery_mt5.py` composes only read-layer facts:
+
+```text
+initialized MT5Reader
+→ account_facts()
+→ resolve_symbol()
+→ symbol_spec()
+→ open_positions()
+→ BrokerRecoverySnapshot + SymbolSpec
+```
+
+The returned `MT5RecoveryTruth.price_tolerance` is **one verified broker tick (`SymbolSpec.tick_size`)**. Startup recovery therefore does not guess a hard-coded Gold SL/TP tolerance.
+
+If current position truth cannot be read completely, snapshot creation raises through the market-data boundary; it never marks `positions_complete=True` with invented empty exposure.
 
 ## Runtime timeframe windows
 
-Initial V1 completed-candle windows:
+Initial completed-candle windows remain:
 
 | Timeframe | Initial window |
 |---|---:|
@@ -71,39 +104,17 @@ Initial V1 completed-candle windows:
 | M15 | 2000 |
 | M5 | 4000 |
 
-These remain research-calibratable rather than market truth.
-
-The builder accepts alternate window sizes for deterministic tests/replay; production defaults remain centralized in `market_data/snapshot.py` rather than scattered through strategies.
+These are research-calibratable implementation baselines.
 
 ## Completed-candle authority
 
-Structural decisions use completed candles unless a future explicit contract grants intrabar telemetry authority.
+MT5 bar position `0` is forming; position `1` is the most recent completed bar. Structural history therefore uses `copy_rates_from_pos(..., start_pos=1, count=...)`.
 
-For MT5 positional rates:
+Returned candles are UTC-normalized, chronological and rejected when duplicate/corrupt.
 
-```text
-bar position 0 = currently forming candle
-bar position 1 = most recent completed candle
-```
+## Snapshot reuse and execution freshness
 
-Therefore the read adapter calls `copy_rates_from_pos(..., start_pos=1, count=...)` for completed history. Returned candles are normalized to UTC, sorted chronologically and rejected if duplicate/non-chronological or structurally corrupt.
-
-## Snapshot reuse
-
-Per market snapshot, normal analysis performs the required read pass once:
-
-```text
-account facts
-→ Gold symbol resolution
-→ symbol specification
-→ current Bid/Ask quote
-→ one completed-candle request per configured timeframe
-→ normalized MarketSnapshot
-```
-
-Downstream intelligence/strategy code consumes this snapshot instead of repeating broker reads or equivalent calculations.
-
-The implemented execution path performs fresh pre-write broker/quote/spec checks where execution safety requires them. Snapshot reuse never overrides execution freshness.
+Normal analysis reuses one normalized market snapshot rather than repeating broker reads. Execution/recovery may perform fresh broker reads where safety requires them; snapshot reuse never overrides execution freshness.
 
 ## Data-quality states
 
@@ -116,66 +127,21 @@ CORRUPT
 UNKNOWN
 ```
 
-Current checks include:
-
-- quote freshness;
-- requested versus returned completed-candle count;
-- latest completed-candle age relative to timeframe;
-- duplicate/non-chronological candles;
-- recent large candle-time gaps;
-- invalid/non-finite quote/spec/OHLC data.
-
-Initial quote-age threshold is 10 seconds in the snapshot builder. It is an implementation baseline, not an execution spread/slippage substitute.
-
-A completed candle timestamp represents bar-open time; stale detection therefore allows the most recent completed bar to be older than one timeframe without immediately declaring it invalid.
+Critical missing/corrupt broker facts are never converted into zeros or fabricated healthy values.
 
 ## Closure/reopen gaps
 
-The market-data layer conservatively reports suspicious recent time gaps as `SPARSE` rather than pretending they are healthy.
-
-Hard scheduled-close/reopen permission is implemented in `risk/permissions.py` and uses verified broker-session facts. The **production broker-session schedule sourcing adapter is still pending**, so market data does not invent whether a specific gap was scheduled.
+Market data reports suspicious gaps conservatively. Hard scheduled-close/reopen permission belongs to `risk/permissions.py` using verified session facts; market data does not invent a broker schedule.
 
 ## History roles
 
-### Immediate context
-
-Recent candles support entry timing, rejection/reclaim, displacement, chase detection and pullback health.
-
-### Local structure
-
-A wider window supports swing identification, BOS/MSS, compression/expansion, local liquidity and structural invalidation.
-
-### Session context
-
-Current/previous session history supports session ranges, highs/lows, sweep/continuation behaviour and intraday expansion analysis.
-
-### Higher-timeframe context
-
-H1/H4 history supports regime, major structure, important liquidity/targets and trend/range/transition context.
-
-## Deep research history
-
-Replay/research may use much deeper historical datasets or caches. These are replaceable research inputs, not permanent live-state truth.
-
-Research must preserve chronology and may never use future bars/outcomes to improve the original historical decision.
+Recent history supports timing/rejection/displacement; wider local history supports swings/BOS/MSS/liquidity; H1/H4 supports regime/major structure/targets; deep research history is replaceable chronological research input.
 
 ## Permanent evidence versus temporary market data
 
-Durable storage prioritizes:
+Durable storage prioritizes trade/opportunity/risk/order/learning/research evidence. Large raw candle archives do not need to become primary permanent runtime state. Current broker exposure is always refreshed from broker truth during recovery.
 
-- trade journal;
-- opportunity/decision snapshots;
-- entry/exit evidence summaries;
-- risk/session state;
-- order lifecycle/reconciliation state;
-- strategy/research/discovery evidence;
-- performance and validation results.
-
-Large raw candle archives need not become the bot's primary permanent state.
-
-## Failure behaviour
-
-Explicit read-layer reasons include:
+## Failure reasons
 
 ```text
 MT5_UNAVAILABLE
@@ -188,35 +154,16 @@ DATA_SPARSE
 DATA_CORRUPT
 ```
 
-Critical missing/corrupt facts are never converted into zeros or fabricated healthy values.
-
-## Holiday and session context
-
-A calendar holiday does not automatically mean XAU is closed. Holiday information is context; actual broker tradeability, executable quotes, valid data and verified session facts own hard market permission.
-
 ## Tests / current evidence
 
-Deterministic CI covers:
+Deterministic CI covers account/DEMO normalization, symbol alias/spec/quote facts, completed-candle chronology, snapshot quality, read-only boundary confinement, BUY/SELL open-position normalization, zero SL/TP → None, positive empty exposure, unknown position read fail-closed, invalid direction rejection, duplicate ticket rejection and live recovery snapshot/tick-tolerance construction.
 
-- MT5 reader initialization requirement;
-- account fact normalization and positive DEMO semantics;
-- non-DEMO cannot produce DEMO PASS;
-- `XAUUSDm → XAUUSD` alias fallback;
-- symbol-spec and Bid/Ask normalization;
-- completed history begins at MT5 position `1`;
-- candle chronology;
-- multi-timeframe snapshot construction;
-- stale quote classification;
-- account identity mismatch handling;
-- positive-DEMO readiness handling;
-- market-data adapter contains no `order_send` path.
-
-Downstream deterministic suites additionally exercise Intelligence, Risk, Session/News and Execution against normalized market facts.
+Current repository checkpoint after live recovery read integration: **226 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Verification status
 
-**Deterministic implementation tests:** PASS in GitHub CI.  
-**Actual connected MT5 DEMO terminal read evidence:** PENDING.  
-**Downstream broker-write modules:** implemented deterministically, but controlled Windows MT5 DEMO write/reconciliation evidence is still PENDING.
+**Deterministic implementation tests:** PASS.  
+**Actual connected Windows MT5 DEMO account/symbol/quote/history/open-position evidence:** PENDING.  
+**Controlled broker-write/reconciliation evidence:** PENDING.
 
-Do not mark this document `VERIFIED` until the intended MT5 DEMO environment supplies real account/symbol/quote/history evidence and the relevant integration checks pass.
+Do not mark this document VERIFIED until intended MT5 DEMO environment supplies real read evidence and integration checks pass.
