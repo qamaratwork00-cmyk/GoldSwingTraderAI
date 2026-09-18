@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 1.0-design  
-**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research-evidence integrity, crash/restart, migration, learning-governance and release verification.  
+**Version:** 1.1-design  
+**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research-evidence integrity, portable dataset integrity, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
 ## Purpose
@@ -17,7 +17,7 @@ Testing must prove documented invariants. `VERIFIED` is reserved for behaviour t
 Unit / Contract Tests
 → Component Tests
 → Deterministic Replay Tests
-→ Research Ablation / Outcome / Management / Stress / Walk-Forward / Evidence Tests
+→ Research Ablation / Outcome / Management / Stress / Walk-Forward / Evidence / Dataset Tests
 → Integration Tests
 → Fault / Crash Injection
 → Persistence / Migration Tests
@@ -74,43 +74,35 @@ COMBINED            all four together
 
 ## Fixed-policy walk-forward tests
 
-Prove:
-
-- windows use historically eligible events;
-- development precedes validation;
-- validation slices never overlap;
-- development context may reconstruct state but is not scored;
-- validation metrics contain only declared validation events;
-- outcome history is clipped at validation end;
-- later windows cannot resolve earlier trades;
-- near-boundary trade may remain `HORIZON_OPEN`;
-- optional stress attaches to validation without reselecting policy;
-- no parameter search/tuning exists in `FIXED_POLICY_WALK_FORWARD`;
-- final one-shot holdout cannot be consumed by walk-forward code.
+Prove windows are chronological, validation slices do not overlap, development context is not scored, outcome history is clipped at validation end, later windows cannot resolve earlier trades, optional stress does not reselect policy, no hidden tuning exists and final one-shot holdout authority remains separate.
 
 Synthetic CI windows prove chronology/software only, not market edge.
 
 ## Research dataset/evidence identity tests
 
-`research/evidence.py` must prove:
-
-- identical replay content generates identical `dataset_sha256`;
-- incidental `ReplayDataset.series` timeframe tuple order does not change dataset identity;
-- candle OHLC/volume/spread mutation changes the relevant timeframe hash and dataset hash;
-- source label/version, replay realism/spread, symbol geometry and economic account context are represented in content identity;
-- broker endpoint `login/server` are intentionally excluded from replay-economic identity;
-- each timeframe identity records bars, first/last open UTC and SHA-256 content hash;
-- dataset/symbol/account hash fields are valid lowercase SHA-256 hex;
-- evidence configuration/result mappings normalize deterministically;
-- equivalent mapping insertion order produces the same input fingerprint;
-- `input_fingerprint_sha256` is stable when only generation time/results change;
-- `manifest_sha256` changes when the complete evidence record changes;
-- canonical manifest JSON round-trips as the declared public representation;
-- non-finite/unsupported evidence values fail rather than silently serialize incorrectly;
-- financial-secret-shaped configuration/result keys fail with `FINANCIAL_SECRET_DETECTED`;
-- evidence-manifest code has no trading, risk, execution or promotion authority.
+`research/evidence.py` must prove stable content-addressed dataset identity, timeframe-order normalization, content-change sensitivity, source/spread/symbol/economic-context representation, broker endpoint login/server exclusion, canonical evidence normalization, input/full-record hashing and `FINANCIAL_SECRET_DETECTED` rejection for authority-bearing secret-shaped fields.
 
 The evidence-level secret check is defense in depth; CI financial-secret scan remains required separately.
+
+## Portable research dataset bundle tests
+
+`research/datasets.py` must prove:
+
+- export → import round-trip preserves `dataset_sha256`;
+- H4/H1/M15/M5 are mandatory for replay bundles;
+- optional supported series such as M1 survive round-trip rather than disappearing;
+- broker endpoint login/server are absent from the bundle manifest;
+- imported endpoint identity is neutral offline research context, not a live account identity;
+- existing destination directories are never silently overwritten;
+- manifest SHA-256 mismatch fails import;
+- CSV SHA-256 mismatch fails before candle data is trusted;
+- declared bar count must match actual CSV rows;
+- unknown timeframe keys fail;
+- canonical `<TIMEFRAME>.csv` filenames are required;
+- manifest/CSV symlink inputs fail;
+- recomputed dataset/symbol/account hashes must match the manifest before the reconstructed dataset is exposed.
+
+Portable bundle integrity is software evidence only; it does not prove the external source data was truthful. Source provenance/version remains part of research evidence.
 
 ## Risk / execution / controller / session tests
 
@@ -157,6 +149,7 @@ Trade Manager replay        PASS / count / realism
 Execution stress            PASS / scenarios / assumptions
 Walk-forward chronology     PASS / windows / validation events
 Dataset identity            PASS / dataset_sha256
+Portable dataset bundle     PASS / manifest + file hashes
 Evidence manifest integrity PASS / input + manifest hashes
 Independent real-data run   PENDING/PASS
 Execution gate              PASS / count
@@ -168,7 +161,7 @@ Long forward sample         PENDING/PASS
 
 Do not mark pending evidence as PASS or convert unresolved modeled outcomes into resolved P/L.
 
-Current deterministic checkpoint after research-evidence identity: **168 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic checkpoint after portable research dataset bundles: **173 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Release-blocking failures
 
@@ -178,6 +171,8 @@ At minimum:
 - walk-forward development counted as validation or later-window leakage;
 - validation/final-holdout governance bypass;
 - dataset identity not changing when replay-relevant content changes;
+- portable dataset import accepting tampered manifest/file/content identity;
+- portable research export leaking broker endpoint identity or authority-bearing secrets;
 - evidence manifest silently accepting authority-bearing secret-shaped fields;
 - evidence/result reported without reproducible dataset/config/code identity when release evidence requires it;
 - centralized execution/DEMO guard bypass;
@@ -203,7 +198,7 @@ Testing must not claim profitability from software correctness, mark docs VERIFI
 ## Open questions
 
 - final CI coverage/static/security thresholds;
-- real historical dataset ingestion/export test matrix;
+- authoritative real historical XAU acquisition/import test matrix;
 - evidence package persistence/directory/publication tests;
 - real-data walk-forward window/sample requirements;
 - historical PRE_CLOSE/session integration;
