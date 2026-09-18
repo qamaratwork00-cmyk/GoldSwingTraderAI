@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 2.8-design
+**Version:** 2.9-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -16,7 +16,7 @@ At behavioural-contract level there are currently **no known `FIX BEFORE BUILD` 
 
 ## Current implementation status
 
-Deterministic core exists through Phase 10 including:
+Deterministic core exists through Phase 10 plus Phase-11 checkpoint foundation:
 
 ```text
 1  Foundation/config/domain/CI
@@ -29,17 +29,16 @@ Deterministic core exists through Phase 10 including:
 8  Trade Manager + execution bridge
 9  Dashboard renderer
 10 Replay / ablation / outcomes / manager replay
-   + verified historical PRE_CLOSE/session-policy replay integration
-   + declared execution stress
-   + fixed-policy walk-forward
-   + dataset/evidence identity
-   + portable research datasets
+   + verified historical PRE_CLOSE/session replay
+   + stress / fixed-policy walk-forward
+   + dataset/evidence identity + portable datasets
    + read-only MT5 historical acquisition
    + immutable evidence packages
-   + metrics/learning/discovery/invention/promotion
+   + learning/discovery/invention/promotion
+11 Portable runtime StateStore checkpoint/export/restore foundation
 ```
 
-Live DEMO release and real-data validation are not complete. Final runtime orchestration, production shared cross-laptop coordination, runtime-state backup/fresh-machine drill, controlled Windows/MT5 evidence and DEMO certification remain pending.
+Live DEMO release and real-data validation are not complete. Final runtime orchestration, production shared cross-laptop coordination, automatic backup publication, real fresh-machine/broker drill, controlled Windows/MT5 evidence and DEMO certification remain pending.
 
 ## Frozen trading principles still in force
 
@@ -53,78 +52,92 @@ Live DEMO release and real-data validation are not complete. Final runtime orche
 - daily/session/news/execution hard safety remains separate from soft scoring;
 - verified connected DEMO is required for V1 broker-write permission.
 
-## Research / learning / evidence — implemented
+## Research / learning / evidence — implemented foundation
 
-- chronological Decision replay and confluence ablation;
-- production Trade Plan/Trade Manager outcome replay;
-- historical session schedule model with production PRE_CLOSE permission reuse;
-- manager-replay PRE_CLOSE flatten integration;
-- declared execution stress;
-- fixed-policy walk-forward;
-- content-addressed `ReplayDatasetIdentity`;
-- portable dataset manifest + timeframe CSV bundles;
-- read-only MT5 historical acquisition through existing `MT5Reader`;
-- exact-count history checks and explicit historical-spread provenance;
-- canonical `ResearchEvidenceManifest`;
-- immutable evidence package persistence;
-- metrics/StrategyMemory/research episode journal;
-- discovery/invention liveness and governed promotion.
+Chronological replay, production manager outcomes, historical PRE_CLOSE software integration, execution stress, fixed-policy walk-forward, content-addressed datasets/evidence, portable research bundles, exact-count read-only MT5 acquisition, immutable evidence packages, learning/discovery/invention and governed promotion are implemented deterministically.
 
-### Historical PRE_CLOSE/session software gap — CLOSED
+Still external/pending: controlled real XAU history, trustworthy historical broker-session coverage, broad validation, empirical friction calibration, final holdout, Shadow and DEMO forward evidence.
 
-`research/session_history.py` now requires named/versioned verified coverage plus explicit chronological tradeable intervals. It delegates DAILY/WEEKEND timing to production `evaluate_market_permission()`, so research does not maintain a second threshold table.
+## Persistence / backup — Phase 11 foundation implemented
 
-`research/management_replay.py` may consume this schedule and forwards mandatory flatten to the real Trade Manager. Outside verified schedule coverage or on a candle/schedule CLOSED contradiction, research fails explicitly rather than guessing.
+### Portable checkpoint format gap — CLOSED
 
-What remains pending here is **external evidence**, not software semantics: a trustworthy historical broker-session source/version/coverage for the real XAU research periods.
-
-### Evidence package software gap — CLOSED
-
-`research/packages.py` stores:
+`persistence/checkpoint.py` now owns:
 
 ```text
-package_manifest.json
-evidence_manifest.json
+checkpoint_manifest.json
+records.jsonl
+events.jsonl
 ```
 
-and binds:
+The checkpoint captures the authoritative `StateStore` current records plus append-only event history and binds:
 
 ```text
-dataset_sha256
-+ optional verified dataset_bundle_manifest_sha256
-+ input_fingerprint_sha256
-+ evidence manifest_sha256
-+ evidence-file SHA-256
-→ package_sha256
+checkpoint schema version
++ StateStore database schema version
++ source label/version
++ UTC creation time
++ records file SHA/count
++ events file SHA/count
+→ checkpoint_sha256
 ```
 
-The package is write-new, verifies identities on import and deliberately does **not** duplicate large dataset bytes. Mutable paths are not authority.
+### StateStore snapshot gap — CLOSED
 
-### Frozen evidence principles
+`StateStore` now:
 
-- no future leakage;
-- no autonomous production promotion/hard-safety bypass;
-- development context is not validation evidence;
-- walk-forward cannot consume the one-shot final holdout;
-- serious evidence identifies code/policy/content-addressed dataset/config/realism/limitations;
-- partial historical data cannot silently shrink the declared sample;
-- absent historical spread requires explicit handling rather than zero/current-live fallback;
-- research acquisition reuses `MT5Reader`, never a second raw MT5 client;
-- historical PRE_CLOSE parity requires explicit verified schedule facts; no guessed broker clock;
-- portable datasets/evidence packages are trusted only after hash/content verification;
-- existing immutable destinations are not silently overwritten;
-- financial-authority secrets stay outside public/tracked evidence.
+- validates current record **and event** integrity;
+- exports deterministic `StoreSnapshot` state;
+- restores a verified snapshot only into an empty store;
+- preserves record/event checksums, timestamps and event IDs;
+- can checkpoint WAL before fresh-database handoff.
 
-## Still pending — research/external evidence
+### Public-safe secret boundary — CLOSED for checkpoint software
 
-- controlled Windows/MT5 real XAU history acquisition;
-- source-label/source-version convention based on observed broker/history facts;
-- reliable history-depth/terminal-limit evidence;
-- trustworthy versioned historical broker-session schedule coverage for studied periods;
-- broad regime-diverse XAU datasets and fixed-policy validation;
-- empirical stress calibration;
-- final untouched holdout, Shadow and DEMO forward evidence;
-- higher-level catalog/index/publication convention across many immutable evidence packages.
+`security/financial_secrets.py` centralizes financial-authority secret detection. Runtime checkpoint export/import applies structured payload scanning in addition to text scanning. Credential-shaped password/token/private/recovery-key fields hard-block with `FINANCIAL_SECRET_DETECTED`.
+
+This does not hide ordinary strategy/research/learning state or non-authority account identifiers under the chosen minimum-hide policy.
+
+### Fresh local DB restore — CLOSED at deterministic software level
+
+Restore requires a non-existing destination database, restores through a temporary StateStore, verifies integrity, checkpoints WAL and atomically installs the result. The restore result explicitly requires broker reconciliation.
+
+A checkpoint is recovery context only. It cannot grant execution authority or blindly replay stale OPEN/Intent state.
+
+## Phase 11 still pending
+
+### IMPLEMENTATION CHOICE
+
+- automatic checkpoint cadence;
+- backup retention count/age policy;
+- public-safe checkpoint naming/catalog/index convention;
+- automatic GitHub publication workflow for allowed checkpoints;
+- last-known-good preservation policy on publication failure;
+- integrated startup hook that selects/restores a checkpoint when explicitly requested.
+
+### CONTROLLED EVIDENCE PENDING
+
+- fresh-machine restore on another machine;
+- current MT5 DEMO account/symbol verification after restore;
+- restored unresolved Intent/open-trade reconciliation against current positions/orders/deals;
+- old-backup + newer broker-truth conflict drill;
+- shared cross-laptop controller/fencing backend and failover proof.
+
+### DEFER UNTIL SCHEMA V2 EXISTS
+
+- real migration/rollback transforms between schema versions. Current code correctly rejects unsupported versions; speculative v1→v2 migration code is not required before v2 exists.
+
+## Frozen backup/security principles
+
+- live SQLite DB is runtime state, not a Git merge artifact;
+- portable checkpoints are canonical content, not raw DB copies;
+- checkpoint export is write-new; failed export cannot overwrite a known-good checkpoint;
+- restore never overwrites/merges an existing local DB;
+- source and restored integrity must verify;
+- financial-authority secrets never enter public/tracked checkpoints;
+- exposure/order/position truth comes from broker after restore;
+- restored laptop must obtain fresh controller authority before any broker write;
+- two restored laptops cannot independently trade the same account.
 
 ## Still calibrate in research
 
@@ -137,28 +150,21 @@ The package is write-new, verifies identities on import and deliberately does **
 - StrategyMemory and discovery similarity/recipe thresholds;
 - Monte Carlo/block/regime-aware methodology.
 
-## Persistence / backup — separate pending work
-
-Runtime SQLite persistence is implemented. Portable **research data/evidence** is implemented. These do not replace Phase 11 runtime-state backup/recovery work.
-
-Still pending:
-
-- runtime checkpoint/export manifest;
-- backup cadence/retention;
-- public-safe automatic backup packaging;
-- fresh-machine restore/reconciliation drill;
-- future schema migration/rollback;
-- production shared controller coordination backend.
-
 ## Operator / runtime / release pending
 
-- authoritative dashboard runtime DTO + Discovery Health/confluence display;
+- authoritative dashboard runtime DTO + backup/recovery/Discovery Health display;
 - live provider/session adapters;
 - final persistent runtime orchestrator;
 - cross-laptop controller proof;
 - controlled Windows/MT5 DEMO lifecycle/fault/restart certification;
 - final release/docs audit based on actual evidence.
 
+## Current deterministic evidence
+
+Portable runtime checkpoint foundation is covered by typed/generic state round-trip, event-history preservation, tamper detection, secret blocking, no-overwrite export/restore and event corruption tests.
+
+Current checkpoint: **195 tests PASS**, Ruff PASS and financial-secret scan PASS.
+
 ## Governance conclusion
 
-No major behavioural redesign item is known. Current work is primarily **Phase 11 backup/recovery, real external evidence, runtime integration/failover and controlled certification**. Documents remain DRAFT/PROVISIONAL where real historical/live proof is incomplete.
+No major behavioural redesign item is known. Current work is primarily **remaining Phase-11 backup automation/failover integration**, followed by real external evidence, runtime orchestration and controlled DEMO certification.
