@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 3.1-design
+**Version:** 3.2-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -16,7 +16,7 @@ At behavioural-contract level there are currently **no known `FIX BEFORE BUILD` 
 
 ## Current implementation status
 
-Deterministic core exists through Phase 10 plus current Phase-11 backup/controller foundation:
+Deterministic core exists through Phase 10 plus current Phase-11 recovery/controller foundation:
 
 ```text
 1  Foundation/config/domain/CI
@@ -28,198 +28,149 @@ Deterministic core exists through Phase 10 plus current Phase-11 backup/controll
 7  Execution intent/gate/controller/writer/reconciliation
 8  Trade Manager + execution bridge
 9  Dashboard renderer
-10 Replay / ablation / outcomes / manager replay
-   + historical PRE_CLOSE/session replay
-   + stress / fixed-policy walk-forward
-   + portable datasets / exact-count MT5 history acquisition
-   + evidence identity/packages
-   + learning/discovery/invention/promotion
-11 StateStore snapshot + portable runtime checkpoint
+10 Research replay/session/stress/walk-forward
+   + portable datasets / MT5 history acquisition
+   + evidence packages / learning/discovery/promotion
+11 StateStore snapshot + portable checkpoint
    + fresh-local-DB restore
-   + automatic local checkpoint cadence
-   + verified backup catalog + count-based retention
-   + durable SQLite controller coordination
-   + monotonic fencing + reconciliation-gated takeover
+   + automatic local checkpoint cadence/catalog/retention
+   + durable SQLite coordination + monotonic fencing
+   + reconciliation-gated controller takeover
+   + governed startup recovery coordinator
 ```
 
-Live DEMO release and real-data validation are not complete. Final runtime orchestration, authenticated remote publication, controlled cross-laptop shared-coordination proof, real fresh-machine/broker drill, controlled Windows/MT5 evidence and DEMO certification remain pending.
+Live DEMO release and real-data validation are not complete. Final live MT5 recovery adapter/runtime orchestration, authenticated remote publication, controlled cross-laptop proof, fresh-machine broker drill and DEMO certification remain pending.
 
 ## Frozen trading principles still in force
 
 - completed candles own structural confirmation;
-- Trendline/Fibonacci/POC are optional bonus-only confluence, not hard filters;
+- Trendline/Fibonacci/POC remain optional bonus-only confluence;
 - six production strategy families remain parallel;
-- target-room RR policy, structural targets and evidence-earned runner remain frozen;
-- SMALL is any positive day-start equity below `$300`; no `$100` floor;
-- Gold capacity `0/1` independently risk-bearing position;
-- daily/session/news/execution hard safety remains separate from soft scoring;
+- structural RR/target/runner policy remains frozen;
+- SMALL is any positive day-start equity below `$300`;
+- Gold capacity is `0/1` independently risk-bearing position;
+- daily/session/news/execution safety stays separate from soft scoring;
 - verified connected DEMO is required for V1 broker-write permission.
 
-## Research / learning / evidence
+## Persistence / backup — deterministic software gaps closed
 
-Deterministic foundation is implemented. External evidence still pending: controlled real XAU history, trustworthy historical broker-session coverage, broad validation, empirical friction calibration, final holdout, Shadow and DEMO forward evidence.
+Implemented:
 
-## Persistence / backup — Phase 11
+- canonical StateStore current-record + append-only-event integrity;
+- portable public-safe runtime checkpoint;
+- financial-secret blocking;
+- fresh-DB-only restore;
+- automatic local 15-minute / keep-96 configurable baseline;
+- verified hashed backup catalog and latest-known-good selection;
+- failed-backup preservation;
+- remote-auth separation.
 
-### Portable checkpoint / StateStore snapshot — CLOSED
+Remote authenticated publication remains pending and must keep PAT/token credentials outside repository/checkpoint state.
 
-`persistence/checkpoint.py` and `StateStore` provide canonical current-record + append-only-event export/import, event integrity verification, financial-secret blocking and fresh-DB-only restore with broker reconciliation explicitly required.
+## Controller / failover — software semantics closed, deployment proof pending
 
-### Automatic local cadence / retention / catalog — CLOSED at software-foundation level
+Implemented:
 
-`persistence/backup.py` owns local verified rolling backups.
+- transactional SQLite coordination backend;
+- one-winner deterministic contention;
+- durable monotonic epoch ledger;
+- stale renew/release denial;
+- explicit shared-locking deployment assertion default false;
+- takeover obtains higher epoch but stays BLOCKED;
+- `CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED` survives lease renewal;
+- only fresh same-holder/same-epoch verification can clear takeover after recovery.
 
-Initial configurable baseline:
+Still controlled-evidence pending:
+
+- exact shared storage across two real machines;
+- simultaneous startup contention;
+- machine/process loss + TTL expiry;
+- standby higher-epoch takeover;
+- stale primary restart denial;
+- network/storage interruption fail-closed behavior;
+- no split brain.
+
+If real storage cannot prove SQLite locking/durability, replace the backend rather than weaken fencing.
+
+## Startup recovery — deterministic software gap CLOSED
+
+`app/recovery.py` now owns the governed READY sequence.
+
+Implemented:
 
 ```text
-interval_minutes = 15
-keep_latest      = 96
+StateStore integrity
+→ typed runtime recovery bundle
+→ current ExecutionIntent
+→ current ManagedTrade
+→ DEMO + persisted account/server/symbol consistency
+→ unresolved Intent reconciliation
+→ ManagedTrade vs broker position reconciliation
+→ all hard RecoveryAuthorities PASS
+→ fresh controller verification
+→ takeover completion only at the successful end
+→ READY
 ```
 
-These values are engineering defaults, not trading/risk policy.
+Key frozen recovery semantics:
 
-Implemented guarantees:
+- restored state is context, never broker truth;
+- APPROVED pre-submit Intent may be cancelled safely because no send allowance was consumed;
+- CREATED requires explicit recovery review;
+- SUBMITTING/ACCEPTED_UNKNOWN never blind resend;
+- VERIFIED OPEN without ManagedTrade context stays RECONCILING;
+- missing/mismatched broker position prevents READY;
+- broker-position ticket/symbol/direction/volume identity is hard;
+- SL/TP mismatch requires reconciliation;
+- price tolerance comes from verified broker geometry, not a guessed Gold constant;
+- any hard authority UNKNOWN/BLOCK prevents READY;
+- takeover controller cannot self-clear before the governed sequence passes.
 
-- verify current catalog and every referenced checkpoint before creating another;
-- skip when not due;
-- stage and fully verify new checkpoint before cataloging it;
-- timestamp + SHA-derived safe checkpoint naming;
-- canonical `backup_catalog.json` with `catalog_sha256`;
-- chronological entries containing checkpoint SHA and record/event counts;
-- `latest_verified_checkpoint()` verifies before returning;
-- count-based newest-N retention;
-- write new catalog before pruning old directories;
-- failed new backup preserves previous known-good catalog/checkpoint;
-- checkpoint name path traversal rejected;
-- tampered catalog or referenced checkpoint fails closed.
+Current deterministic evidence: **219 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
-### Remote publication boundary — still pending
+## Phase 11 remaining implementation choices
 
-`backup.py` intentionally contains no GitHub/cloud authentication and no PAT/token handling.
+- extend/reuse existing `MT5Reader` for current open-position recovery facts; no duplicate raw MT5 read client;
+- adapter that builds `BrokerRecoverySnapshot` from initialized live read boundary;
+- final runtime owner that supplies authoritative `RecoveryAuthorities` from risk/session/data/execution owners;
+- operator recovery/controller DTO;
+- authenticated publication mechanism for already verified backup artifacts.
 
-Still required:
+## Phase 11 controlled evidence pending
 
-- authenticated publication mechanism for **already verified public-safe artifacts**;
-- publication credentials supplied externally and never serialized into checkpoint/repo state;
-- remote destination/layout/catalog convention;
-- failure semantics that preserve local known-good backup even when remote publication fails;
-- proof that publication never uploads financial-authority secrets.
-
-This may be implemented as external CLI/CI/provider adapter; it must not move credentials into runtime backup state.
-
-### Fresh-machine / broker truth — controlled evidence pending
-
-- restore on another machine;
-- MT5 DEMO account/symbol verification after restore;
-- unresolved Intent/open-trade reconciliation against current positions/orders/deals;
-- old-backup + newer broker-truth conflict drill;
+- restore a real checkpoint on another machine;
+- verify intended MT5 DEMO account/server/symbol;
+- fetch real positions/orders/deals;
+- reconcile unresolved Intent/open ManagedTrade;
+- old backup + newer broker-truth conflict drill;
 - no stale order replay;
-- fresh controller authority before any broker write.
+- real cross-laptop coordination/fencing proof.
 
-## Cross-laptop controller — software semantics closed, deployment proof pending
+## Schema migration
 
-### Durable coordination backend — CLOSED at deterministic software level
+DEFER until schema v2 actually exists. Current code correctly rejects unsupported schemas; speculative transforms are not required.
 
-`execution/sqlite_coordination.py` now implements the frozen `CoordinationStore` contract using transactional SQLite state.
-
-Implemented guarantees:
-
-- one active lease row per scope;
-- `BEGIN IMMEDIATE` acquire/renew/release serialization;
-- one winner under deterministic multi-instance contention;
-- durable separate `last_epoch` ledger;
-- fencing epoch survives release/store reopen;
-- expiry takeover receives a strictly newer epoch;
-- stale holder cannot renew/release a newer lease;
-- lease/epoch integrity checks;
-- cross-machine deployment assertion defaults false.
-
-### Reconciliation-gated takeover — CLOSED at software-contract level
-
-`ControllerLeaseManager` no longer treats an expired-lease takeover as immediately write-ready.
-
-```text
-old lease expires
-→ standby atomically acquires higher epoch
-→ BLOCK: CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED
-→ restore/reconcile durable + broker truth
-→ fresh holder/epoch verification
-→ complete_takeover_reconciliation()
-→ CONTROLLER_PRIMARY may PASS
-```
-
-Renewal preserves the blocked takeover state. If another controller takes ownership during recovery, the stale takeover cannot complete reconciliation.
-
-### Still pending controlled cross-laptop evidence
-
-The exact shared deployment/filesystem must prove SQLite locking/durability across two machines. `shared_locking_verified=True` is an explicit deployment assertion, not self-certifying evidence.
-
-Still required:
-
-- two real machines/processes using the selected shared coordination storage;
-- one-winner contention under simultaneous startup;
-- primary process/laptop loss followed by TTL expiry;
-- standby obtains strictly newer epoch;
-- standby remains blocked through restore/broker reconciliation;
-- stale primary restart cannot write;
-- network/storage interruption fails closed;
-- no split-brain under the tested failure matrix.
-
-If the selected shared storage cannot guarantee SQLite locking/durability, replace the coordination backend rather than weaken the frozen fencing contract.
-
-## Integrated startup — pending
-
-- explicit restore/startup path;
-- automatic integrity/reconciliation sequence;
-- orchestrator-controlled call to `complete_takeover_reconciliation()` only after required durable/broker checks pass;
-- operator-visible backup/restore/controller health;
-- no READY state until broker/current-controller hard authorities verify.
-
-### Schema migration — defer until v2 exists
-
-Current code rejects unsupported schemas. Real migration/rollback transforms should be implemented when a second schema actually exists, not guessed in advance.
-
-## Frozen backup/security/controller principles
-
-- live SQLite DB is runtime state, not a Git merge artifact;
-- portable checkpoints/catalogs are canonical verified content;
-- failed export/new backup cannot overwrite the previous known-good checkpoint;
-- restore never overwrites/merges an existing local DB;
-- financial-authority secrets never enter public/tracked backup state;
-- account identifiers without authority are not hidden merely because they identify scope;
-- broker truth owns current exposure after restore;
-- restored laptop needs fresh controller authority before any broker write;
-- a higher fencing epoch alone is not write permission after takeover;
-- takeover reconciliation must complete before PRIMARY write authority;
-- two restored laptops cannot independently trade the same account;
-- remote publication credentials stay external to backup artifacts.
-
-## Still calibrate in research
+## Research calibration still pending
 
 - market-intelligence/scoring/timing/trailing thresholds;
-- optional-confluence value and retention;
+- optional-confluence retention;
 - real-data periods/sample sizes;
 - walk-forward window sizes/stepping;
-- stress severity and broker-friction distributions;
+- stress/broker-friction distributions;
 - promotion/Shadow/Canary thresholds;
-- StrategyMemory/discovery similarity/recipe thresholds;
+- StrategyMemory/discovery thresholds;
 - Monte Carlo/block/regime-aware methodology.
 
 ## Operator / runtime / release pending
 
-- authoritative dashboard runtime DTO + backup/recovery/controller/Discovery Health display;
-- live provider/session adapters;
-- final persistent runtime orchestrator;
-- controlled cross-laptop controller proof;
+- live recovery snapshot + authoritative startup wiring;
+- dashboard backup/recovery/controller/Discovery Health visibility;
+- authenticated public backup publication;
+- real cross-laptop controller proof;
 - controlled Windows/MT5 DEMO lifecycle/fault/restart certification;
-- final release/docs audit based on actual evidence.
-
-## Current deterministic evidence
-
-Phase-11 tests cover portable state round-trip, event-history integrity, secret blocking, checkpoint tamper, no-overwrite restore, due/skip cadence, retention, catalog tamper, referenced-checkpoint tamper, latest verified selection, previous-known-good preservation, SQLite controller one-winner contention, durable monotonic epochs, stale-holder denial, reconciliation-gated takeover and authority-loss denial during takeover recovery.
-
-Current checkpoint: **209 tests PASS**, Ruff PASS and financial-secret scan PASS.
+- broad real-XAU validation/holdout/forward evidence;
+- final docs/release audit.
 
 ## Governance conclusion
 
-No major behavioural redesign item is known. Current work is primarily **remaining Phase-11 integrated startup/fresh-machine recovery + controlled cross-laptop deployment proof + authenticated publication**, followed by runtime orchestration and controlled DEMO certification.
+No major behavioural redesign item is known. Next implementation work is **live read-only MT5 recovery truth**, then complete startup/runtime integration, external backup publication and controlled fresh-machine/cross-laptop/DEMO evidence.
