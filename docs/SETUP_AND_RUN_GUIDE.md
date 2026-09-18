@@ -1,15 +1,24 @@
 # GoldSwingTraderAI — Setup and Run Guide
 
-**Status:** DRAFT — PHASE 1/2 COMMANDS IMPLEMENTED; TRADING WORKFLOW NOT YET IMPLEMENTED  
-**Version:** 0.5-implementation  
+**Status:** DRAFT — CORE MODULES IMPLEMENTED; INTEGRATED PERSISTENT TRADING RUNTIME PENDING  
+**Version:** 0.6-implementation  
 **Authority:** Operator workflow for installation, startup, safe shutdown, migration, restore and common blocked-state handling.  
 **Depends on:** `50-operator/DASHBOARD_AND_UX.md`, `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
 ## Purpose
 
-This guide records real commands as they become implemented. Current commands cover package setup and **read-only MT5 Phase 2 readiness**. They do not yet start automated trading because the governed broker-write phase has not been implemented.
+This guide records real commands and current runtime reality.
 
-## Current prerequisites
+Important distinction:
+
+- deterministic production modules now exist through the current Phase-10 foundation, including strategy/risk/execution/management/research components;
+- the current `goldswing` / `python -m goldswingtraderai` launcher still runs the **read-only MT5 readiness path**;
+- the launcher has not yet been replaced by the final persistent full-trading orchestrator;
+- controlled Windows/MT5 DEMO execution certification remains pending.
+
+Do not infer that a module is missing merely because the current launcher does not yet orchestrate it, and do not infer live trading readiness merely because component tests are green.
+
+## Prerequisites
 
 For the Windows MT5 read path:
 
@@ -17,13 +26,13 @@ For the Windows MT5 read path:
 - intended MT5 account already connected in the terminal;
 - Python **3.11+**;
 - repository checkout/clone;
-- network access required by the terminal/broker.
+- network access required by terminal/broker.
 
-The official `MetaTrader5` Python package is optional in CI but required for local terminal reads.
+The official `MetaTrader5` Python package is optional in CI but required for local terminal integration.
 
 ## First-time development setup
 
-From the repository root on Windows PowerShell/cmd:
+From repository root on Windows PowerShell/cmd:
 
 ```text
 python -m venv .venv
@@ -33,7 +42,7 @@ python -m pip install -e ".[dev,mt5]"
 copy .env.example .env
 ```
 
-For deterministic development/CI on a machine without MT5 terminal support:
+For deterministic development/CI without MT5 terminal support:
 
 ```text
 python -m pip install -e ".[dev]"
@@ -45,7 +54,7 @@ Do not place MT5 passwords, authentication/session tokens or other financial-aut
 
 ## Current `.env` fields
 
-The safe example currently exposes only non-secret configuration:
+The safe example currently exposes non-secret configuration such as:
 
 ```text
 GSTAI_ENV=development
@@ -58,53 +67,55 @@ GSTAI_ALLOWED_ACCOUNT_LOGIN=
 GSTAI_ALLOWED_SERVER=
 ```
 
-`GSTAI_ALLOWED_ACCOUNT_LOGIN` and `GSTAI_ALLOWED_SERVER` are optional identity pins. If supplied, the current read-only readiness path reports a mismatch explicitly.
+`GSTAI_ALLOWED_ACCOUNT_LOGIN` and `GSTAI_ALLOWED_SERVER` are optional identity pins.
 
 ### DEMO guard is not a config switch
 
-There is deliberately no `GSTAI_REQUIRE_DEMO` setting.
-
-V1 owns this as a runtime invariant:
+There is deliberately no setting that disables DEMO verification.
 
 ```text
 Connected MT5 account positively verified DEMO
 → DEMO_GUARD PASS
 ```
 
-A local config value cannot disable that rule.
+V1 does not define a separate REAL authorization workflow.
 
-## Current Phase 2 run command
+## Current launcher command
 
-With MT5 open and the local environment activated:
+With MT5 open and environment activated:
 
 ```text
 python -m goldswingtraderai
 ```
 
-Equivalent installed console command:
+Equivalent console command:
 
 ```text
 goldswing
 ```
 
-Current runtime behaviour is **read-only**:
+### Current launcher behaviour
+
+The launcher currently performs **read-only readiness**:
 
 ```text
 load/validate non-secret settings
 → initialize MT5 Python bridge
 → read connected account facts
-→ resolve configured Gold symbol (default XAUUSDm → XAUUSD fallback)
+→ resolve configured Gold symbol
 → read broker symbol specifications
 → read Bid/Ask
 → load completed H4/H1/M15/M5 candles
-→ build one normalized market snapshot
+→ build normalized MarketSnapshot
 → evaluate positive DEMO fact
 → check optional account identity pins
-→ log concise readiness/data-quality result
-→ shutdown MT5 Python bridge
+→ log readiness/data quality
+→ shutdown MT5 bridge
 ```
 
-No `order_send`, create, modify or close path is implemented at this stage.
+The current `app/main.py` intentionally reports `broker_write_implemented=False` because the launcher itself does not yet call the integrated execution runtime.
+
+This does **not** mean execution modules are absent. The repository already contains deterministic implementations for execution intent/gate/checks/controller/MT5 writer/service/reconciliation, but they are not yet wired into the normal persistent launcher.
 
 ## Current default history windows
 
@@ -115,46 +126,37 @@ M15  2000 completed candles
 M5   4000 completed candles
 ```
 
-MT5 bar position `0` is the forming candle. The current reader intentionally starts completed history at position `1`.
+MT5 bar position `0` is the forming candle. Completed history starts at position `1`.
 
-## Current readiness outcomes
+## Current deterministic subsystem checkpoint
 
-Useful current log events include:
-
-```text
-PHASE_2_READINESS_START
-MARKET_SNAPSHOT_READY
-ACCOUNT_IDENTITY_MISMATCH
-DEMO_GUARD_NOT_VERIFIED
-MARKET_DATA_DEGRADED
-MT5_UNAVAILABLE
-MT5_NOT_INITIALIZED
-SYMBOL_NOT_FOUND
-DATA_UNAVAILABLE
-DATA_INSUFFICIENT
-DATA_STALE
-DATA_SPARSE
-DATA_CORRUPT
-```
-
-A degraded snapshot can still be displayed/read, but it must not later become broker-write permission merely because the process is running.
-
-## V1 environment rule
-
-V1 uses a positive DEMO guard only:
+Implemented/tested component families include:
 
 ```text
-Connected MT5 account verified DEMO
-→ DEMO_GUARD PASS
+market_data/
+intelligence/        # structure, quant, technical, liquidity, session/news, confluence
+strategies/
+decisions/
+risk/
+persistence/
+execution/
+management/
+operator/
+research/
 ```
 
-When the execution phase exists, broker writes will require this guard plus all ordinary account/data/session/news/risk/controller/execution checks.
+Notable current behaviour:
 
-V1 does not define a separate REAL authorization workflow.
+- causal Trendline/Fibonacci/broker-local POC confluence exists as optional bonus-only intelligence;
+- SMALL is any positive UTC day-start equity below `$300`; no `$100` floor;
+- one-shot Execution Intent and reconciliation logic exist;
+- SQLite persistence/recovery exists;
+- HOLD/PROTECT/TRAIL/RUNNER/EXIT Trade Manager exists;
+- discovery/invention has durable liveness/candidate/promotion machinery.
 
-## Planned full startup
+These deterministic modules still require final runtime orchestration and controlled broker integration evidence.
 
-The final trading startup remains:
+## Intended full startup after orchestration is complete
 
 ```text
 load + validate durable state
@@ -164,83 +166,70 @@ load + validate durable state
 → load/validate H4/H1/M15/M5 history
 → reconcile positions/orders/deals
 → restore risk/open-trade/opportunity state
-→ load Strategy Registry + learning
+→ load Strategy Registry + learning/research state
 → verify news/session inputs
 → acquire controller lease/epoch
 → rebuild/revalidate market intelligence
+→ run strategies/fusion/timing/TradePlan/risk
 → evaluate centralized Execution Permission Gate
 → READY
 ```
 
-Only the early read-only subset above exists today.
-
-## Runtime roles — planned
+## Runtime roles
 
 ### PRIMARY
-
-Single instance with governed broker-write authority for the managed account/symbol.
+Single instance with governed broker-write authority for managed account/symbol.
 
 ### STANDBY
-
-May analyze and wait for controller lease expiry. It cannot write while another valid PRIMARY exists. After takeover it must reconcile before becoming PRIMARY READY.
+May wait for valid lease expiry, then must reconcile before becoming PRIMARY READY.
 
 ### OBSERVER
-
 Analysis/dashboard only; no broker writes.
 
 ### RESEARCH
-
-Historical/replay/experimental use; no production broker writes.
+Replay/experiments; no production broker writes.
 
 ### RECOVERING / RECONCILING
-
 Runtime is restoring/reconciling state and is not yet broker-write ready.
 
-## What to do on WAIT — future trading runtime
+## Expected trading states
 
-Normally nothing.
+`WAIT` normally requires no operator action. A valid setup may remain armed while timing improves.
 
-Example:
+Expected policy blocks include:
+
+- `NEWS_BLACKOUT`;
+- `SESSION_PRE_CLOSE`;
+- `LOSS_LOCKED`;
+- `POSITION_CAPACITY_FULL`;
+- `EXTERNAL_GOLD_EXPOSURE`;
+- `SPREAD_TOO_HIGH` / `PRICE_DRIFT`;
+- `ANOTHER_ACTIVE_CONTROLLER`;
+- `DEMO_GUARD_NOT_VERIFIED`.
+
+System failures such as account mismatch, unresolved broker acknowledgement, corrupt state, controller coordination failure or required-data/news truth failure require recovery/reconciliation rather than forced trading.
+
+## Optional confluence visibility
+
+Future integrated runtime/dashboard may show compact lines such as:
 
 ```text
-ENTRY_EXTENDED
-Setup remains ARMED
+Trendline   M15 support TOUCH
+Fib         BUY 0.618
+POC         NEAR (tick-volume)
 ```
 
-Do not restart or alter settings simply because the bot is waiting for better timing.
+These are analytical context only. Missing Trendline/Fibonacci/POC is not itself a reason to block a trade.
 
-## Expected policy blocks — future trading runtime
+## Manual daily-loss reset
 
-Examples:
+Feature is OFF by default.
 
-- `NEWS_BLACKOUT` — wait for event safety/normalization;
-- `SESSION_PRE_CLOSE` — scheduled XAU closure approaching;
-- `LOSS_LOCKED` — daily safety budget exhausted;
-- `POSITION_CAPACITY_FULL` — one bot-managed Gold risk position already exists;
-- `EXTERNAL_GOLD_EXPOSURE` — manual/foreign/unknown Gold exposure exists;
-- `SPREAD_TOO_HIGH` / `PRICE_DRIFT` — current entry execution degraded;
-- `ANOTHER_ACTIVE_CONTROLLER` — another instance owns the controller lease;
-- `DEMO_GUARD_NOT_VERIFIED` — positive DEMO verification is unavailable.
+When operator UX is fully wired, reset is available only from `LOSS_LOCKED`, requires deliberate `R,R` confirmation, is limited to one per UTC risk day, and creates durable audit/new-cycle state without erasing cumulative day P/L.
 
-Do not bypass the centralized Execution Permission Gate when it is implemented.
+Exact keyboard timing remains an operator-detail item.
 
-## System blocks
-
-`ACCOUNT_IDENTITY_MISMATCH`, unresolved broker acknowledgement, state corruption, controller coordination failure or required data/news truth failure require reconciliation/recovery rather than manual trade forcing.
-
-Manual loss reset cannot clear unrelated technical/system blocks.
-
-## Manual daily-loss reset — planned operator control
-
-The feature is OFF by default.
-
-When its UX is implemented, reset is available only from `LOSS_LOCKED`, requires deliberate `R,R` confirmation, is limited to one per UTC risk day and creates a durable audit event/new cycle reference without erasing cumulative day P/L.
-
-Exact keyboard timing remains an operator-UX implementation detail.
-
-## Scheduled closure behaviour — frozen, not yet runtime-implemented
-
-V1 does not intentionally carry bot-managed Gold through scheduled XAU closure/reopen gap risk.
+## Scheduled closure behaviour
 
 ```text
 Daily break:
@@ -252,7 +241,7 @@ T-60m stop new entries
 T-30m mandatory governed flatten
 ```
 
-Timing comes from the verified broker Gold session schedule rather than a hard-coded local clock.
+Timing comes from verified broker Gold session schedule rather than guessed local clock.
 
 After reopen:
 
@@ -261,11 +250,13 @@ Daily   → normalized conditions + at least 1 clean completed M5
 Weekend → gap assessment + normalized conditions + at least 2 clean completed M5
 ```
 
-## Current safe shutdown
+Hard permission logic is implemented deterministically; live schedule/provider wiring and controlled DEMO evidence remain integration work.
 
-The Phase 2 command reads one snapshot and exits; the MT5 Python bridge is shut down in a `finally` path.
+## Safe shutdown target
 
-The future persistent trading runtime will use the fuller shutdown sequence:
+Current read-only launcher exits after one readiness snapshot and shuts down MT5 bridge in `finally`.
+
+Final persistent runtime should use:
 
 ```text
 stop new entry triggering
@@ -276,7 +267,7 @@ stop new entry triggering
 → exit
 ```
 
-## Planned laptop migration
+## Laptop migration target
 
 ```text
 OLD PRIMARY
@@ -300,17 +291,19 @@ clone/install project
 → PRIMARY READY
 ```
 
-## Disaster recovery after laptop loss
+Production shared cross-laptop coordination backend and fresh-machine drill remain pending release work.
+
+## Disaster recovery
 
 Recovery requires repository + portable recovery state/checkpoint + separately supplied financial credentials + intended MT5 access.
 
-Never replay a stale backup assumption that a position is open or closed without checking broker truth.
+Never replay a stale backup assumption about open/closed positions without checking broker truth.
 
 ## Public backup / secret rule
 
 Public backup may contain code, docs, strategies, learned parameters, research/promotion history and portable recovery intelligence.
 
-Never commit authority-bearing credentials/keys/tokens such as MT5 trading secrets, private broker/session tokens, paid API keys, GitHub PATs, private/signing keys or paid cloud/database credentials.
+Never commit authority-bearing credentials/keys/tokens such as MT5 secrets, private broker/session tokens, paid API keys, GitHub PATs, private/signing keys or paid cloud/database credentials.
 
 Run:
 
@@ -322,8 +315,12 @@ If a financial credential was committed publicly, rotate/revoke it; deletion alo
 
 ## Verification status
 
-Current deterministic repository checks include Ruff, Pytest and the financial-secret scanner through GitHub Actions.
+Repository CI runs Ruff, Pytest and financial-secret scan.
 
-**Actual connected MT5 DEMO read verification remains pending on the intended Windows terminal.** Do not interpret passing fake-adapter CI as proof that a specific local broker terminal is configured correctly.
+Current deterministic green status is software evidence only. The following remain pending before honest DEMO verification:
 
-This guide will continue to gain exact persistence/controller/trading/dashboard commands only after those features actually exist.
+- fully integrated persistent runtime;
+- real Windows/MT5 read/write lifecycle evidence;
+- production shared cross-laptop coordination backend/failover evidence;
+- backup/export/fresh-machine recovery drill;
+- full end-to-end controlled DEMO certification.
