@@ -1,14 +1,14 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT  
-**Version:** 0.7-implementation-map  
+**Version:** 0.8-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
 
 > **Behaviour comes from the authoritative topic document. Code implements it. This guide only tells you where the real implementation lives.**
 
-For whole-project sequencing/recovery use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`; for code-quality rules use `60-engineering/CODING_STANDARD.md`.
+For project sequencing/recovery use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`; for code-quality rules use `60-engineering/CODING_STANDARD.md`.
 
 ## Current implementation checkpoint — 2026-09-18
 
@@ -28,7 +28,7 @@ scripts/scan_financial_secrets.py
 .github/workflows/ci.yml
 ```
 
-Positive DEMO requirement is a code invariant, tracked config is secret-free, and there is still no irreversible broker-write implementation.
+Positive DEMO requirement is a code invariant, tracked config is secret-free, and there is no irreversible broker-write implementation yet.
 
 ### Phase 2 — MT5 read layer — IMPLEMENTED + deterministic CI green; live Windows DEMO proof pending
 
@@ -81,8 +81,6 @@ Market intelligence has zero broker authority. News/session here are facts/conte
 
 ### Phase 4 — Strategies + fusion + Opportunity + Entry Timing — IMPLEMENTED + deterministic CI green
 
-Primary files:
-
 ```text
 strategies/floor.py
 decisions/fusion.py
@@ -99,25 +97,76 @@ IntelligenceSnapshot
 → StrategyFloorReport
 → independent BUY Thesis + SELL Thesis
 → bounded correlation/synergy + conflict + Red Team
-→ Opportunity create/update with stable opportunity_id/episode_id
+→ Opportunity lifecycle with stable IDs
 → M5 Entry Timing
 → DecisionSnapshot
 ```
 
-Phase-4 invariants now executable:
-- all six families evaluate from the same snapshot; no sequential filter chain;
+Important behaviour:
+- all six families evaluate the same snapshot; no sequential filter chain;
 - optional unavailable evidence is omitted/reweighted rather than forced to zero;
-- strong opposition remains visible as conflict;
+- one strong family may lead; all-six consensus is not required;
+- strong opposition remains visible as conflict rather than arbitrary veto;
 - Opportunity and Entry Timing are separate;
 - severe extension normally becomes `WAIT`, not thesis deletion;
-- MISSED re-arm requires a genuinely fresh event assertion;
-- surviving setup keeps Opportunity/Episode identity;
-- `ENTER_BUY/ENTER_SELL` means analytical readiness only, not broker permission;
-- strategy/decision modules contain no MetaTrader5/order-send boundary.
+- MISSED re-arm requires genuinely fresh structural/timing evidence;
+- current scores/weights are explicit research-calibratable baselines, not frozen profitability truth.
 
-Current strategy/fusion/timing numbers are research-calibratable implementation baselines, not frozen profitability truth.
+### Phase 5 — Trade Plan + Risk Engine — IMPLEMENTED + deterministic CI green
 
-## Current test ownership
+Primary files:
+
+```text
+decisions/trade_plan.py
+risk/engine.py
+risk/state.py
+risk/__init__.py
+```
+
+Runtime boundary:
+
+```text
+DecisionSnapshot / READY Opportunity
+→ structural Trade Plan
+   Signal Price
+   Approved Entry Reference
+   structural invalidation
+   volatility/noise buffer
+   Initial SL
+   Immediate / Primary / Expansion / Runner objectives
+   immutable original-R price distance
+   RR/path/plan quality
+→ Risk Engine
+   UTC risk-day profile
+   target-size calculation
+   broker volume-grid normalization
+   min-lot evaluation
+   all-in SL risk + friction exactly once
+   daily lock / cooldown / episode re-entry / 0-of-1 capacity
+   optional exact broker-margin fact
+→ RiskEvaluation PASS / BLOCK / UNKNOWN
+```
+
+Phase-5 implementation invariants:
+- Trade Plan defines market geometry before monetary sizing;
+- BUY plans use Ask and SELL plans use Bid as the approved planning reference; Phase 7 still revalidates a fresh executable quote before broker write;
+- a nearby low-quality internal obstacle may remain `Immediate Obstacle` instead of automatically becoming the Primary target and killing otherwise valid target room;
+- frozen structural RR policy is enforced: `<1.20R` current plan degrades, `1.20–<1.50R` needs credible `~2R+` expansion path, `1.50R+` is acceptable subject to other geometry;
+- fragile/noisy stop geometry becomes `DEGRADED/WAIT` rather than inventing a tighter stop;
+- invalid plans contain explicit missing (`None`) stop geometry rather than fabricated placeholder SL/R values;
+- score/Plan Quality never increases monetary risk;
+- account profile is fixed from UTC risk-day start equity so floating P/L does not make profile boundaries oscillate intraday;
+- SMALL raw size below broker minimum does not auto-block; actual `0.01` all-in risk is evaluated and may PASS in NORMAL or ELEVATED acceptable band;
+- target sizing uses the midpoint of each frozen normal band only as an explicit implementation baseline: SMALL `3.75%`, MEDIUM `2.5%`, NORMAL `1.5%`;
+- spread is not added twice when Bid/Ask planning geometry already embeds it; it remains visible as a diagnostic;
+- current friction baseline is explicit/configurable (`2` ticks slippage reserve, commission supplied separately) and remains research/broker calibration work;
+- heuristic `price × contract / leverage` margin is diagnostic only because Gold/CFD margin can be broker-specific;
+- exact broker-required margin, when supplied, is authoritative and may block; Phase 7 must obtain/revalidate the broker margin fact before irreversible write;
+- daily safety P/L, one-reset semantics, 3-loss cooldown and same-episode one-fresh-re-entry rules are executable pure state transitions ready for Phase-6 persistence.
+
+Phase 5 still contains **zero broker writes**.
+
+## Current deterministic test ownership
 
 ```text
 tests/test_settings.py
@@ -129,7 +178,12 @@ tests/test_indicators_structure.py
 tests/test_technical_liquidity.py
 tests/test_intelligence_snapshot.py
 tests/test_strategy_decisions.py
+tests/test_trade_plan_risk.py
+tests/test_risk_state_regressions.py
+tests/test_margin_authority.py
 ```
+
+Phase-5 tests protect BUY/SELL structural geometry, immediate-vs-primary target distinction, frozen RR guard, min-lot behaviour, no stop distortion, no score-leveraged risk, spread no-double-count, cash-flow-adjusted daily lock, one manual reset, 3-loss cooldown release, episode re-entry limit and exact broker-margin authority.
 
 CI gates remain:
 
@@ -155,11 +209,10 @@ Do not weaken a safety/regression test merely to make CI green.
 | Strategy families | `20-trading-decisions/STRATEGY_FLOOR.md` | `strategies/floor.py` IMPLEMENTED baseline |
 | BUY/SELL fusion + Red Team | `20-trading-decisions/SCORING_AND_DECISION_FUSION.md` | `decisions/fusion.py` IMPLEMENTED baseline |
 | Opportunity/Entry Timing | `20-trading-decisions/ENTRY_TIMING.md` | `decisions/opportunity.py`, `timing.py` IMPLEMENTED baseline |
-| Decision orchestration | supporting engineering owner | `decisions/snapshot.py` IMPLEMENTED |
-| Trade Plan | `20-trading-decisions/TRADE_PLAN.md` | **Phase 5 next** |
-| Monetary risk | `30-risk-execution/RISK_CONTRACT.md` | **Phase 5 next** |
-| Hard session/news state | `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` | Phase 6 |
-| Persistence/recovery | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | Phase 6 |
+| Trade Plan | `20-trading-decisions/TRADE_PLAN.md` | `decisions/trade_plan.py` IMPLEMENTED baseline |
+| Monetary risk | `30-risk-execution/RISK_CONTRACT.md` | `risk/engine.py`, `risk/state.py` IMPLEMENTED baseline |
+| Hard session/news state | `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` | **Phase 6 next** |
+| Persistence/recovery | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | **Phase 6 next** |
 | Execution gate/MT5 writes | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | Phase 7 |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | Phase 8 |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | Phase 9 |
@@ -171,30 +224,34 @@ Do not weaken a safety/regression test merely to make CI green.
 - one normalized broker snapshot and one shared intelligence derivation;
 - pure deterministic functions where practical;
 - no decorative framework/inheritance layers;
-- no raw broker writes from intelligence/strategies/decisions/research/dashboard;
+- no raw broker writes from intelligence/strategies/decisions/risk/research/dashboard;
 - no lookahead;
 - hard safety never becomes a weighted strategy score;
+- safety rules must not be multiplied into unnecessary filters that suppress valid opportunities;
 - financial-authority credentials never enter tracked config/logs.
 
-## Next implementation owner — Phase 5
+## Next implementation owner — Phase 6
 
-Consume `DecisionSnapshot` and build:
+Phase 6 builds two safety/state foundations without sending orders:
 
 ```text
-analytically ready Opportunity
-→ structural Trade Plan
-   signal/reference/executable-price separation
-   structural invalidation + volatility buffer
-   Primary / Expansion / Runner objectives
-   original R immutable
-→ broker-aware Risk Result
-   SMALL/MEDIUM/NORMAL profile
-   executable lot/min-lot handling
-   all-in risk/ceiling/margin facts
-   daily Account Safety P/L state inputs
+A) hard session/news permission
+   verified scheduled-close facts
+   T-20/T-10 daily policy
+   T-60/T-30 weekend policy
+   Tier-1/Tier-2/Tier-3 news state
+   reopen/post-news warmup
+
+B) persistence/recovery
+   lightweight durable store
+   schema/version/integrity
+   risk-day/cooldown/episode state
+   Opportunity/TradePlan lifecycle
+   unresolved execution/reconciliation state contracts
+   startup recovery and broker-reconciliation inputs
 ```
 
-Phase 5 still must not send orders. Hard session/news/controller/execution permission remains later.
+Use the smallest safe persistence stack; standard-library SQLite is preferred unless an actual requirement proves it insufficient. Phase 6 must not add broker-write authority.
 
 ## Debugging order
 
@@ -211,8 +268,8 @@ MarketSnapshot
 → broker lifecycle
 ```
 
-Do not weaken strategy when the actual problem belongs to risk/execution/data.
+Do not weaken strategy or Trade Plan thresholds when the actual blocker belongs to data, state, margin or execution.
 
 ## Documentation rule
 
-After each phase, update the authoritative topic docs, `60-engineering/MODULE_STRUCTURE.md`, this guide, relevant tests and operator docs only for functionality that actually exists. Deterministic CI green is not the same as live DEMO certification.
+After each phase, update authoritative topic docs only where implementation choices/evidence matter, then update `60-engineering/MODULE_STRUCTURE.md`, this guide and relevant tests. Deterministic CI green is not the same as controlled DEMO certification.
