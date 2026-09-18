@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 1.8-design
+**Version:** 1.9-design
 
 This file separates remaining items into four classes so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -16,11 +16,11 @@ A `CALIBRATE IN RESEARCH` item is **not permission to guess silently**. Initial 
 
 ## Current freeze status
 
-At behavioural-contract level there are currently **no `FIX BEFORE BUILD` items**. The major trading, risk, session, execution, persistence, learning and recovery architecture is sufficiently defined for implementation to continue through the large phases in `../CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`.
+At behavioural-contract level there are currently **no `FIX BEFORE BUILD` items**. Implementation is complete through Phase 6 deterministic software scope: market/data/intelligence, strategy/decision, Trade Plan/risk, hard session/news permission and SQLite persistence/recovery foundation.
 
 The V1 engineering style is frozen in `../60-engineering/CODING_STANDARD.md`: Python 3.11+, lightweight production runtime, minimal dependencies, direct/auditable architecture, shared snapshot/derived calculations and professional non-noisy commenting/error handling.
 
-Remaining items below are research calibration, ordinary implementation choices, operator details or later-version work; they must not silently change frozen behavioural or engineering invariants.
+Remaining items below are research calibration, broker/provider integration choices, operator details or later-version work; they must not silently change frozen behavioural or engineering invariants.
 
 ## Market intelligence
 
@@ -156,9 +156,12 @@ Weekend:        T-60m no new entry, T-30m mandatory flatten
 Weekend reopen: gap assessment + normalized conditions + 2 clean completed M5
 ```
 
+Phase 6 implements these hard states in `risk/permissions.py`.
+
 ### IMPLEMENTATION CHOICE
 
-- production event-provider adapter(s), freshness TTL and provider mapping, while preserving `NEWS_SAFETY_UNKNOWN` on required-truth failure.
+- production event-provider adapter(s), freshness TTL and provider mapping, while preserving `NEWS_SAFETY_UNKNOWN` on required-truth failure;
+- verified broker-session schedule sourcing/adapter for the actual MT5/broker environment, while preserving `SESSION_SCHEDULE_UNKNOWN` when truth is unavailable.
 
 ### CALIBRATE IN RESEARCH
 
@@ -210,11 +213,13 @@ DEMO status not verified            → broker-write permission not granted
 
 V1 defines only the positive DEMO guard. There is no separate REAL authorization policy or REAL hard-block contract in V1.
 
-### IMPLEMENTATION CHOICE
+### IMPLEMENTATION CHOICE — PHASE 7
 
 - shared coordination-store product/library, provided frozen atomic lease + fencing contract is satisfied;
 - exact broker comment string shape and magic integer, provided durable Execution Intent/Trade lineage remains authoritative and magic/comment are only reconciliation aids;
-- bounded retry/backoff mechanics for safe read-only/pre-submit operations; irreversible ambiguous writes remain one-shot/reconciliation-only.
+- bounded retry/backoff mechanics for safe read-only/pre-submit operations; irreversible ambiguous writes remain one-shot/reconciliation-only;
+- exact MT5 order/deal reconciliation adapter shape while broker truth remains authoritative;
+- exact healthy-spread-baseline storage/sample implementation, preserving the frozen ratio rules.
 
 ### CALIBRATE IN RESEARCH / DEMO OBSERVATION
 
@@ -223,26 +228,33 @@ V1 defines only the positive DEMO guard. There is no separate REAL authorization
 
 ## Persistence / backup / migration
 
-### FIX BEFORE BUILD
+### IMPLEMENTED V1 FOUNDATION
 
-None at behavioural-contract level. Broker truth remains authoritative for live positions/orders/deals; critical local lifecycle/risk state must persist and reconcile.
+Initial local durable storage is no longer an open choice:
 
-### IMPLEMENTATION CHOICE
+```text
+standard-library SQLite
++ canonical JSON records
++ SHA-256 record checksums
++ explicit database/record schema versions
++ transactional updates
++ append-only event rows where requested
+```
 
-Initial implementation may choose storage stack, schema layout, checkpoint format, migration mechanism, backup cadence/retention and export packaging provided it satisfies:
+`persistence/runtime_state.py` currently persists/restores RiskDayState, CooldownState, EpisodeRiskState, active Opportunity and active TradePlan, and validates their lineage in `RecoveryBundle`.
 
-- atomic/durable critical state;
-- schema versioning;
-- restart recovery;
-- Strategy Registry + learning portability;
-- broker reconciliation;
-- fresh-machine restore test;
-- public backup of useful project intelligence;
-- financial-authority secret exclusion/scanning.
+Critical corruption/version mismatch fails explicitly. Broker truth remains authoritative for current positions/orders/deals.
 
-Live mutable database files need not be Git-merged directly if a safer portable checkpoint/export represents the same required recovery state.
+### IMPLEMENTATION CHOICE / LATER PHASE
 
-The chosen persistence stack must also satisfy the frozen Coding Standard: use the smallest safe solution and do not add ORM/service-layer complexity without a demonstrated need.
+- backup/checkpoint cadence and retention;
+- portable checkpoint/export/manifest format for permitted GitHub recovery state;
+- schema migration/rollback mechanism when schema version 2+ exists;
+- Phase-7 Execution Intent/order/trade persistence shape once those real lifecycle types exist;
+- controller-lease persistence/coordinator details;
+- later Strategy Registry/learning/research export shape.
+
+Live mutable SQLite database files are runtime state, not mergeable source artifacts. Public backup/export must continue to exclude financial-authority secrets.
 
 ## Research / learning / autonomous improvement
 
@@ -293,7 +305,6 @@ Research is automatic where practical but cannot self-promote production, bypass
 
 - exact compatible dependency pins/upper bounds within the frozen baseline;
 - final filenames/classes while preserving documented ownership;
-- persistence libraries consistent with the lightweight standard;
 - CI/static/security/coverage thresholds;
 - packaging/version/tag layout;
 - optional research-only analytical libraries.
@@ -317,6 +328,6 @@ The behavioural design close-out is complete enough for implementation to contin
 
 The former below-`$100` profile question is closed: any positive equity below `$300` is SMALL. Actual risk geometry and existing safety authorities decide trade affordability.
 
-Research-calibration values and ordinary library/file choices remain explicit work for implementation/replay. Python/runtime complexity principles are frozen by `CODING_STANDARD.md` and DEC-063.
+The local persistence-engine question is also closed for initial V1: SQLite is implemented and deterministic recovery/corruption tests are green. Remaining persistence work is execution lifecycle, backup/migration packaging and later learning/research state, not a reason to reopen the storage foundation.
 
-Documents remain honestly `DRAFT/PROVISIONAL` where implementation or executable verification does not yet exist. They must not be relabeled `IMPLEMENTED` or `VERIFIED` until required code/tests/evidence actually exist.
+Documents remain honestly `DRAFT/PROVISIONAL` where live broker integration or controlled DEMO evidence does not yet exist. They must not be relabeled `VERIFIED` until required integration evidence actually passes.
