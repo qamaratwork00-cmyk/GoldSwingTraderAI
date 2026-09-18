@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Indicators and Volatility
 
-**Status:** PROVISIONAL  
-**Version:** 0.2-implementation-baseline  
+**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
+**Version:** 0.3-implementation  
 **Authority:** EMA/RSI/ATR evidence, volatility normalization, momentum phase, compression/expansion quantification, extension/chase and exhaustion metrics.  
 **Depends on:** `CANDLE_STRUCTURE.md`, `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -11,15 +11,16 @@ Indicators support and normalize price behaviour; they do not replace structure 
 
 > **Indicators explain and quantify market behaviour. Structure remains primary market language.**
 
-## Phase 3 implementation checkpoint
+## Current implementation checkpoint
 
 Implemented in:
 
 ```text
 src/goldswingtraderai/intelligence/indicators.py
+src/goldswingtraderai/intelligence/snapshot.py
 ```
 
-Current baseline periods are:
+Current baseline periods:
 
 ```text
 EMA fast   20
@@ -28,9 +29,9 @@ RSI        14 (Wilder)
 ATR        14 (Wilder)
 ```
 
-These are initial implementation defaults, not permanently frozen profitability assumptions. Research/replay may calibrate them later without turning the system into indicator filter soup.
+These are explicit implementation defaults, not frozen profitability assumptions. Replay/research may calibrate them without turning the system into indicator filter soup.
 
-`IndicatorSeries` is chronological and uses `None` before enough completed history exists. The unified `intelligence/snapshot.py` computes the series once per timeframe and shares ATR with Candle Structure so the same deterministic fact is not redundantly recalculated in normal runtime.
+`IndicatorSeries` is chronological and uses `None` before enough completed history exists. The unified Intelligence snapshot computes each series once per timeframe and shares ATR with Candle Structure so equivalent deterministic facts are not redundantly recalculated.
 
 ## EMA evidence
 
@@ -38,17 +39,17 @@ EMA evidence includes:
 
 - EMA20 versus EMA50 ordering;
 - current trend-support direction;
-- price distance from the fast EMA for extension context.
+- price distance from EMA20 for extension context.
 
-Future bounded improvements may add slope/separation/pullback-depth detail. `EMA20 > EMA50` is never a BUY signal by itself.
+`EMA20 > EMA50` is never a BUY signal by itself. Slope/separation/pullback-depth remain possible research refinements rather than mandatory V1 filters.
 
 ## RSI evidence
 
-RSI is used for momentum/pressure context, not rigid `>70 SELL` / `<30 BUY` reversal logic.
+RSI is momentum/pressure context, not rigid `>70 SELL` / `<30 BUY` reversal logic.
 
-The Phase-3 momentum phase uses RSI as one supporting input alongside EMA flow, directional progress, candle body and extension.
+Current momentum logic uses RSI as one supporting input alongside EMA flow, directional progress, candle body and extension.
 
-Divergence remains a future research primitive and is not production authority.
+Divergence remains a research candidate, not current production authority.
 
 ## ATR and normalization
 
@@ -60,13 +61,12 @@ ATR normalizes:
 - liquidity clustering;
 - volatility regime;
 - extension/chase context;
-- future stop/target/spread context.
+- structural stop/target context;
+- execution-relative measurements such as drift/stop distance through downstream authorities.
 
-ATR does not automatically set final broker SL or TP.
+ATR does not independently set final broker SL or TP.
 
 ## Volatility states
-
-Current typed states are:
 
 ```text
 UNKNOWN
@@ -78,31 +78,23 @@ EXTREME
 DISLOCATED
 ```
 
-The implementation compares current ATR with the median of a rolling ATR context. Baseline ratios are explicit configuration values inside `QuantConfig` so replay/research can calibrate them.
+The implementation compares current ATR with rolling ATR context. Baseline ratios live in `QuantConfig` and are research-calibratable.
 
-`EXTREME` may still be tradeable. `DISLOCATED` is evidence that later market-data/execution safety may need to block/revalidate.
+`EXTREME` may still be tradeable. `DISLOCATED` is adverse market evidence consumed by downstream session/news/execution safety where appropriate; the Quant desk itself does not issue broker-write permission.
 
 ## Relative volatility
 
-The desk prefers normalized facts such as:
+Prefer normalized facts such as:
 
 - current ATR / recent median ATR;
-- latest candle range / ATR through Candle Structure;
-- future percentile/distribution context where validated.
+- latest candle range / ATR;
+- optional future percentile/distribution context if validated.
 
-Absolute Gold movement alone is not treated as stable market truth.
+Absolute Gold movement alone is not stable market truth.
 
 ## Momentum
 
-Phase-3 implementation exposes a bounded momentum phase from:
-
-- EMA flow;
-- latest directional progress;
-- body size normalized by ATR;
-- RSI pressure;
-- extension state.
-
-Typed phases:
+Current implementation exposes:
 
 ```text
 UNKNOWN
@@ -113,11 +105,13 @@ EXHAUSTING
 REVERSING
 ```
 
+Momentum combines EMA flow, latest directional progress, body/ATR, RSI pressure and extension state.
+
 Strong momentum does not automatically mean good entry timing.
 
 ## Extension / chase metrics
 
-The current Quant baseline measures price distance from EMA20 in ATR units and classifies:
+The current Quant baseline measures price distance from EMA20 in ATR units:
 
 ```text
 UNKNOWN
@@ -127,25 +121,25 @@ EXTENDED
 SEVERELY_EXTENDED
 ```
 
-This is only one extension primitive. Later Entry Timing must also consider structural base, breakout/retest location and remaining target room before deciding whether an entry is chased.
+This is only one extension primitive. The implemented Entry Timing and Trade Plan also consider structure, location and target room; the Execution layer separately checks fresh price drift. EMA distance alone is never final chase authority.
 
 ## Compression and expansion
 
-Quant supplies volatility normalization. Candle Structure owns candle-sequence compression/expansion classification. Technical/Strategy consumers may combine those reports but must not double-count the same market event as independent certainty.
+Quant supplies volatility normalization. Candle Structure owns sequence-level compression/expansion classification. Strategy/Fusion consume these shared reports without counting one market event repeatedly as independent certainty.
 
 ## Exhaustion risk
 
-Current baseline can classify `EXHAUSTING` when a severely extended move loses normalized body efficiency. Future validated inputs may include rejection, follow-through deterioration and target proximity.
+The baseline can classify `EXHAUSTING` when a severely extended move loses normalized body efficiency. Additional rejection/follow-through/target-proximity features may be researched later.
 
-Exhaustion remains evidence, not automatic exit/reversal authority.
+Exhaustion remains evidence, not automatic exit/reversal authority. Open-trade action belongs to the Trade Manager.
 
 ## Spread quality
 
-Hard spread permission is not implemented in this desk. Market-data provides live spread facts; the later execution layer owns the frozen spread-ratio and stop-distance safety rules.
+Hard spread permission is not owned here. Market Data publishes spread facts; `execution/checks.py` and `EXECUTION_AND_BROKER_SAFETY.md` own the implemented spread-ratio/stop-distance execution rules.
 
 ## Outputs
 
-`QuantReport` currently publishes:
+`QuantReport` publishes:
 
 - timeframe;
 - EMA fast/slow;
@@ -159,11 +153,9 @@ Hard spread permission is not implemented in this desk. Market-data provides liv
 
 ## Missing evidence
 
-Unavailable indicators remain `None`/`UNKNOWN`; they are not silently converted to bearish/bullish score zero. Dependent consumers must respect coverage.
+Unavailable indicators remain `None`/`UNKNOWN`; they are not silently converted to bullish/bearish score zero. Dependent consumers respect coverage.
 
 ## Multi-timeframe use
-
-Typical use remains:
 
 ```text
 H4/H1  trend/context support
@@ -179,16 +171,21 @@ The system must not create an all-timeframe indicator veto matrix.
 completed CandleSeries
 → compute IndicatorSeries once
 → QuantReport
-→ same ATR series passed to Candle Structure
-→ Technical/Liquidity consume QuantReport
+→ same ATR passed to Candle Structure
+→ Technical/Liquidity/Confluence consume shared facts
 → reusable IntelligenceSnapshot
+→ Strategy/Decision/Timing/Management consumers
 ```
 
-No indicator module queries MT5 directly.
+No indicator module queries MT5 or performs broker writes.
+
+## Replay/research
+
+Phase-10 chronological replay reuses the same indicator/Intelligence semantics at completed-bar prefixes. Research can ablate/tune indicator parameters while monitoring Net R, drawdown, opportunity recall, capture and trade frequency—not just win rate.
 
 ## Dashboard visibility
 
-Compact future example:
+Compact example:
 
 ```text
 EMA Flow        BUY
@@ -198,18 +195,19 @@ Momentum        BUILDING
 Extension       NORMAL
 ```
 
-## Tests required / current evidence
+## Tests / current evidence
 
-Required:
+Deterministic coverage includes:
+
 - indicator chronology/no future values;
-- ATR normalization invariance;
+- ATR normalization;
 - missing-indicator UNKNOWN handling;
-- volatility-state transitions;
-- extension logic;
-- correlated-feature double-count protection;
-- quant/candle-structure ownership separation.
+- volatility/extension states;
+- shared ATR reuse with Candle Structure;
+- no duplicate MT5 reads from indicator code;
+- chronological replay prefix behaviour.
 
-Phase-3 tests cover chronological EMA/RSI/ATR, no-future prefix behaviour and shared ATR reuse in `tests/test_indicators_structure.py` and `tests/test_intelligence_snapshot.py`.
+Relevant suites include `tests/test_indicators_structure.py` and `tests/test_intelligence_snapshot.py`, with Phase-10 replay exercising shared production semantics.
 
 ## Explicit non-goals
 
@@ -217,7 +215,7 @@ This desk must not:
 
 - convert RSI overbought/oversold into automatic reversal;
 - let EMA order override structure;
-- set final structural stops;
+- set structural stops by itself;
 - hard-block trades for one imperfect soft indicator;
 - place orders.
 
@@ -227,4 +225,4 @@ This desk must not:
 - volatility-ratio bands;
 - extension/chase thresholds;
 - future RSI state labels/divergence value;
-- whether percentile-based volatility adds useful information without complexity.
+- whether percentile-based volatility adds useful information without unnecessary complexity.
