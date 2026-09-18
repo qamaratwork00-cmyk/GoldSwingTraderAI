@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 1.7-design
+**Version:** 1.8-design
 
 This file separates remaining items into four classes so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -16,11 +16,9 @@ A `CALIBRATE IN RESEARCH` item is **not permission to guess silently**. Initial 
 
 ## Current freeze status
 
-At behavioural-contract level there are currently **no `FIX BEFORE BUILD` items**. The major trading, risk, session, execution, persistence, learning and recovery architecture is sufficiently defined for implementation to begin in the large phases defined by `../CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`.
+At behavioural-contract level there are currently **no `FIX BEFORE BUILD` items**. The major trading, risk, session, execution, persistence, learning and recovery architecture is sufficiently defined for implementation to continue through the large phases in `../CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`.
 
-The design close-out pass has synchronized the System Contract, Architecture, Trade Plan/Manager direction, Risk/Session/Execution contracts, docs-root User/Setup/Coder guides, Testing/Release docs, Design Decisions ledger and Final Build Prompt candidate.
-
-The V1 engineering style is also frozen in `../60-engineering/CODING_STANDARD.md`: Python 3.11+, lightweight production runtime, minimal dependencies, direct/auditable architecture, shared snapshot/derived calculations and professional non-noisy commenting/error handling.
+The V1 engineering style is frozen in `../60-engineering/CODING_STANDARD.md`: Python 3.11+, lightweight production runtime, minimal dependencies, direct/auditable architecture, shared snapshot/derived calculations and professional non-noisy commenting/error handling.
 
 Remaining items below are research calibration, ordinary implementation choices, operator details or later-version work; they must not silently change frozen behavioural or engineering invariants.
 
@@ -110,11 +108,13 @@ Primary Structural Target is normally a management checkpoint. A valid Expansion
 ### FROZEN INITIAL POLICY
 
 ```text
-Profile  Normal Risk   Elevated Risk    Entry Ceiling   Daily Lock
-SMALL    3.0–4.5%      >4.5–6.5%        7%              12%
-MEDIUM   2.0–3.0%      >3.0–4.5%        5%               9%
-NORMAL   1.0–2.0%      >2.0–3.5%        4%               7%
+Profile  Equity Range            Normal Risk   Elevated Risk    Entry Ceiling   Daily Lock
+SMALL    >0 and < $300           3.0–4.5%      >4.5–6.5%        7%              12%
+MEDIUM   $300–$999.99            2.0–3.0%      >3.0–4.5%        5%               9%
+NORMAL   $1,000+                 1.0–2.0%      >2.0–3.5%        4%               7%
 ```
+
+There is **no V1 minimum-balance floor for a positive SMALL account**. `$99`, `$50`, `$30`, etc. remain SMALL; actual minimum-lot all-in risk, hard ceiling, margin, daily lock and execution safety decide whether a specific plan can trade.
 
 Capacity is `0/1`. Account Safety P/L uses cash-flow-adjusted equity change. Manual loss reset is OFF by default and, when explicitly enabled, max one per UTC risk day. Three consecutive closed bot losses trigger minimum 30-minute cooldown plus fresh M15 context; same Market Episode allows at most one genuinely fresh re-entry.
 
@@ -126,11 +126,10 @@ Capacity is `0/1`. Account Safety P/L uses cash-flow-adjusted equity change. Man
 ### CALIBRATE IN RESEARCH
 
 - slippage reserve model by broker/session/volatility;
-- any drawdown-aware preference inside already frozen risk bands.
+- any future drawdown-aware preference inside already frozen risk bands.
 
 ### DEFER LATER
 
-- account profile below `$100`;
 - multi-position aggregate-risk model beyond V1 `0/1`;
 - separate emergency trade-count quota. V1 relies on intent uniqueness, episode/re-entry controls, one-shot writes and reconciliation rather than a normal trade quota.
 
@@ -314,8 +313,10 @@ Research is automatic where practical but cannot self-promote production, bypass
 
 ## Governance conclusion
 
-The behavioural design close-out and cross-document consistency pass are complete enough for implementation to begin. No major subsystem or `FIX BEFORE BUILD` item is currently known.
+The behavioural design close-out is complete enough for implementation to continue. No major subsystem or `FIX BEFORE BUILD` item is currently known.
 
-Research-calibration values and ordinary library/file choices remain explicit work for implementation/replay and should not stall Phase 1. Python/runtime complexity principles are no longer open design questions; they are frozen by `CODING_STANDARD.md` and DEC-063.
+The former below-`$100` profile question is closed: any positive equity below `$300` is SMALL. Actual risk geometry and existing safety authorities decide trade affordability.
 
-Documents remain honestly `DRAFT/PROVISIONAL` where implementation or executable verification does not yet exist. They must not be relabeled `IMPLEMENTED` or `VERIFIED` until the required code/tests/evidence actually exist.
+Research-calibration values and ordinary library/file choices remain explicit work for implementation/replay. Python/runtime complexity principles are frozen by `CODING_STANDARD.md` and DEC-063.
+
+Documents remain honestly `DRAFT/PROVISIONAL` where implementation or executable verification does not yet exist. They must not be relabeled `IMPLEMENTED` or `VERIFIED` until required code/tests/evidence actually exist.
