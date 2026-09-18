@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from goldswingtraderai.domain.enums import MarketState
 from goldswingtraderai.risk.permissions import (
     BrokerSessionFacts,
     ClosureKind,
@@ -19,7 +20,7 @@ from goldswingtraderai.risk.permissions import (
 
 
 class HistoricalSessionCoverageError(RuntimeError):
-    """Requested replay time is outside verified schedule coverage."""
+    """Requested replay time is outside verified/tradeable schedule coverage."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,14 +99,24 @@ class HistoricalSessionSchedule:
         )
 
     def flatten_required_at(self, now_utc: datetime) -> bool:
-        """Return only the production PRE_CLOSE mandatory-flatten decision."""
+        """Return production PRE_CLOSE flatten truth for a tradeable replay bar.
 
-        return self.market_permission_at(now_utc).flatten_required
+        A completed market bar inside a declared closed gap indicates that the
+        historical schedule and candle dataset do not describe the same market
+        chronology. Research fails explicitly rather than treating it as OPEN.
+        """
+
+        permission = self.market_permission_at(now_utc)
+        if permission.state is MarketState.CLOSED:
+            raise HistoricalSessionCoverageError(
+                "historical replay bar falls outside declared tradeable interval"
+            )
+        return permission.flatten_required
 
     def _active_interval(self, now_utc: datetime) -> HistoricalTradingInterval | None:
         for interval in self.intervals:
-            # Close instant itself belongs to the closed side; mandatory flatten
-            # must have occurred while the broker was still tradeable before it.
+            # Close instant belongs to the closed side; mandatory flatten must
+            # occur while the broker remains tradeable before this instant.
             if interval.open_utc <= now_utc < interval.close_utc:
                 return interval
         return None
