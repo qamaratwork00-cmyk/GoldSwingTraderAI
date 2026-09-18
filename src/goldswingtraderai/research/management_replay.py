@@ -1,15 +1,9 @@
-"""Chronological bar-close replay of the production Trade Manager.
+"""Chronological replay of the production Trade Manager.
 
-The replay starts from a historical production Trade Plan, models the currently
-active broker stop/TP against each later M5 bar, then (only if still open) feeds
-the completed bar into the real Trade Manager. Manager state changes are applied
-only after the research execution model says the corresponding modify is verified.
-
-The default assumptions preserve the earlier idealized model. Research may opt in
-to explicit adverse entry slippage, executable-side spread, modify latency and a
-deterministic modify-rejection pattern. These are declared stress assumptions,
-not claims of tick-perfect broker parity. Same-bar stop+TP ambiguity therefore
-remains unresolved rather than guessed.
+The default path remains an idealized completed-M5 model. Optional research-only
+execution friction and a verified historical broker-session schedule may be added
+without changing production strategy/manager policy. Same-bar stop/target ordering
+is never guessed favorably.
 """
 
 from __future__ import annotations
@@ -32,6 +26,7 @@ from goldswingtraderai.management.models import (
 )
 from goldswingtraderai.research.outcomes import build_historical_trade_plan
 from goldswingtraderai.research.replay import ReplayDataset, ReplayRun
+from goldswingtraderai.research.session_history import HistoricalSessionSchedule
 
 
 _M5 = timedelta(minutes=5)
@@ -60,22 +55,7 @@ class ManagementOutcome(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ManagementReplayAssumptions:
-    """Explicit research-only execution assumptions for one management replay.
-
-    ``adverse_entry_slippage_r`` is measured in the production plan's immutable
-    original-R units. The structural stop/targets are not moved to hide slippage.
-
-    ``barrier_spread_price`` treats historical candle OHLC as a mid-price proxy and
-    shifts BUY exits to Bid / SELL exits to Ask by half the declared spread.
-
-    ``modify_delay_bars`` delays PROTECT/TRAIL/RUNNER verification by completed M5
-    bars. While one modify is unresolved, later manager modify requests are not
-    submitted, matching the production principle that ambiguous lifecycle state
-    must reconcile before another irreversible write.
-
-    ``reject_every_nth_modify`` is deterministic. For example, ``2`` rejects every
-    second submitted modify. ``None`` means no synthetic rejection.
-    """
+    """Explicit research-only execution assumptions for one manager replay."""
 
     adverse_entry_slippage_r: float = 0.0
     barrier_spread_price: float = 0.0
@@ -152,6 +132,7 @@ class ManagementReplayMetrics:
     modify_rejected: int = 0
     modify_suppressed_pending: int = 0
     modify_pending_at_end: int = 0
+    pre_close_exits: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,8 +152,14 @@ def run_trade_manager_replay(
     trade_plan_config: TradePlanConfig | None = None,
     manager_config: TradeManagerConfig | None = None,
     assumptions: ManagementReplayAssumptions | None = None,
+    session_schedule: HistoricalSessionSchedule | None = None,
 ) -> tuple[ManagementReplayRecord, ...]:
-    """Replay production management for every analytical ENTER in ``run``."""
+    """Replay production management for every analytical ENTER in ``run``.
+
+    When ``session_schedule`` is supplied, every completed management bar must be
+    covered by its explicit verified tradeable intervals. Frozen production
+    PRE_CLOSE rules then feed ``pre_close_flatten`` into the real Trade Manager.
+    """
 
     if horizon_m5_bars <= 0:
         raise ValueError("management replay horizon must contain at least one M5 bar")
@@ -238,6 +225,7 @@ def run_trade_manager_replay(
                 intelligence_config=intelligence_config,
                 manager_config=manager_config,
                 assumptions=execution,
+                session_schedule=session_schedule,
             )
         )
 
@@ -250,11 +238,7 @@ def evaluate_active_barriers(
     *,
     spread_price: float = 0.0,
 ) -> ActiveBarrierResult:
-    """Evaluate stop/active broker TP without inventing same-bar ordering.
-
-    With a positive ``spread_price``, candle OHLC is treated as a mid-price proxy.
-    BUY exits are evaluated on Bid and SELL exits on Ask.
-    """
+    """Evaluate active broker stop/TP without inventing same-bar ordering."""
 
     if spread_price < 0:
         raise ValueError("active-barrier spread cannot be negative")
@@ -293,7 +277,7 @@ def evaluate_active_barriers(
 def summarize_management_replay(
     records: tuple[ManagementReplayRecord, ...],
 ) -> ManagementReplayMetrics:
-    """Summarize manager replay while keeping unresolved trades out of Net R."""
+    """Summarize replay while excluding unresolved outcomes from resolved Net R."""
 
     managed = tuple(
         record for record in records if record.outcome is not ManagementOutcome.PLAN_NOT_READY
@@ -334,9 +318,7 @@ def summarize_management_replay(
         resolved_coverage=(len(resolved_values) / len(managed) if managed else 0.0),
         resolved_net_r=sum(resolved_values),
         resolved_average_r=_average(resolved_values),
-        resolved_profit_factor=(
-            gross_profit / gross_loss if gross_loss > 0 else None
-        ),
+        resolved_profit_factor=(gross_profit / gross_loss if gross_loss > 0 else None),
         resolved_max_drawdown_r=_max_drawdown(resolved_values),
         average_mfe_r=_average(tuple(record.mfe_r for record in managed)),
         average_mae_r=_average(tuple(record.mae_r for record in managed)),
@@ -354,6 +336,11 @@ def summarize_management_replay(
             record.modify_suppressed_pending for record in managed
         ),
         modify_pending_at_end=sum(record.modify_pending_at_end for record in managed),
+        pre_close_exits=sum(
+            record.outcome is ManagementOutcome.MANAGER_EXIT
+            and record.exit_reason == "PRE_CLOSE_FLATTEN"
+            for record in managed
+        ),
     )
 
 
@@ -369,6 +356,7 @@ def _replay_one_trade(
     intelligence_config: IntelligenceConfig | None,
     manager_config: TradeManagerConfig | None,
     assumptions: ManagementReplayAssumptions,
+    session_schedule: HistoricalSessionSchedule | None,
 ) -> ManagementReplayRecord:
     future = _future_m5_bars(dataset, as_of_utc, horizon_m5_bars)
     mfe_r = 0.0
@@ -483,11 +471,16 @@ def _replay_one_trade(
         if market is None:
             break
         intelligence = build_intelligence_snapshot(market, config=intelligence_config)
+        pre_close_flatten = (
+            session_schedule.flatten_required_at(event_time)
+            if session_schedule is not None
+            else False
+        )
         decision = evaluate_trade_manager(
             trade,
             market,
             intelligence,
-            pre_close_flatten=False,
+            pre_close_flatten=pre_close_flatten,
             config=manager_config,
         )
         actions.append(decision.action)
@@ -513,6 +506,7 @@ def _replay_one_trade(
                 modify_suppressed_pending,
                 pending,
             )
+
         if decision.requires_broker_write:
             if pending is not None:
                 modify_suppressed_pending += 1
