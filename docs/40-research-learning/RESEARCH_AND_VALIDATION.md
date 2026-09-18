@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Research and Validation
 
 **Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
-**Version:** 0.8-implementation  
-**Authority:** Chronological replay, no-lookahead validation, dataset/evidence identity, holdouts, robustness/stress evidence, opportunity/entry/exit research metrics and evidence claims.  
+**Version:** 0.9-implementation  
+**Authority:** Chronological replay, no-lookahead validation, dataset/evidence identity, portable research datasets, holdouts, robustness/stress evidence, opportunity/entry/exit research metrics and evidence claims.  
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../20-trading-decisions/ENTRY_TIMING.md`, `../20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`
 
 ## Purpose
@@ -23,6 +23,7 @@ research/management_replay.py
 research/stress.py
 research/validation.py
 research/evidence.py
+research/datasets.py
 research/metrics.py
 research/learning.py
 research/episode_journal.py
@@ -46,6 +47,10 @@ Current deterministic infrastructure supports:
 - reproducible research input fingerprints separated from result/time hashes;
 - canonical public-serializable evidence manifests;
 - rejection of financial-secret-shaped manifest fields;
+- portable integrity-checked replay dataset bundles using canonical JSON + timeframe CSVs;
+- round-trip preservation of optional supported timeframe series such as M1;
+- broker endpoint login/server exclusion from portable research bundles;
+- manifest, per-file and recomputed dataset identity verification on import;
 - decision/bracket/management metrics, learning, discovery/invention and governed promotion state.
 
 This remains a **software/research foundation**, not completed market validation. Broad real XAU datasets, empirical stress calibration, sufficiently large validation, untouched holdout and DEMO forward evidence remain required before claiming edge.
@@ -162,27 +167,17 @@ Rules:
 
 Exact window sizes/sample requirements remain research-calibratable.
 
-## Dataset identity and evidence manifests — implemented foundation
+## Dataset identity and evidence manifests — implemented
 
 `research/evidence.py` makes serious research results content-addressable and reproducible.
 
 ### Dataset identity
 
-`identify_replay_dataset()` creates a deterministic `ReplayDatasetIdentity` from:
+`identify_replay_dataset()` creates deterministic `ReplayDatasetIdentity` from source label/version, replay realism/spread, calculation-relevant symbol specification, economic replay account context and every candle OHLC/volume/spread field.
 
-- source label and explicit source version;
-- replay realism and spread assumption;
-- complete broker symbol specification relevant to calculations;
-- non-secret economic account context used by replay;
-- every OHLC/volume/spread field in every replay candle;
-- canonical timeframe ordering;
-- per-timeframe bar count, first/last open time and SHA-256 content hash.
+Each timeframe records bar count, first/last open UTC and SHA-256 content hash. The full dataset receives `dataset_sha256`. Series tuple order is normalized before hashing.
 
-The full dataset receives `dataset_sha256`. Series tuple order is normalized so identical content does not acquire a different identity merely because timeframes were passed in a different order.
-
-Account endpoint identifiers (`login`, `server`) are deliberately excluded from the replay dataset hash because they identify a broker endpoint rather than the economic replay context. Account mode/currency/balance/equity/margin/free-margin/leverage remain in the hashed account-context fingerprint where they can affect reproducibility.
-
-Changing candle content, source version, spread assumption, symbol geometry or hashed account context changes the dataset identity.
+Broker endpoint identifiers (`login`, `server`) are deliberately excluded because they identify an account endpoint rather than replay economics. Account mode/currency/balance/equity/margin/free-margin/leverage remain in the hashed economic context.
 
 ### Evidence manifest
 
@@ -202,33 +197,57 @@ input_fingerprint_sha256
 manifest_sha256
 ```
 
-`input_fingerprint_sha256` intentionally excludes generation time and result values. It answers: **are these the same experiment inputs?**
+`input_fingerprint_sha256` excludes generation time/result values and answers whether the experiment inputs are the same. `manifest_sha256` identifies the complete evidence record except its own hash field.
 
-`manifest_sha256` covers the complete evidence record except its own hash field. It changes when results, generation time, limitations or other manifested facts change.
+Configuration/result mappings reject authority-bearing secret-shaped keys with `FINANCIAL_SECRET_DETECTED`. This supplements, not replaces, repository secret scanning.
 
-Canonical JSON serialization uses sorted keys and stable compact separators. Equivalent configuration mappings therefore produce the same input fingerprint regardless of dictionary insertion order.
+## Portable replay dataset bundles — implemented
 
-### Secret boundary
+`research/datasets.py` owns the inspectable offline research bundle format.
 
-Evidence manifests are intended to be safe for public recovery/audit artifacts under the project's minimum-hide policy. Configuration/result mappings reject financial-secret-shaped keys such as password, API key, access/refresh token, private/secret key, client secret and similar authority-bearing fields with `FINANCIAL_SECRET_DETECTED`.
-
-This is an additional guard, not a replacement for repository financial-secret scanning.
-
-### Evidence claim rule
-
-A serious historical result should not be quoted without enough identity to reconstruct:
+A V1 bundle is a directory containing:
 
 ```text
-code revision
-+ policy version
-+ dataset SHA-256/source version
-+ explicit configuration/window definitions
-+ realism/stress assumptions
-+ results
-+ limitations
+dataset_manifest.json
+H4.csv
+H1.csv
+M15.csv
+M5.csv
+[optional supported timeframe CSVs, e.g. M1.csv]
 ```
 
-A filename like `gold_2025.csv` by itself is not sufficient dataset identity.
+The manifest includes:
+
+- schema version;
+- source label/version;
+- `dataset_sha256`, symbol-spec hash and account-context hash;
+- replay realism and spread assumption;
+- calculation-relevant `SymbolSpec`;
+- non-secret economic replay account context;
+- one entry per exported timeframe containing canonical filename, bar count and file SHA-256;
+- manifest SHA-256.
+
+Export rules:
+
+- destination must not already exist; an existing research bundle is never silently overwritten;
+- files are first written into a temporary sibling directory and renamed only after successful completion;
+- all dataset series are exported, not only the four minimum decision timeframes;
+- broker endpoint `login` and `server` are not exported;
+- UTF-8 CSV uses explicit chronological candle fields only.
+
+Import rules:
+
+- manifest checksum must match before dataset reconstruction;
+- only known `Timeframe` values are accepted;
+- required H4/H1/M15/M5 files must exist;
+- optional supported timeframes such as M1 are preserved through round-trip;
+- timeframe CSV filenames must be canonical and cannot contain paths;
+- manifest/CSV symlinks are rejected;
+- each CSV SHA-256 and declared bar count must match;
+- reconstructed `ReplayDatasetIdentity` must match dataset/symbol/account hashes in the manifest;
+- imported broker endpoint identity is neutral offline context (`login=1`, `server=RESEARCH_DATASET`) and is not treated as live account truth.
+
+This bundle is for reproducible offline research and backup of public-safe historical inputs. It is **not** a credential/account export and has zero broker authority.
 
 ## Execution realism
 
@@ -260,7 +279,7 @@ Walk-forward is repeatable chronological validation evidence; it is not the fina
 
 ## Final holdout rule
 
-The final holdout is one-shot for the locked candidate. If it fails, alternate candidates must not repeatedly use the same data while still calling it untouched. Consumed holdout identity/status is durable under the promotion registry. Walk-forward/evidence utilities cannot consume it automatically.
+The final holdout is one-shot for the locked candidate. If it fails, alternate candidates must not repeatedly use the same data while still calling it untouched. Consumed holdout identity/status is durable under the promotion registry. Walk-forward/evidence/dataset utilities cannot consume it automatically.
 
 ## Ablation / stability / stress
 
@@ -268,7 +287,7 @@ Confluence ablation compares identical chronology under BASE, TRENDLINE, FIBONAC
 
 Stress and confluence ablation are separate axes: confluence changes optional analytical evidence; stress holds analytical decisions fixed and changes declared execution friction.
 
-Walk-forward should span multiple chronological periods/regimes. If optimization is later introduced, its selection data and validation data must remain explicitly separated and all tuning choices reproducible.
+A feature that slightly improves headline accuracy by eliminating too many good opportunities is not automatically an improvement. Evaluate Opportunity Recall and trade-frequency cost alongside quality and modeled economics.
 
 ## Core performance metrics
 
@@ -288,13 +307,14 @@ Every serious evidence package should identify:
 - strategy/policy version;
 - configuration version/values;
 - dataset source/version and content hash;
+- portable bundle manifest hash when a bundle is used;
 - historical period/window identities;
 - replay/outcome/stress realism;
 - explicit stress assumptions;
 - random seed where relevant;
 - limitations.
 
-The implemented evidence manifest provides the deterministic container for these facts; broader historical-data ingestion/export packaging is the next integration layer.
+A mutable filename such as `gold_2025.csv` is not sufficient evidence identity.
 
 ## Evidence claims
 
@@ -319,23 +339,24 @@ Deterministic coverage includes:
 - ambiguity-safe bracket and manager outcomes;
 - immutable-R stress accounting;
 - fixed-policy walk-forward chronology and validation-boundary clipping;
-- stable dataset identity despite incidental timeframe tuple order;
-- dataset hash changes when candle content changes;
-- endpoint login/server exclusion from economic replay identity;
-- reproducible input fingerprint across mapping insertion order/result time changes;
-- full manifest hash changes when evidence record changes;
-- canonical JSON serialization;
-- financial-secret-shaped manifest-field rejection;
+- stable content-addressed dataset/evidence identities;
+- canonical evidence serialization and secret-shaped-field rejection;
+- portable bundle round-trip identity;
+- optional M1 series preservation;
+- broker endpoint login/server exclusion from bundle manifest;
+- CSV tamper detection;
+- manifest tamper detection;
+- immutable/no-overwrite export destination;
 - actual/counterfactual isolation;
 - discovery/promotion governance.
 
-Current deterministic CI after evidence-manifest foundation: **168 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic CI after portable-dataset bundle coverage: **173 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 Still required for full research validation:
 
-- real historical XAU dataset ingestion/versioning using these identities;
+- authoritative real historical XAU acquisition/ingestion into this bundle contract;
 - broad regime-diverse datasets;
-- persisted/exported evidence packages tied to code revisions;
+- persisted result/evidence-package directory conventions tied to code revisions;
 - empirical stress calibration from broker/DEMO evidence;
 - historical PRE_CLOSE/session integration;
 - sufficiently large walk-forward/independent validation;
@@ -355,15 +376,16 @@ Research must not:
 - hide stress assumptions;
 - rewrite structural geometry/original R to improve stressed results;
 - identify datasets only by mutable filenames;
-- place financial-authority secrets inside evidence manifests;
+- export broker endpoint credentials/login/server as research dataset authority;
+- silently overwrite an existing dataset bundle;
+- accept a bundle whose file/manifest/content identity fails verification;
 - overstate historical evidence.
 
 ## Open questions
 
-- exact real-data source(s), periods and sample requirements;
+- exact authoritative real-data source(s), periods and acquisition workflow;
 - exact development/validation window sizes and stepping;
-- dataset ingestion/export format and retention policy;
-- evidence-package directory/naming/publication convention;
+- evidence-package directory/naming/publication convention around dataset bundles;
 - exact Opportunity Recall labeling method;
 - historical PRE_CLOSE/session integration;
 - empirical spread/slippage/modify-failure distributions;
