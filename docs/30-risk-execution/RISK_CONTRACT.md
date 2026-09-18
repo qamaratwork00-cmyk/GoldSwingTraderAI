@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Risk Contract
 
 **Status:** PROVISIONAL  
-**Version:** 0.5-design  
+**Version:** 0.6-design  
 **Authority:** Monetary risk, account-size risk profiles, dynamic/hybrid lot sizing, aggregate exposure, daily-loss/manual-reset semantics and risk-policy invariants.  
 **Depends on:** `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -225,15 +225,24 @@ Stop movement never redefines historical original R.
 
 ## Aggregate exposure
 
-Track worst-case remaining open risk across all managed exposure. If future versions permit multiple positions/add-ons, aggregate risk remains a separate ceiling from per-trade risk.
+Track worst-case remaining open risk across all managed exposure. Unknown open exposure is not treated as zero.
 
-Unknown open exposure is not treated as zero.
+## Position capacity — V1 frozen policy
 
-## Position capacity
+V1 allows **one independently risk-bearing Gold position at a time** for the managed account/symbol.
 
-One independently risk-bearing Gold position at a time remains the preferred V1 **PROVISIONAL** policy. This is not a trade-frequency quota. Analysis/research continue while capacity is full.
+```text
+Capacity 0/1 → a new independent Gold entry may be considered
+Capacity 1/1 → new independent Gold entries are blocked
+```
 
-The final V1 position-count policy remains an open question until frozen.
+This is not a daily trade quota. Analysis, setup tracking, opposite-thesis analysis, missed-opportunity logging and research continue while capacity is full.
+
+An opposite opportunity does not automatically open a hedge or second independent position. It is first handed to the Trade Manager as reversal/exit evidence for the existing managed trade. A new opposite trade requires the existing independently risk-bearing position to be closed/reconciled and a fresh opportunity/Execution Intent to qualify.
+
+Reason code: `POSITION_CAPACITY_FULL`.
+
+Future multi-position/add-on support requires an explicit later design change plus aggregate-risk policy; it is not implicit in V1.
 
 ## Margin guard
 
@@ -313,7 +322,7 @@ Market Episode identity helps distinguish fresh opportunity from stale repetitio
 
 Broker positions must distinguish bot-managed versus manual/foreign/unknown ownership. External exposure may affect aggregate account safety even when the bot does not own/manage that position.
 
-Final V1 policy for unexpected Gold exposure remains open under execution safety.
+Under the frozen V1 capacity policy, unexpected manual/foreign/unknown Gold exposure consumes safety capacity for new bot entries until Execution/Reconciliation establishes a safe state. The bot does not manage that external position as if it were bot-owned.
 
 ## Risk output contract
 
@@ -335,7 +344,7 @@ Every risk evaluation should expose, as applicable:
 - daily P/L;
 - profile Daily Loss Lock and budget remaining;
 - risk state;
-- position-capacity state.
+- position capacity (`0/1` or `1/1`).
 
 ## Prohibited risk behaviour
 
@@ -347,6 +356,7 @@ Every risk evaluation should expose, as applicable:
 - treating elevated band or emergency ceiling as preferred target sizing;
 - assuming unknown exposure/P&L is zero;
 - double-counting spread/execution friction;
+- opening a second independent Gold risk position or automatic hedge in V1;
 - redefining original R after stop movement;
 - bypassing hard lock through manual reset.
 
@@ -373,10 +383,11 @@ Lot              0.01
 Daily P/L        ...
 Daily Lock       12%
 Daily Remaining  ...
+Position         0/1
 Decision         PASS / BLOCK
 ```
 
-If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY_TOO_LARGE` or `DAILY_LOSS_LIMIT_REACHED`.
+If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY_TOO_LARGE`, `POSITION_CAPACITY_FULL` or `DAILY_LOSS_LIMIT_REACHED`.
 
 ## Tests required
 
@@ -392,6 +403,9 @@ If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY
 - minimum-lot hard-ceiling block without SL manipulation;
 - stepped/full dynamic volume normalization/recalculated risk;
 - valid opportunity may remain ARMED after current risk geometry blocks entry;
+- one managed Gold position allows capacity `1/1` and blocks a second independent entry;
+- opposite opportunity routes to Trade Manager rather than creating an automatic hedge;
+- external/manual/unknown Gold exposure blocks new bot entry without being managed as bot-owned;
 - aggregate exposure/unknown exposure handling;
 - margin policy;
 - UTC risk-day rollover;
@@ -402,12 +416,11 @@ If blocked, show the exact reason such as `MIN_LOT_UNAFFORDABLE`, `RISK_GEOMETRY
 
 ## Open questions
 
-- emergency/aggregate risk ceilings;
+- emergency/aggregate risk ceilings for any future multi-position design;
 - policy for account balances below `$100`;
 - exact slippage-reserve model and commission treatment by broker/account type;
 - exact realized/floating daily-loss accounting formula;
 - bounded manual-reset count/confirmation window;
 - exact cooldown trigger/release rules;
 - exact drawdown-aware target-band reduction curve;
-- final one-position-at-a-time confirmation;
 - emergency trade-count circuit-breaker value.
