@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
-**Version:** 2.5-implementation-map  
+**Version:** 2.6-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -12,7 +12,7 @@ Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `6
 
 ## Current checkpoint — 2026-09-18
 
-Deterministic core exists through Phase 10 plus **Phase-11 portable runtime checkpoints and verified automatic local backup cadence/retention/catalog**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+Deterministic core exists through Phase 10 plus Phase-11 **portable runtime checkpoints, verified automatic local backup cadence/retention/catalog, durable SQLite controller coordination and reconciliation-gated takeover**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
 
 ## Implemented phase map
 
@@ -35,7 +35,7 @@ Deterministic core exists through Phase 10 plus **Phase-11 portable runtime chec
 `risk/permissions.py`, `persistence/`; hard permission + stdlib SQLite durable state.
 
 ### Phase 7 — Execution + Reconciliation
-`execution/`; centralized gate, durable one-shot intents, raw writer boundary and broker reconciliation.
+`execution/`; centralized gate, durable one-shot intents, raw writer boundary, controller fencing and broker reconciliation.
 
 ### Phase 8 — Trade Manager
 `management/`; HOLD / PROTECT / TRAIL / RUNNER / EXIT and broker-verified state transition bridge.
@@ -78,13 +78,15 @@ verified history
 → governed learning/discovery/promotion evidence
 ```
 
-### Phase 11 — Backup / Recovery — local foundation implemented
+### Phase 11 — Backup / Recovery / Controller — software foundation implemented
 
 ```text
 persistence/store.py
 persistence/runtime_state.py
 persistence/checkpoint.py
 persistence/backup.py
+execution/controller.py
+execution/sqlite_coordination.py
 security/financial_secrets.py
 ```
 
@@ -120,6 +122,35 @@ Failed checkpoint creation, including a financial-secret block, leaves the previ
 
 Remote GitHub publication is **not** owned by `backup.py`; authenticated publication must be external tooling so PAT/token material never enters repository/runtime checkpoint state.
 
+### Durable controller coordination
+
+`execution/sqlite_coordination.py` implements the existing `CoordinationStore` contract with transactional SQLite acquire/renew/release and a separate monotonic epoch ledger.
+
+Deterministic guarantees:
+
+```text
+many independent store instances
+→ exactly one lease winner
+→ expired lease takeover gets a strictly newer epoch
+→ stale holder cannot renew/release newer lease
+→ epoch survives release/reopen
+```
+
+`shared_locking_verified=False` by default. Setting it true records a deployment assertion only; it does not make arbitrary network filesystems safe automatically.
+
+`ControllerLeaseManager` now treats expired-lease takeover as:
+
+```text
+new epoch acquired
+→ BLOCK / CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED
+→ durable state + broker reconciliation outside manager
+→ fresh same-holder/same-epoch verification
+→ complete_takeover_reconciliation()
+→ CONTROLLER_PRIMARY
+```
+
+A takeover cannot write merely because it obtained a newer epoch. Losing authority while reconciling prevents completion.
+
 ### Shared security owner
 
 `security/financial_secrets.py` owns reusable financial-authority secret detection. Repository source scanning remains fixture-safe text scanning; exported structured state gets stricter recursive key/value inspection.
@@ -145,12 +176,14 @@ tests/test_research_session_history.py
 tests/test_persistence_recovery.py
 tests/test_runtime_checkpoint.py
 tests/test_backup_catalog.py
+tests/test_execution_safety.py
+tests/test_sqlite_coordination.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Latest verified Phase-11 local-backup checkpoint: **202 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Latest verified Phase-11 controller/backup checkpoint: **209 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Feature ownership index
 
@@ -162,7 +195,7 @@ Latest verified Phase-11 local-backup checkpoint: **202 tests PASS**, Ruff PASS 
 | Risk/session/news | `30-risk-execution/*` | `risk/` |
 | Runtime persistence/backup | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/store.py`, `runtime_state.py`, `checkpoint.py`, `backup.py` |
 | Financial-secret detection | persistence/security policy | `security/financial_secrets.py` |
-| Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
+| Execution/controller | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/`, including `controller.py`, `sqlite_coordination.py` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/` |
 | Research validation/data/evidence/session | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/` |
@@ -186,18 +219,21 @@ Latest verified Phase-11 local-backup checkpoint: **202 tests PASS**, Ruff PASS 
 - backup replacement must verify before old-retention prune;
 - restore targets a new local DB; no stale-state merge into live DB;
 - restored state never grants broker authority before reconciliation;
+- controller takeover does not grant write authority before reconciliation completion;
+- controller epoch must be monotonic and freshly verified before every write;
 - authenticated remote backup credentials stay outside runtime/repository state;
 - financial-authority credentials never enter tracked/public checkpoint state.
 
 ## Current integration gaps / next work
 
-1. public-safe **authenticated GitHub publication workflow** for already-verified backup artifacts, with credentials external;
+1. integrate restore/startup/broker reconciliation with `complete_takeover_reconciliation()` so takeover completion is reached only by the governed recovery orchestrator;
 2. real fresh-machine restore + MT5 broker reconciliation drill;
-3. production shared cross-laptop atomic controller backend and failover proof;
-4. controlled Windows/MT5 real-history acquisition + real broker-session evidence;
-5. broad real-XAU walk-forward/holdout/DEMO evidence;
-6. dashboard runtime DTO including backup/recovery + research/discovery health;
-7. Phase 12 final persistent runtime orchestrator + controlled Windows/MT5 DEMO certification;
-8. final docs/release audit based on actual evidence.
+3. controlled cross-laptop shared-locking/failover proof for the selected coordination deployment; replace backend if that environment cannot satisfy SQLite locking semantics;
+4. public-safe **authenticated GitHub publication workflow** for already-verified backup artifacts, with credentials external;
+5. controlled Windows/MT5 real-history acquisition + real broker-session evidence;
+6. broad real-XAU walk-forward/holdout/DEMO evidence;
+7. dashboard runtime DTO including backup/recovery/controller + research/discovery health;
+8. Phase 12 final persistent runtime orchestrator + controlled Windows/MT5 DEMO certification;
+9. final docs/release audit based on actual evidence.
 
 The current `app/main.py` remains a read-only readiness launcher until final runtime orchestration.
