@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.7-design
+**Version:** 1.8-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -216,7 +216,8 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-042 — Account-size Gold risk profiles use hybrid sizing
 
 **Decision:** `SMALL $100–$299`, `MEDIUM $300–$999`, `NORMAL $1,000+`. SMALL normally uses practical `0.01` base/min-lot evaluation; MEDIUM stepped dynamic; NORMAL fully dynamic percentage sizing.  
-**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+**Status:** SUPERSEDED IN RANGE ONLY BY DEC-064  
+**Note:** Hybrid sizing mode remains valid. The `$100` lower boundary is superseded; see DEC-064.
 
 ## DEC-043 — Execution friction is part of effective monetary risk exactly once
 
@@ -332,6 +333,13 @@ This ledger records accepted/provisional architectural decisions so future imple
 **Decision:** V1 source code must follow `docs/60-engineering/CODING_STANDARD.md`: Python 3.11+; standard-library-first/minimal runtime dependencies; official MetaTrader5 boundary; pure functions for deterministic calculations where practical; classes only for genuine state/resource/lifecycle ownership; typed dataclasses/enums/IDs where they protect semantics; one verified snapshot/shared derived facts rather than duplicate MT5 reads/calculations; no giant all-in-one file and no unnecessary micro-file/framework/factory/service-manager architecture; concise comments/docstrings that explain why/safety/chronology; explicit non-silent error handling; structured secret-safe logging; heavier research dependencies isolated from normal runtime; and a code-quality review as part of every phase exit gate.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
 **Reason:** Keep the bot expert-level, optimized, clean and maintainable without allowing unnecessary code bulk/architecture to become an operational risk.
+
+## DEC-064 — No arbitrary minimum-balance floor for positive SMALL accounts
+
+**Decision:** V1 `SMALL` covers **any positive DayStartEquity below `$300`**. A `$100` lower trading boundary is not permitted. Accounts at `$99`, `$50`, `$30` or any other positive amount below `$300` remain SMALL. Account size alone cannot become an extra hard filter. Whether a specific trade is permitted is decided by the already frozen actual-risk authorities: executable broker minimum/step volume, structural SL geometry, all-in monetary risk, SMALL `7%` new-entry ceiling, SMALL `12%` daily loss lock, verified margin/free margin, exposure/capacity and execution safety. If broker minimum volume makes the current plan exceed hard risk, that current plan may be blocked without invalidating the underlying opportunity and without tightening the structural SL.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Supersedes:** DEC-042 only with respect to the `$100` lower boundary/range definition; hybrid sizing modes and DEC-046/047 risk percentages remain unchanged.  
+**Reason:** The risk system already measures actual affordability. Adding a separate `$100` eligibility floor would be redundant, unnecessarily restrictive and contrary to the small-account design objective.
 
 ## Change rule
 
