@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 1.6-design  
-**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research data/evidence integrity, historical session-policy replay, portable runtime recovery, local backup catalog/retention, crash/restart, migration, learning-governance and release verification.  
+**Version:** 1.7-design  
+**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research data/evidence integrity, historical session-policy replay, portable runtime recovery, local backup catalog/retention, controller coordination/fencing, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
 ## Purpose
@@ -20,7 +20,8 @@ Unit / Contract
 → Research Ablation / Outcomes / Manager / Historical Session / Stress / Walk-Forward
 → Dataset / Acquisition / Evidence / Package Integrity
 → Persistence / Runtime Checkpoint / Backup Catalog / Restore / Fault Injection
-→ Controlled Windows MT5 / Fresh Machine / DEMO
+→ Controller Contention / Fencing / Takeover Reconciliation
+→ Controlled Windows MT5 / Fresh Machine / Cross-Laptop / DEMO
 → Learning / Discovery / Promotion Governance
 → End-to-End DEMO Certification
 ```
@@ -81,6 +82,30 @@ A deterministic checkpoint restore is **not** permission to trade.
 
 Initial 15-minute / keep-96 values are a configurable engineering baseline. Tests protect configured semantics, not those values as trading-policy constants.
 
+## Controller coordination / fencing tests
+
+`execution/controller.py` and `execution/sqlite_coordination.py` must prove:
+
+- independent contenders sharing one coordination DB yield exactly one lease winner;
+- first lease starts with a positive epoch;
+- epoch ledger survives release and store reopen;
+- a later acquisition gets a strictly larger epoch;
+- lease renew preserves the current epoch while moving expiry forward;
+- expired/stale holder cannot renew after a newer takeover;
+- stale holder cannot release the newer holder's lease;
+- persisted lease/epoch integrity checks fail closed;
+- `shared_locking_verified` is false by default and requires explicit deployment assertion;
+- initial uncontested acquisition may become PRIMARY;
+- a standby attempting while a valid holder exists is BLOCKED with `ANOTHER_ACTIVE_CONTROLLER`;
+- expired-lease takeover may acquire a newer epoch but returns BLOCK with `CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED`;
+- `verify_write_authority()` remains BLOCKED throughout takeover recovery;
+- lease renewal does not accidentally clear the reconciliation requirement;
+- `complete_takeover_reconciliation()` clears the block only after freshly verifying the same current holder/epoch;
+- if a third controller takes over during reconciliation, the stale second controller cannot complete reconciliation;
+- `ExecutionService` still compares Intent controller ID + fencing epoch immediately before send.
+
+These tests establish software semantics on one correctly locking SQLite database. They do **not** prove an arbitrary cross-laptop/network filesystem preserves SQLite locking/durability.
+
 ## Risk / execution / session tests
 
 Risk tests cover frozen bands, no `$100` floor, min-lot actual risk, daily lock/reset/cooldown and 0/1 capacity. Execution tests cover positive DEMO guard, central gate, exactly-one-send, ambiguous ACK reconciliation and controller fencing. Runtime session/news tests cover frozen blackout/PRE_CLOSE/reopen rules.
@@ -89,13 +114,15 @@ Risk tests cover frozen bands, no `$100` floor, min-lot actual risk, daily lock/
 
 Fault injection must prove unresolved send/modify/close states survive restart without duplicate exposure. Fresh-machine certification must combine restored local context with current broker positions/orders/deals and refuse stale replay of an old OPEN/Intent into a new order.
 
+Cross-laptop failover certification must additionally prove that a newly fenced controller stays blocked until restored state and live broker truth reconcile, and that the old/stale controller cannot write after takeover.
+
 ## Discovery / promotion
 
 Discovery accepts audited declarative primitives and enforces candidate-or-suppression liveness. Promotion enforces stage order, locked fingerprint, one-shot final holdout, explicit approval and rollback. Neither gets raw broker authority.
 
 ## CI versus controlled broker evidence
 
-Public CI is credential-free software evidence. Authenticated GitHub backup publication, Windows MT5 acquisition, real historical broker-session evidence, fresh-machine broker reconciliation, cross-machine coordination and DEMO execution need controlled environments/credentials outside repository state.
+Public CI is credential-free software evidence. Authenticated GitHub backup publication, Windows MT5 acquisition, real historical broker-session evidence, fresh-machine broker reconciliation, real shared-storage/cross-machine coordination and DEMO execution need controlled environments/credentials outside repository state.
 
 ## Evidence reporting
 
@@ -106,15 +133,17 @@ Runtime checkpoint export      PASS / checkpoint SHA
 Local backup catalog           PASS / catalog SHA / retained count
 Latest verified checkpoint     PASS / path + checkpoint SHA
 Runtime checkpoint restore     PASS / fresh DB
+SQLite controller contention   PASS / one winner + monotonic epoch
+Takeover reconciliation gate   PASS
 Remote backup publication      PENDING/PASS
 Broker reconcile after restore PENDING/PASS
+Cross-laptop coordination      PENDING/PASS
 Historical PRE_CLOSE software  PASS
 Research evidence packages     PASS
-Shared controller failover     PENDING/PASS
 DEMO execution                 PENDING/PASS
 ```
 
-Current deterministic checkpoint after local backup cadence/retention/catalog: **202 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic checkpoint after durable coordination/takeover enforcement: **209 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Release-blocking failures
 
@@ -137,19 +166,22 @@ At minimum:
 - restored local state treated as broker truth;
 - centralized execution/DEMO guard bypass;
 - duplicate/wrong-account broker write;
-- split-brain controller write;
+- non-monotonic fencing epoch;
+- two active controller winners for one scope;
+- takeover write allowed before reconciliation completion;
+- stale controller allowed to complete reconciliation after ownership loss;
 - autonomous self-promotion/broker bypass.
 
 ## Explicit non-goals
 
-Software correctness is not profitability proof. Synthetic fixtures/schedules are not real-market validation. Checkpoints/catalogs are not broker statements and do not grant execution authority. Local backup tests do not prove remote GitHub publication or real-machine recovery.
+Software correctness is not profitability proof. Synthetic fixtures/schedules are not real-market validation. Checkpoints/catalogs are not broker statements and do not grant execution authority. Local SQLite controller tests do not certify arbitrary network filesystems or real cross-laptop failover.
 
 ## Open questions
 
 - final CI coverage/static/security thresholds;
 - authenticated public-safe GitHub publication test matrix;
 - real fresh-machine + broker reconciliation certification matrix;
-- production shared-controller failover matrix;
+- exact shared-storage/cross-laptop failover certification environment and matrix;
 - controlled Windows/MT5 historical acquisition matrix;
 - trustworthy historical broker-session source/version/coverage matrix;
 - real-data walk-forward sample requirements;
