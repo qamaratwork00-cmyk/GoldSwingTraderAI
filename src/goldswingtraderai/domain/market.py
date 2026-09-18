@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from math import isfinite
 
-from goldswingtraderai.domain.enums import AccountMode, DataQuality, Timeframe
+from goldswingtraderai.domain.enums import AccountMode, DataQuality, Direction, Timeframe
 from goldswingtraderai.domain.ids import EntityId
 from goldswingtraderai.domain.models import MarketSnapshotMeta
 
@@ -88,6 +88,40 @@ class SymbolSpec:
             raise ValueError("maximum volume cannot be below minimum volume")
         if self.stops_level_points < 0 or self.freeze_level_points < 0:
             raise ValueError("broker stop/freeze levels cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class OpenPositionFacts:
+    """Normalized read-only broker position facts; never ownership by themselves."""
+
+    ticket: int
+    symbol: str
+    direction: Direction
+    volume: float
+    price_open: float
+    stop_loss: float | None
+    take_profit: float | None
+    magic: int | None = None
+    comment: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.ticket <= 0:
+            raise ValueError("position ticket must be positive")
+        if not self.symbol.strip():
+            raise ValueError("position symbol cannot be empty")
+        if self.direction is Direction.NONE:
+            raise ValueError("position direction must be BUY or SELL")
+        _require_finite("position facts", self.volume, self.price_open)
+        if self.volume <= 0 or self.price_open <= 0:
+            raise ValueError("position volume/open price must be positive")
+        if self.stop_loss is not None:
+            _require_finite("position stop", self.stop_loss)
+            if self.stop_loss <= 0:
+                raise ValueError("position stop must be positive when present")
+        if self.take_profit is not None:
+            _require_finite("position target", self.take_profit)
+            if self.take_profit <= 0:
+                raise ValueError("position target must be positive when present")
 
 
 @dataclass(frozen=True, slots=True)
