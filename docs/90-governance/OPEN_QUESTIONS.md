@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.7-design
+**Version:** 0.8-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -63,16 +63,17 @@ NORMAL   1.0–2.0%      >2.0–3.5%        4%               7%
 
 Elevated risk is tolerance, not target sizing.
 
+**Resolved V1 capacity direction:** one independently risk-bearing Gold position at a time (`0/1`). Opposite opportunities go to Trade Manager first rather than creating an automatic hedge. Unexpected manual/foreign/unknown-owner Gold exposure blocks new bot entries and is never managed as bot-owned.
+
 Remaining risk questions:
 
-- Emergency safety ceiling and aggregate open-risk ceiling.
+- Emergency safety ceiling and aggregate-risk semantics for any future multi-position design.
 - Policy for accounts below `$100`.
 - Exact slippage-reserve model and commission treatment by broker/account type.
 - Exact realized/floating P/L accounting formula for applying the frozen daily lock percentages.
 - Bounded manual-reset count and confirmation timing per UTC risk day.
 - Exact cooldown trigger/release rules.
 - Exact drawdown-aware target-band reduction curve.
-- Final V1 confirmation of one independently risk-bearing Gold position at a time.
 - Emergency maximum-trade/runaway circuit-breaker value.
 
 **Resolved direction:** the provisional daily-risk boundary is `00:00 UTC`; it is no longer an open XAU-reopen-versus-calendar question.
@@ -90,7 +91,6 @@ Remaining risk questions:
 ## Execution / broker safety
 
 - Exact price-drift and spread limits by broker/volatility context.
-- Final policy for unexpected manual/foreign Gold positions.
 - Exact DEMO-to-future-REAL approval/config mechanism. Architecture is already decided: REAL is not a separate engine and must use the same centralized Execution Permission Gate.
 - Exact execution-controller/lease mechanism, timeout/clock/failover semantics and coordination store.
 - Exact broker comment/magic/lineage conventions.
