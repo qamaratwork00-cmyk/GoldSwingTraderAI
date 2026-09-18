@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 2.2-implementation-map  
+**Version:** 2.3-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -9,7 +9,7 @@
 
 > **One primary owner per responsibility; facts flow forward; irreversible broker authority stays narrow and last.**
 
-## Current package shape — Phase 10 research foundation
+## Current package shape — Phase 10 + Phase 11 checkpoint foundation
 
 ```text
 src/goldswingtraderai/
@@ -23,9 +23,14 @@ src/goldswingtraderai/
 ├── decisions/
 ├── risk/
 ├── persistence/
+│   ├── store.py
+│   ├── runtime_state.py
+│   └── checkpoint.py
 ├── execution/
 ├── management/
 ├── operator/
+├── security/
+│   └── financial_secrets.py
 └── research/
     ├── replay.py
     ├── ablation.py
@@ -59,14 +64,21 @@ config/domain
 → management
 → operator
 
+security → repository/checkpoint artifact validation only
+
+StateStore
+→ StoreSnapshot
+→ persistence/checkpoint
+→ fresh local StateStore
+→ broker reconciliation required
+
 read-only MT5 history or offline source
 → acquisition / portable dataset / dataset identity
 → replay / outcomes / management
 → optional verified historical session schedule
 → PRE_CLOSE-aware management / stress / walk-forward
-→ evidence manifest
-→ immutable evidence package
-→ metrics / learning / discovery / promotion
+→ evidence manifest / package
+→ learning / discovery / promotion
 ```
 
 The execution package remains the only raw irreversible MT5-write owner.
@@ -74,7 +86,7 @@ The execution package remains the only raw irreversible MT5-write owner.
 ## Key ownership
 
 ### `market_data/`
-Read-only account/symbol/quote/completed-candle authority. Research acquisition reuses `MT5Reader.completed_candles()` and does not create another MetaTrader5 adapter.
+Read-only account/symbol/quote/completed-candle authority. Research acquisition reuses `MT5Reader.completed_candles()`.
 
 ### `intelligence/`
 Shared causal structure/quant/technical/liquidity/session/news/confluence facts. No broker authority.
@@ -82,93 +94,91 @@ Shared causal structure/quant/technical/liquidity/session/news/confluence facts.
 ### `strategies/` + `decisions/`
 Parallel strategy floor, BUY/SELL fusion, Opportunity/Timing and structural Trade Plan. Optional Trendline/Fib/POC remains bounded bonus-only.
 
-### `risk/`, `persistence/`, `execution/`, `management/`
-Risk/hard permissions, SQLite critical state, centralized one-shot execution/reconciliation and open-trade HOLD/PROTECT/TRAIL/RUNNER/EXIT respectively.
+### `risk/`
+Monetary sizing plus hard session/news/risk authority.
 
-### `operator/`
-Read-only presentation; no trading authority.
+### `persistence/store.py`
+Primary owner of local SQLite durability and canonical record/event integrity.
 
-### `research/datasets.py`
-Portable replay inputs. Hash-verifies manifest, CSVs, bar counts and reconstructed dataset identity. Does not export broker login/server.
+New Phase-11 responsibilities:
 
-### `research/acquisition.py`
-Read-only MT5 history adapter built on `MT5Reader`. Exact declared counts, historical spread provenance, optional direct bundle export. No raw writes.
+- `StoreSnapshot` model;
+- deterministic export of all current records + ordered append-only events;
+- integrity verification of event history, not only current records;
+- restore of verified snapshot only into an empty initialized store;
+- explicit WAL checkpoint helper for safe fresh-DB handoff.
 
-### `research/evidence.py`
-Dataset/evidence content identity, canonical input fingerprint and evidence-manifest SHA.
-
-### `research/packages.py`
-Immutable evidence-package persistence.
+### `persistence/checkpoint.py`
+Primary owner of portable runtime checkpoint packaging and fresh-database restore.
 
 ```text
-ResearchEvidenceManifest
-+ optional verified DatasetBundle identity
-→ evidence_manifest.json
-→ package_manifest.json
-→ package_sha256
+checkpoint_manifest.json
+records.jsonl
+events.jsonl
 ```
 
-Responsibilities:
+Rules:
 
 - write-new destination only;
-- persist canonical evidence JSON;
-- hash the evidence file;
-- bind evidence manifest/input/dataset hashes;
-- optionally bind a verified dataset-bundle manifest hash;
-- never copy large dataset bytes merely to package each result;
-- recompute package, evidence, input and dataset identities on import;
-- optionally verify a supplied external dataset bundle against the package.
+- canonical JSONL records/events;
+- source label/version + schema versions + UTC creation time;
+- file SHA-256 + `checkpoint_sha256`;
+- strict filenames/file-set/symlink checks;
+- structured + text financial-secret rejection;
+- no raw SQLite database publication as portable state;
+- restore only to a non-existing local DB;
+- temporary restore + integrity check + WAL checkpoint + atomic move;
+- restore result explicitly says broker reconciliation is required.
 
-Package identity is content-based; filesystem path is not authority. Module has no trading/risk/promotion authority.
+### `security/financial_secrets.py`
+Shared credential detection owner.
+
+Repository scanning uses text semantics suitable for source/tests. Structured checkpoint scanning recursively checks real payload keys/values, so a serialized authority-bearing `password`, token, private/recovery key or client secret cannot pass merely because JSON quoted the key.
+
+No trading authority.
+
+### `execution/`
+Single raw broker-write authority: centralized permission gate, durable intent, writer, reconciliation and controller/fencing semantics.
+
+### `management/`
+Verified open-trade HOLD/PROTECT/TRAIL/RUNNER/EXIT decisions. No raw MT5 writes.
+
+### `operator/`
+Read-only presentation.
 
 ### `research/session_history.py`
-Historical broker-session facts for replay only.
-
-```text
-named/versioned verified coverage
-+ chronological tradeable intervals
-+ DAILY/WEEKEND close kind
-→ production evaluate_market_permission()
-→ OPEN / PRE_CLOSE / CLOSED facts
-```
-
-Responsibilities:
-
-- require explicit source label/version and UTC coverage;
-- reject overlapping/out-of-coverage intervals;
-- never guess session times;
-- reuse production DAILY `T-20/T-10` and WEEKEND `T-60/T-30` policy through `risk.permissions`;
-- return CLOSED inside verified coverage when no interval is active;
-- fail outside verified coverage.
-
-`management_replay.py` optionally consumes this schedule and forwards mandatory PRE_CLOSE flatten into production `evaluate_trade_manager()`. A session-aware replay event that contradicts a verified CLOSED interval is a research data/schedule error, not a normal candle.
+Explicit historical broker-session facts. Reuses production PRE_CLOSE permission; no guessed session clock.
 
 ### Other research modules
-`replay.py` chronological decisions; `ablation.py` controlled variants; `outcomes.py` Trade Plan paths; `management_replay.py` production manager; `stress.py` declared friction; `validation.py` fixed-policy walk-forward; `metrics.py` actual/counterfactual metrics; learning/journal/discovery/invention/promotion own governed improvement lifecycle.
+`replay.py` chronological decisions; `ablation.py` controlled variants; `outcomes.py` Trade Plan paths; `management_replay.py` production manager; `stress.py` declared friction; `validation.py` fixed-policy walk-forward; `datasets.py` portable replay inputs; `acquisition.py` read-only MT5 history; `evidence.py` content identity; `packages.py` immutable evidence packages; metrics/learning/discovery/invention/promotion own governed improvement lifecycle.
 
 ## Prohibited dependency directions
 
 ```text
-intelligence      → order_send                    NO
-strategies        → order_send/risk reset         NO
-decisions         → raw order_send                NO
-management        → raw order_send                NO
-operator          → trading authority             NO
-research          → production broker write       NO
-acquisition       → duplicate raw MT5 client      NO
-session_history   → guessed/default broker clock  NO
-packages          → trading/risk/promotion        NO
-invention         → arbitrary Python/eval/exec    NO
-candidate         → self-promotion                NO
-stress            → production safety mutation    NO
-validation        → hidden tuning/final holdout   NO
+intelligence       → order_send                    NO
+strategies         → order_send/risk reset         NO
+decisions          → raw order_send                NO
+management         → raw order_send                NO
+operator           → trading authority             NO
+research           → production broker write       NO
+acquisition        → duplicate raw MT5 client      NO
+session_history    → guessed/default broker clock  NO
+checkpoint restore → broker-write authority        NO
+checkpoint restore → overwrite/merge live DB       NO
+security scanner   → trading policy                NO
+invention          → arbitrary Python/eval/exec    NO
+candidate          → self-promotion                NO
+stress             → production safety mutation    NO
+validation         → hidden tuning/final holdout   NO
 ```
 
 ## Current deterministic tests
 
-Later research suites include:
+Later suites include:
 
 ```text
+tests/test_persistence_recovery.py
+tests/test_runtime_checkpoint.py
 tests/test_management_replay.py
 tests/test_research_ablation.py
 tests/test_research_outcomes.py
@@ -184,18 +194,23 @@ tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Current verified checkpoint: **189 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current verified checkpoint: **195 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
-## Remaining Phase-10 evidence work
+## Remaining Phase-11 work
 
-- controlled Windows/MT5 real-history acquisition evidence;
-- trustworthy versioned historical broker-session schedule source/coverage;
-- broad regime-diverse real-XAU studies producing immutable evidence packages;
+- automatic checkpoint cadence/retention;
+- public-safe publication/catalog workflow;
+- controlled fresh-machine restore + real broker reconciliation drill;
+- production shared cross-laptop atomic controller backend/failover proof;
+- integrated startup recovery orchestration.
+
+## Remaining external research/release work
+
+- controlled Windows/MT5 real-history evidence;
+- trustworthy historical broker-session source/coverage;
+- broad real-XAU validation/holdout/DEMO evidence;
 - empirical execution-friction calibration;
-- final untouched holdout evidence;
-- replay-versus-DEMO attribution and operator visibility.
-
-The historical PRE_CLOSE/session-policy software integration itself is implemented; only trustworthy real schedule evidence remains external.
+- final runtime/dashboard/release integration.
 
 ## Phase completion rule
 
