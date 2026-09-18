@@ -6,7 +6,6 @@ persists intent state before the irreversible call and never retries ambiguity.
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import datetime
 
 from goldswingtraderai.domain.enums import HardDecision
@@ -52,6 +51,8 @@ class ExecutionService:
             raise PermissionError(
                 f"execution permission not granted: {permission.decision}/{permission.primary_reason}"
             )
+        if self.repository.intent_id_seen(intent.intent_id):
+            raise PermissionError("Execution Intent ID has already been used")
 
         lifecycle, lifecycle_reason = self.repository.lifecycle_permission()
         if lifecycle is not HardDecision.PASS:
@@ -118,19 +119,6 @@ class ExecutionService:
         )
         self.repository.save(unknown, event_type="INTENT_ACCEPTED_UNKNOWN")
         return unknown
-
-
-def bind_execution_price(intent: ExecutionIntent, quote: Quote) -> ExecutionIntent:
-    """Return intent with fresh quote recorded only for diagnostics if desired.
-
-    The immutable approved-entry reference remains the Trade Plan reference; this
-    helper intentionally does not overwrite it. Kept as a no-op semantic marker for
-    callers that must distinguish planning reference from executable quote.
-    """
-
-    if quote.symbol != intent.symbol:
-        raise ValueError("execution quote symbol does not match intent")
-    return replace(intent)
 
 
 def _precheck_message(reason: str, comment: str | None) -> str:
