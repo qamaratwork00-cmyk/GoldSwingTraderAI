@@ -45,12 +45,17 @@ from goldswingtraderai.execution.reconcile import (
     ReconciliationStatus,
 )
 from goldswingtraderai.execution.service import ExecutionService
+from goldswingtraderai.execution.sqlite_coordination import (
+    COORDINATION_SCHEMA_VERSION,
+    SQLiteCoordinationStore,
+)
 
 __all__ = [
     "AuthorityTrace",
     "BrokerCheckResult",
     "BrokerSubmitClass",
     "BrokerSubmitResult",
+    "COORDINATION_SCHEMA_VERSION",
     "ControllerLeaseManager",
     "ControllerStatus",
     "CoordinationError",
@@ -72,6 +77,7 @@ __all__ = [
     "MT5Writer",
     "ReconciliationResult",
     "ReconciliationStatus",
+    "SQLiteCoordinationStore",
     "approve_intent",
     "evaluate_execution_checks",
     "evaluate_execution_permission",
