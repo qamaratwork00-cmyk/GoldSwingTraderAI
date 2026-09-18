@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** Feature-oriented developer implementation map. It does not redefine trading behaviour.
 
 ## Purpose
@@ -14,8 +14,36 @@ Core rule:
 
 Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for large implementation phases and resume/recovery procedure.
 
+## Frozen coding-quality contract
+
+All source implementation must obey [`60-engineering/CODING_STANDARD.md`](60-engineering/CODING_STANDARD.md), which is **FROZEN FOR INITIAL IMPLEMENTATION**.
+
+Its intent is deliberately simple:
+
+> **Use the minimum clear production-grade code that fully expresses the required behaviour and safety. Keep it light, explicit, testable and easy to audit; do not build decorative architecture.**
+
+In practice this means:
+
+- Python 3.11+ baseline;
+- standard library first and minimal runtime dependencies;
+- official `MetaTrader5` boundary for terminal integration;
+- pure functions for deterministic calculations where practical;
+- classes only where real state/resource/lifecycle ownership exists;
+- typed dataclasses/enums/domain IDs where they protect semantics;
+- one verified snapshot and shared derived facts rather than repeated MT5 reads/calculations;
+- no giant single `bot.py`, but also no unnecessary micro-file explosion;
+- no speculative Service/Manager/Factory layers;
+- concise professional comments/docstrings explaining **why**, safety, chronology and broker quirks rather than obvious syntax;
+- explicit error handling; no silent `except Exception: pass` behaviour;
+- concise structured logs with financial-secret redaction;
+- live/runtime core kept lightweight while heavier research dependencies remain isolated;
+- tests protect real invariants and regressions rather than padding test counts.
+
+If implementation convenience conflicts with the frozen Coding Standard, the Coding Standard wins unless explicitly superseded through governance.
+
 ## Relationship to engineering docs
 
+- `60-engineering/CODING_STANDARD.md` — frozen code-quality/complexity/dependency/commenting authority;
 - `60-engineering/MODULE_STRUCTURE.md` — file/module-oriented ownership map;
 - `CODER_GUIDE.md` — feature-oriented change/debug map;
 - `60-engineering/TESTING_AND_VERIFICATION.md` — validation architecture;
