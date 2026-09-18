@@ -8,7 +8,7 @@ This folder is the design source of truth for GoldSwingTraderAI.
 
 - **DRAFT** — incomplete working document.
 - **PROVISIONAL** — current agreed direction; still open to refinement/calibration.
-- **FROZEN** — approved behavioural contract for implementation.
+- **FROZEN** — approved behavioural/engineering contract for implementation.
 - **IMPLEMENTED** — corresponding behaviour exists in code.
 - **VERIFIED** — exact implementation passed required executable validation.
 
@@ -21,6 +21,7 @@ These important project-wide/operator/developer guides live directly in `docs/` 
 - [`USER_MANUAL.md`](USER_MANUAL.md) — authoritative operator/user manual; DRAFT until implemented commands/UI exist.
 - [`SETUP_AND_RUN_GUIDE.md`](SETUP_AND_RUN_GUIDE.md) — authoritative setup/startup/shutdown/restore/migration guide; DRAFT until real commands exist.
 - [`CODER_GUIDE.md`](CODER_GUIDE.md) — authoritative feature-oriented developer map; DRAFT until real source modules are implemented.
+- [`60-engineering/CODING_STANDARD.md`](60-engineering/CODING_STANDARD.md) — **FROZEN** lightweight production-code quality, dependency, commenting and complexity contract for all implementation agents.
 
 Old subfolder locations for User Manual, Setup/Run Guide and Coder Guide are compatibility redirects only.
 
@@ -34,7 +35,7 @@ Old subfolder locations for User Manual, Setup/Run Guide and Coder Guide are com
 | `30-risk-execution/` | Monetary risk, permission states, broker-write safety, persistence/restart/reconciliation |
 | `40-research-learning/` | Replay/validation, discovery, invention, experiments/promotion, learning/AI boundaries |
 | `50-operator/` | Dashboard/UX and operator-domain supporting docs; primary User/Setup guides are at docs root |
-| `60-engineering/` | Module map, diagnostics, testing, release gates and audit; primary Coder Guide is at docs root |
+| `60-engineering/` | Frozen coding standard, module map, diagnostics, testing, release gates and audit; primary Coder Guide is at docs root |
 | `90-governance/` | Design decisions, freeze matrix/open questions and documentation/change governance |
 
 ## 00 — Foundation
@@ -101,6 +102,7 @@ A separate authoritative `OFFLINE_RESEARCH.md` is intentionally not used.
 
 | Document | Status | Purpose |
 |---|---|---|
+| [Coding Standard](60-engineering/CODING_STANDARD.md) | **FROZEN** | Lightweight production-grade Python, dependency, abstraction, commenting, performance and phase-quality rules |
 | [Coder Guide — docs root](CODER_GUIDE.md) | DRAFT | Feature-oriented ownership/change/debugging map |
 | [Module Structure](60-engineering/MODULE_STRUCTURE.md) | DRAFT | File/module-oriented planned ownership and dependency direction |
 | [System Health and Diagnostics](60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md) | PROVISIONAL | Fault severity, trading impact, recovery and overall-health aggregation |
@@ -108,7 +110,7 @@ A separate authoritative `OFFLINE_RESEARCH.md` is intentionally not used.
 | [Release Checklist](60-engineering/RELEASE_CHECKLIST.md) | PROVISIONAL | DEMO release gates and sign-off checklist |
 | [Final Release Audit](60-engineering/FINAL_RELEASE_AUDIT.md) | DRAFT TEMPLATE | Evidence-backed release snapshot; PASS only after tests execute |
 
-`CODER_GUIDE.md` is feature-oriented. `MODULE_STRUCTURE.md` is file/module-oriented.
+`CODING_STANDARD.md` owns source-code quality/complexity rules. `CODER_GUIDE.md` is feature-oriented. `MODULE_STRUCTURE.md` is file/module-oriented. Supporting docs link to the Coding Standard instead of maintaining competing style contracts.
 
 ## 90 — Governance
 
@@ -127,6 +129,7 @@ A separate authoritative `OFFLINE_RESEARCH.md` is intentionally not used.
 - Risk owns monetary affordability; Execution owns final broker-write permission/path.
 - Scoring/Fusion owns decision attribution; System Health owns technical fault aggregation.
 - Persistence owns storage/recovery/backup mechanics; research docs own strategy/learning semantics.
+- Coding Standard owns source-quality/complexity/dependency/commenting rules; feature/module docs consume it rather than redefine a competing version.
 
 ## Authority rule
 
@@ -136,7 +139,8 @@ When documents conflict:
 2. specific authoritative topic document
 3. `90-governance/DESIGN_DECISIONS.md`
 4. `90-governance/OPEN_QUESTIONS.md` for explicitly classified unresolved/calibration items
-5. supporting engineering/operator docs
-6. `FINAL_BUILD_PROMPT.md` as handoff summary only
+5. `60-engineering/CODING_STANDARD.md` for implementation-quality rules
+6. supporting engineering/operator docs
+7. `FINAL_BUILD_PROMPT.md` as handoff summary only
 
 No implementation should silently resolve a contradiction by guessing.
