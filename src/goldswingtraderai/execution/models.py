@@ -77,8 +77,10 @@ class ExecutionIntent:
             raise ValueError("one Execution Intent permits at most one send attempt")
         if self.state in {IntentState.SUBMITTING, IntentState.ACCEPTED_UNKNOWN} and self.submit_attempts != 1:
             raise ValueError("submitting/unknown intent must record its single send attempt")
-        if self.state in _TERMINAL_INTENT_STATES and self.submit_attempts != 1:
-            raise ValueError("terminal submitted intent must record its send attempt")
+        if self.state is IntentState.ACCEPTED_VERIFIED and self.submit_attempts != 1:
+            raise ValueError("accepted intent must record its single send attempt")
+        if self.state in {IntentState.CREATED, IntentState.APPROVED} and self.submit_attempts != 0:
+            raise ValueError("pre-submit intent cannot already consume its send attempt")
         if self.action in {ExecutionAction.MODIFY, ExecutionAction.CLOSE} and self.position_ticket is None:
             raise ValueError("modify/close intent requires the managed position ticket")
 
@@ -143,8 +145,8 @@ def mark_failed(
     message: str,
     broker_retcode: int | None = None,
 ) -> ExecutionIntent:
-    if intent.state is not IntentState.SUBMITTING:
-        raise ValueError("only SUBMITTING intent can become FAILED")
+    if intent.state not in {IntentState.APPROVED, IntentState.SUBMITTING}:
+        raise ValueError("only APPROVED/SUBMITTING intent can become FAILED")
     return replace(
         intent,
         state=IntentState.FAILED,
