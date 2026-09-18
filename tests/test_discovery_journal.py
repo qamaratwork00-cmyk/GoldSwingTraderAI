@@ -4,7 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 from goldswingtraderai.domain.enums import Direction, StrategyFamily
 from goldswingtraderai.persistence import StateStore
-from goldswingtraderai.research.discovery import CandidateKind, CandidateRegistry
+from goldswingtraderai.research.discovery import (
+    ApprovedPrimitive,
+    CandidateKind,
+    CandidateRegistry,
+)
 from goldswingtraderai.research.episode_journal import (
     ResearchEpisodeRecord,
     ResearchEpisodeRepository,
@@ -62,6 +66,33 @@ def test_episode_evidence_maps_to_multiple_approved_primitives() -> None:
     observation = observations[0]
     assert len(observation.primitives) >= 4
     assert observation.evidence_strength_r == 2.5
+
+
+def test_technical_confluence_labels_are_audited_discovery_primitives() -> None:
+    episode = ResearchEpisodeRecord(
+        source_id="confluence-1",
+        observed_at_utc=NOW,
+        direction=Direction.BUY,
+        family=StrategyFamily.TREND_PULLBACK_CONTINUATION,
+        regime="TREND_EXPANDING",
+        session="LONDON_NY",
+        outcome_kind=OpportunityOutcomeKind.ENTRY_MISSED,
+        strategy_evidence=(
+            "H1_STRUCTURE",
+            "TRENDLINE_PULLBACK_SUPPORT",
+            "FIB_CORE_RETRACEMENT",
+            "POC_LOCATION_CONFLUENCE",
+            "TARGET_ROOM",
+        ),
+        meaningful_move=True,
+        counterfactual_mfe_r=2.2,
+    )
+
+    observation = discovery_observations_from_episodes((episode,))[0]
+
+    assert ApprovedPrimitive.TRENDLINE in observation.primitives
+    assert ApprovedPrimitive.FIBONACCI in observation.primitives
+    assert ApprovedPrimitive.VOLUME_PROFILE_POC in observation.primitives
 
 
 def test_ordinary_small_move_does_not_spam_discovery(tmp_path) -> None:
