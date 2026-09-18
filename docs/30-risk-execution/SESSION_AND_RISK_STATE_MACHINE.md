@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Session and Risk State Machine
 
 **Status:** PROVISIONAL  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** Hard market/session permission states, risk/system permission composition, news-safety states and state transitions.  
 **Depends on:** `RISK_CONTRACT.md`, `EXECUTION_AND_BROKER_SAFETY.md`, `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`, `../10-market-intelligence/SESSION_CONTEXT.md`
 
@@ -24,9 +24,9 @@ Scheduled XAU closure is approaching.
 V1 policy:
 
 - new entries are blocked;
-- existing bot-managed Gold positions must be flattened before the scheduled closure while the broker remains tradeable;
-- Trade Manager may protect/exit earlier for normal structural reasons, but it may not intentionally carry a bot-managed position through the scheduled daily XAU break or weekend closure;
-- the exact pre-close no-new-entry/mandatory-flatten lead time remains a broker/research calibration value.
+- existing bot-managed Gold positions must be flattened before scheduled closure while broker remains tradeable;
+- Trade Manager may protect/exit earlier for structural reasons, but may not intentionally carry a bot-managed position through scheduled daily XAU break/weekend closure;
+- exact pre-close no-new-entry/mandatory-flatten lead time remains broker/research calibration.
 
 Reason codes should distinguish `SESSION_PRE_CLOSE` from `PRE_CLOSE_FLATTEN`.
 
@@ -34,34 +34,25 @@ Reason codes should distinguish `SESSION_PRE_CLOSE` from `PRE_CLOSE_FLATTEN`.
 
 Broker-confirmed XAU closure/weekend/scheduled break.
 
-- New entries: blocked.
+- New entries blocked.
 - V1 normally expects no bot-managed Gold position to remain open because PRE_CLOSE should have flattened it.
-- If a managed position remains because the broker became unavailable, a close acknowledgement was ambiguous, or another operational fault occurred, persist/reconcile the exposure as an exceptional state rather than pretending it is flat.
+- If a managed position remains because broker became unavailable, close acknowledgement was ambiguous, or another fault occurred, persist/reconcile exposure rather than pretending flat.
 - Reconciliation/state maintenance continues where possible.
 - Research/background analysis may continue.
 
 ### REOPEN_WARMUP
 
-The first returned quote after closure is not sufficient for trade readiness.
+First returned quote after closure is not sufficient for trade readiness.
 
-Evidence may include:
+Evidence may include fresh valid quotes, symbol tradeability, normalized spread, candle continuity, gap/dislocation assessment and sufficient fresh data for required timeframe decisions.
 
-- fresh valid quotes;
-- symbol tradeability;
-- normalized spread;
-- candle continuity;
-- gap/dislocation assessment;
-- sufficient fresh data for required timeframe decisions.
-
-Warmup is evidence-driven rather than an unnecessarily long fixed delay. No fresh entry is allowed until required reopen evidence passes.
+Warmup is evidence-driven rather than an unnecessarily long fixed delay.
 
 ### HOLIDAY_CAUTION
 
-Holiday calendar context indicates potentially unusual participation/liquidity, but the market may remain open. Broker tradeability and live market data remain authority for actual OPEN/CLOSED status.
+Holiday context may imply unusual participation/liquidity, but broker tradeability/live data remain authority for actual OPEN/CLOSED state.
 
 ## News-safety states
-
-Market Intelligence publishes event facts/provider health. This state machine derives hard permission according to the frozen initial V1 event policy.
 
 States:
 
@@ -74,100 +65,73 @@ POST_NEWS_WARMUP
 
 ### Initial V1 hard blackout windows
 
-Using the tiers owned by `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`:
-
 ```text
 TIER 1 CRITICAL   → no new entries from 15 min before through 15 min after
 TIER 2 HIGH       → no new entries from 5 min before through 5 min after
 TIER 3 CONTEXT    → no automatic hard blackout
 ```
 
-For a known linked TIER 1 event cluster, the hard blackout remains active through **15 minutes after the final scheduled critical item**.
-
-These windows are initial implementation policy and may only change through governed research/configuration, not silent runtime adaptation.
+Known linked TIER 1 clusters remain blocked through 15 minutes after the final scheduled critical item.
 
 ### NEWS_CLEAR
 
-Required event-safety information is verified, no configured hard blackout is active, and any required post-event normalization checks have passed.
+Required event-safety information is verified, no hard blackout is active, and required post-event normalization has passed.
 
 ### NEWS_BLACKOUT
 
-A verified scheduled event falls inside its configured hard no-new-entry window.
-
-This is an expected safety state, not a system fault.
-
-`NEWS_BLACKOUT` blocks new entries/re-entry/add-ons but does **not** automatically force-close an already-open bot-managed trade. Existing positions remain under Trade Manager and ordinary execution/risk/session safety.
+Blocks new entries/re-entry/add-ons, but does **not** automatically force-close an already-open managed trade.
 
 ### NEWS_SAFETY_UNKNOWN
 
-Required scheduled-event safety cannot be verified through accepted current/fallback event sources.
-
-New entries fail closed. The system must never translate provider failure into `NEWS_CLEAR` merely because no events were returned.
+Required event safety cannot be verified through accepted current/fallback sources. New entries fail closed; provider failure never becomes silent `NEWS_CLEAR`.
 
 ### POST_NEWS_WARMUP
 
-After the minimum scheduled blackout ends, new entries remain paused only while market evidence remains abnormal/unreliable.
+After minimum blackout ends, new entries remain paused only while market evidence remains abnormal/unreliable.
 
-The warmup evaluates at least:
-
-- fresh quote continuity;
-- spread normalized relative to broker/recent context;
-- no unresolved feed/data gap;
-- no extreme/dislocated price state that makes immediate execution unreliable;
-- required timeframe data still valid/readable;
-- execution freshness checks passing.
-
-The design is deliberately **not a long fixed timer**. If the market has normalized when the minimum blackout expires, the state may return to `NEWS_CLEAR` promptly.
-
-If the event caused severe displacement/dislocation, require at least one clean completed M5 candle after the shock plus normalized execution conditions before new entry permission returns.
-
-A TIER 2 event that produces no material dislocation may clear immediately after its minimum `+5 minute` blackout once all required checks pass.
-
-A TIER 1 event may clear after its minimum `+15 minute` blackout when required checks pass; otherwise it stays in `POST_NEWS_WARMUP` until normalization.
+Evaluate fresh quotes, normalized spread, data continuity, volatility/dislocation and execution freshness. If normalized at expiry, permission may return promptly. Severe dislocation requires at least one clean completed M5 candle plus normalized execution conditions.
 
 ## Unscheduled shock interaction
 
-An unscheduled geopolitical/macro shock may have no calendar event. Market-data, volatility and execution-safety authorities may still block/degrade trading because of spread explosion, stale quotes, extreme velocity, gaps or dislocation.
-
-The absence of a scheduled event must not override those safety facts.
+An unscheduled shock may have no calendar event. Market-data, volatility and execution-safety authorities may still block/degrade trading because of spread explosion, stale quotes, extreme velocity, gaps or dislocation.
 
 ## Risk/system states
 
 ### NORMAL
 
-No special risk lock is active.
+No special risk lock/cooldown is active.
 
 ### LOSS_LOCKED
 
-The Risk Contract reports that the daily loss budget is exhausted.
+Risk Contract reports daily loss budget exhausted.
 
 - New entries/re-entry/add-ons blocked.
 - Open-trade management remains active where safely possible.
-- Governed manual reset may transition the risk state only according to `RISK_CONTRACT.md`.
-
-This document does **not** redefine daily P/L calculation/reset-reference semantics.
+- Manual reset is disabled by default.
+- If explicitly enabled, V1 permits at most one governed manual reset per UTC risk day using deliberate `R,R` confirmation and durable audit semantics owned by `RISK_CONTRACT.md`.
+- Manual reset never clears unrelated `BLOCKED` conditions.
 
 ### COOLDOWN
 
-Temporary pause after a frozen adverse-behaviour/churn trigger. Exact trigger/release rules belong to Risk Contract and remain open.
+V1 transitions to global `COOLDOWN` after **3 consecutive closed bot-trade losses** or when Risk/Execution declares an abnormal execution/shock cooldown.
+
+For the 3-loss trigger:
+
+- minimum duration is 30 minutes;
+- time alone cannot release it;
+- release also requires fresh completed M15 context after the trigger, no unresolved execution/reconciliation fault and a fresh valid opportunity/episode rather than replaying the failed setup.
+
+One ordinary loss does **not** create a global cooldown.
+
+Same-Market-Episode churn is handled separately: at most one genuinely fresh re-entry is allowed in the same episode; a second loss in that episode locks further entries for that episode.
 
 ### BLOCKED
 
-Critical truth/safety is unavailable or invalid, for example:
+Critical truth/safety unavailable/invalid, for example account identity uncertainty, stale/corrupt required data, unresolved order lifecycle, unknown financial state, persistence corruption, unknown required news safety or execution-controller ownership uncertainty.
 
-- broker/account identity uncertainty;
-- stale/corrupt required market data;
-- unresolved order lifecycle;
-- unknown required financial state;
-- critical persistence corruption;
-- unknown required news safety;
-- execution-controller ownership uncertainty.
-
-No operator shortcut may silently bypass a genuine `BLOCKED` state.
+No operator shortcut may silently bypass genuine `BLOCKED` state.
 
 ## Permission composition
-
-Final entry permission is composed from at least:
 
 ```text
 Market State
@@ -182,9 +146,10 @@ Examples:
 
 ```text
 OPEN + NEWS_CLEAR + NORMAL + READY → entries may be evaluated
-PRE_CLOSE + any otherwise-valid state → no new entry; existing managed trade must flatten
+PRE_CLOSE + otherwise-valid state → no new entry; existing managed trade must flatten
 OPEN + NEWS_CLEAR + LOSS_LOCKED + READY → no new entries
-OPEN + NEWS_BLACKOUT + NORMAL + READY → no new entries; expected safety block
+OPEN + NEWS_CLEAR + COOLDOWN + READY → no new entries until cooldown release criteria pass
+OPEN + NEWS_BLACKOUT + NORMAL + READY → no new entries
 OPEN + POST_NEWS_WARMUP + NORMAL + READY → no new entries until normalization passes
 OPEN + NEWS_SAFETY_UNKNOWN + NORMAL + READY → no new entries
 HOLIDAY_CAUTION + NEWS_CLEAR + NORMAL + READY → may trade with caution context
@@ -193,63 +158,42 @@ OPEN + NEWS_CLEAR + NORMAL + BLOCKED → no new entries
 
 ## UTC risk-day relationship
 
-Daily-loss accounting/reset boundary is owned by `RISK_CONTRACT.md`. The current provisional decision is a **UTC calendar risk day (`00:00 UTC`)** rather than XAU reopen semantics.
-
-This state machine simply consumes the resulting risk-state transition; it does not maintain a competing reset formula.
+Daily-loss accounting/reset boundary is owned by `RISK_CONTRACT.md`: UTC calendar risk day (`00:00 UTC`). This state machine consumes the resulting risk-state transitions without maintaining a competing formula.
 
 ## Broker truth over calendar
 
-A calendar may suggest expected open/closed/holiday conditions, but actual broker tradeability and valid live quotes determine whether XAU can be executed.
-
-Calendar says open + broker unavailable → not executable.
-
-Holiday says caution + broker/live market healthy → not automatically CLOSED.
-
-The configured close schedule is used to enter PRE_CLOSE early enough to flatten, but broker tradeability remains the final fact for whether a close can actually execute.
+Calendar may suggest expected state, but broker tradeability and valid live quotes determine whether XAU can execute. Configured close schedule enters PRE_CLOSE early enough to flatten, while broker state remains final fact for whether close can actually execute.
 
 ## Open-trade priority
 
-A hard new-entry block should not automatically stop safe management of an already-open managed position. Trade Manager/execution remain active where required and broker operations are safely available.
+A hard new-entry block should not automatically stop safe management of an open managed position.
 
-`PRE_CLOSE` is a special case: it creates an explicit V1 requirement to close the bot-managed position before the known XAU closure rather than carry gap risk into reopen.
-
-Scheduled news blackout is **not** the same as PRE_CLOSE; news timing alone does not force-close an existing position.
+`PRE_CLOSE` is a special case requiring flatten before known XAU closure. Scheduled news blackout is **not** equivalent to PRE_CLOSE and does not by itself force-close an existing position.
 
 ## Dashboard requirements
 
-Operator should distinguish at a glance:
-
-- Market State;
-- News Safety State;
-- next scheduled event and tier;
-- blackout countdown/window where applicable;
-- Risk State;
-- System/Execution State;
-- exact primary/secondary block reason;
-- PRE_CLOSE countdown/flatten status where knowable;
-- next expected transition where knowable;
-- manual-reset state as published by Risk Contract.
+Show at least Market State, News Safety State, next event/tier, blackout countdown, Risk State, loss streak, cooldown state/release condition, manual-reset state, System/Execution State, primary/secondary blocker, PRE_CLOSE countdown/flatten status and next expected transition where knowable.
 
 ## Tests required
 
 - OPEN/PRE_CLOSE/CLOSED transitions;
-- PRE_CLOSE blocks new entries;
-- PRE_CLOSE requests governed flatten of any bot-managed Gold position;
-- no intentional managed-position carry through scheduled daily XAU break/weekend;
-- close ambiguity/unavailable broker is persisted and reconciled rather than treated as flat;
+- PRE_CLOSE blocks new entries and requests governed flatten;
+- no intentional carry through scheduled daily XAU break/weekend;
+- close ambiguity is persisted/reconciled;
 - REOPEN_WARMUP evidence;
 - holiday caution not market closure;
-- TIER 1 `-15/+15` NEWS_BLACKOUT;
-- linked TIER 1 event cluster remains blocked through final event +15 min;
-- TIER 2 `-5/+5` NEWS_BLACKOUT;
-- TIER 3 does not independently create a hard blackout;
+- TIER 1 `-15/+15` and linked-cluster blackout;
+- TIER 2 `-5/+5` blackout;
+- TIER 3 no automatic hard blackout;
 - provider failure/fallback and `NEWS_SAFETY_UNKNOWN`;
-- POST_NEWS_WARMUP immediate clear after minimum window when market is normalized;
-- severe post-news dislocation requires a clean completed M5 candle plus normalized execution conditions;
-- scheduled news does not automatically close existing managed trade;
-- daily-loss state consumed from Risk Contract without duplicate accounting;
-- BLOCKED state cannot be overridden by manual reset;
-- permission composition truth table;
+- post-news normalization/clean-M5 severe-dislocation rule;
+- scheduled news does not auto-close managed trade;
+- one ordinary loss does not enter global cooldown;
+- 3 consecutive closed losses enter 30-minute minimum cooldown;
+- cooldown cannot release on timer alone;
+- same-episode second loss locks episode;
+- manual reset default OFF and cannot bypass BLOCKED;
+- permission-composition truth table;
 - broker state overrides calendar assumptions.
 
 ## Open questions
@@ -258,4 +202,4 @@ Operator should distinguish at a glance:
 - exact REOPEN_WARMUP evidence/fresh-candle requirements;
 - final production event provider(s), freshness TTL and provider-specific mapping details;
 - future research-backed changes to initial news tiers/windows;
-- final cooldown transition rules (owned numerically by Risk Contract).
+- exact keyboard confirmation timing for `R,R` as an operator UX detail.
