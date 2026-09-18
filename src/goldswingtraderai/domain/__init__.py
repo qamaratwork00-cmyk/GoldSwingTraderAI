@@ -2,6 +2,7 @@
 
 from goldswingtraderai.domain.enums import (
     AccountMode,
+    DataQuality,
     Direction,
     ExecutionState,
     HardDecision,
@@ -16,6 +17,14 @@ from goldswingtraderai.domain.enums import (
     TradeManagerAction,
 )
 from goldswingtraderai.domain.ids import EntityId
+from goldswingtraderai.domain.market import (
+    AccountFacts,
+    Candle,
+    CandleSeries,
+    MarketSnapshot,
+    Quote,
+    SymbolSpec,
+)
 from goldswingtraderai.domain.models import (
     ControllerLease,
     DemoGuardResult,
@@ -26,24 +35,31 @@ from goldswingtraderai.domain.models import (
 )
 
 __all__ = [
+    "AccountFacts",
     "AccountMode",
+    "Candle",
+    "CandleSeries",
     "ControllerLease",
+    "DataQuality",
     "DemoGuardResult",
     "Direction",
     "EntityId",
     "ExecutionIntent",
     "ExecutionState",
     "HardDecision",
+    "MarketSnapshot",
     "MarketSnapshotMeta",
     "MarketState",
     "NewsSafetyState",
     "OpportunityStage",
     "PermissionResult",
     "PositionOwnership",
+    "Quote",
     "Reason",
     "RiskState",
     "RuntimeRole",
     "StrategyFamily",
+    "SymbolSpec",
     "Timeframe",
     "TradeManagerAction",
 ]
