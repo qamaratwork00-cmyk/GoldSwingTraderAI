@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 1.2-design  
-**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research-evidence/data integrity, crash/restart, migration, learning-governance and release verification.  
+**Version:** 1.3-design  
+**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research data/evidence integrity, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
 ## Purpose
@@ -14,164 +14,118 @@ Testing must prove documented invariants. `VERIFIED` is reserved for behaviour t
 ## Test layers
 
 ```text
-Unit / Contract Tests
-→ Component Tests
-→ Deterministic Replay Tests
-→ Research Ablation / Outcome / Management / Stress / Walk-Forward / Evidence / Dataset / Acquisition Tests
-→ Integration Tests
-→ Fault / Crash Injection
-→ Persistence / Migration Tests
-→ Broker DEMO Tests
-→ Learning / Discovery / Promotion Governance Tests
+Unit / Contract
+→ Component
+→ Deterministic Replay
+→ Research Ablation / Outcomes / Manager / Stress / Walk-Forward
+→ Dataset / Acquisition / Evidence / Package Integrity
+→ Integration / Fault Injection / Persistence
+→ Controlled Windows MT5 / DEMO
+→ Learning / Discovery / Promotion Governance
 → End-to-End DEMO Certification
 ```
 
-## No-lookahead tests
+## No-lookahead / strategy / lifecycle
 
-Future candles/facts cannot leak into structure, confluence, decisions, Trade Plans, manager actions or earlier validation windows. MT5 research acquisition must use the existing completed-candle reader boundary and never include forming bar position 0 through a duplicate adapter.
+Future data cannot leak into structure, confluence, decisions, Trade Plans, manager actions or earlier validation windows. Optional Trendline/Fib/POC remains bonus-only. WAIT/MISSED/INVALID, re-entry limits and immutable original-R semantics remain regression protected.
 
-## Replay/live parity labels
+## Research replay / stress / validation
 
-```text
-Decision replay          BAR_CLOSE
-Initial bracket outcomes BAR_HIGH_LOW
-Trade Manager replay     BAR_CLOSE_IDEALIZED + active barriers
-Execution stress         BAR_CLOSE_EXECUTION_STRESS + declared assumptions
-Walk-forward             FIXED_POLICY_WALK_FORWARD over declared replay layers
-```
+Tests preserve same-bar ambiguity, production Trade Manager reuse, non-retroactive modifications, explicit friction assumptions, fixed-policy walk-forward boundaries, development-not-scored and final-holdout separation.
 
-Do not claim tick/broker parity without sufficient historical/live evidence.
+## Dataset / evidence identity
 
-## Strategy / confluence / lifecycle tests
+`research/evidence.py` tests stable content-addressed identities, timeframe-order normalization, content-change sensitivity, source/spread/symbol/economic-context representation, login/server exclusion, canonical mapping normalization, input/full-record hashes and secret-shaped-field rejection.
 
-Cover family fixtures, independent BUY/SELL theses, conflict, missing optional evidence, bounded correlation, one-strong-family opportunity creation, bonus-only Trendline/Fib/POC and entry WAIT/MISSED/INVALID lifecycle.
+## Portable dataset bundles
 
-Trade Plan tests cover structural invalidation, volatility buffer, Stop Quality, RR guards, target roles, immutable original R and indivisible 0.01 management.
+`research/datasets.py` tests round-trip identity, required H4/H1/M15/M5, optional M1 preservation, no endpoint identity, no overwrite, manifest/CSV/bar-count/recomputed-identity verification, canonical filenames and symlink rejection.
 
-## Research replay / stress / validation tests
+## Historical acquisition
 
-Initial outcomes preserve BUY/SELL symmetry and same-bar ambiguity. Trade Manager replay reuses production HOLD/PROTECT/TRAIL/RUNNER/EXIT, checks active barriers before new management and never applies a modification retroactively.
+`research/acquisition.py` tests reuse of the read-only `MT5Reader` contract, exact requested counts, partial-history rejection, median positive M5 historical spread derivation, explicit spread override and acquisition → bundle → verified import. Synthetic/FakeReader evidence is not real broker proof.
 
-Execution stress proves immutable-R adverse fill, declared spread, modify delay/rejection and signed deltas without changing production policy.
+## Immutable evidence-package tests
 
-Walk-forward proves non-overlapping validation slices, development-not-scored, validation-boundary clipping, no hidden tuning and no final-holdout consumption.
+`research/packages.py` must prove:
 
-## Research dataset/evidence identity tests
-
-`research/evidence.py` must prove stable content-addressed dataset identity, timeframe-order normalization, content-change sensitivity, replay assumption/symbol/economic-context representation, broker endpoint login/server exclusion, canonical evidence normalization, input/full-record hashing and financial-secret-shaped field rejection.
-
-## Portable research dataset bundle tests
-
-`research/datasets.py` must prove:
-
-- export/import preserves dataset identity;
-- H4/H1/M15/M5 are mandatory;
-- optional supported M1 survives round-trip;
-- login/server are absent from bundle research context;
+- canonical `ResearchEvidenceManifest` persists and round-trips through package integrity checks;
+- package binds `dataset_sha256`, evidence input fingerprint and evidence manifest SHA;
+- when a dataset bundle is supplied, it is verified before export and its dataset identity must equal the evidence dataset;
+- package may reference dataset identity without copying dataset bytes;
+- optional dataset-bundle manifest hash is preserved and checked when the bundle is supplied again;
+- evidence file SHA-256 is verified before evidence contents are trusted;
+- evidence manifest's internal `manifest_sha256` is recomputed;
+- evidence input fingerprint is recomputed from experiment-input fields;
+- package-manifest SHA-256 is recomputed;
+- mismatched dataset bundle fails;
+- tampered evidence file fails;
+- tampered package manifest fails;
 - existing destination is never overwritten;
-- manifest/CSV SHA-256 mismatch fails;
-- bar count mismatch fails;
-- unknown timeframe/canonical filename/symlink violations fail;
-- recomputed dataset/symbol/account identity must match before exposure.
+- evidence package code has no trading/risk/execution/promotion authority.
 
-## Read-only MT5 historical acquisition tests
+A package path is not evidence identity; hashes are authority.
 
-`research/acquisition.py` must prove:
+## Risk / execution / session / persistence
 
-- it consumes the existing `MT5Reader` interface rather than creating a second raw MetaTrader5 boundary;
-- H4/H1/M15/M5 positive requested counts are mandatory;
-- optional supported timeframes such as M1 can be requested;
-- every requested timeframe is read through `completed_candles()`;
-- returned history must match the exact requested count; partial history fails instead of silently reducing the sample;
-- default replay spread is derived from median positive historical M5 `spread_points × SymbolSpec.point`;
-- all-zero/missing M5 historical spread data fails unless an explicit spread override is supplied;
-- explicit spread override is non-negative and its provenance is visible as `EXPLICIT_OVERRIDE`;
-- current live quote spread is never silently substituted for historical spread;
-- source label/version are required provenance;
-- acquire → portable bundle → verified import preserves content identity;
-- acquisition code has no broker-write/execution/promotion authority.
+Risk tests cover all frozen bands, no `$100` floor, min-lot actual risk, daily lock/reset/cooldown and 0/1 capacity. Execution tests cover positive DEMO guard, central gate, exactly-one-send, reconciliation and controller fencing. Session/news tests cover frozen blackout/PRE_CLOSE/reopen rules. Persistence/fault tests protect restart and corruption handling.
 
-Deterministic FakeReader tests prove software contracts only. Controlled Windows/MT5 evidence is separately required to verify broker history availability and source/version assumptions.
+## Discovery / promotion
 
-## Risk / execution / controller / session tests
-
-Risk covers SMALL/MEDIUM/NORMAL, any positive equity below $300 as SMALL, min-lot actual-risk evaluation, 0/1 capacity, external ownership, margin authority, UTC risk day, cash-flow-adjusted AccountSafetyPL, daily lock/reset/cooldown and unknown-state fail-closed behaviour.
-
-Execution covers positive DEMO guard, centralized gate, spread/drift, exactly-one-send Intent semantics and reconciliation. Cross-machine controller certification requires a real shared atomic backend.
-
-Session/news tests cover Tier windows, required truth failure, PRE_CLOSE/reopen rules and ambiguous-close reconciliation.
-
-## Crash / persistence / restore tests
-
-Fault injection covers intent/send/fill/modify/close/PRE_CLOSE/daily-lock/controller/atomic-write boundaries. Persistence covers checksum/schema failure and all critical runtime/research state. Fresh-machine restore must exclude financial-authority secrets and reconcile broker truth.
-
-## Dashboard / learning / discovery / promotion tests
-
-Dashboard is presentation-only. Learning is bounded/context-isolated. Discovery accepts audited primitives and enforces candidate-or-suppression liveness. Promotion enforces stage order, locked fingerprint, one-shot holdout, explicit approval and rollback.
-
-## Public repository secret scanning
-
-Repository financial-secret scan remains mandatory. Evidence/bundle sanitization does not replace it.
+Discovery accepts audited declarative primitives and enforces candidate-or-suppression liveness. Promotion enforces stage order, locked fingerprint, one-shot final holdout, explicit approval and rollback. Neither gets raw broker authority.
 
 ## CI versus controlled broker evidence
 
-Public CI runs credential-free software/replay/research/governance/security checks. Actual Windows MT5 acquisition and broker execution require controlled environment evidence with credentials outside the repository.
+Public CI is credential-free software evidence. Windows MT5 acquisition, cross-machine coordination and DEMO execution need controlled environment evidence with secrets outside the repository.
 
 ## Evidence reporting
 
 ```text
-Unit                       PASS / count
-Replay chronology           PASS / count
-Trade Manager replay        PASS / count / realism
-Execution stress            PASS / scenarios
-Walk-forward chronology     PASS / windows
-Dataset identity            PASS / dataset_sha256
-Portable dataset bundle     PASS / manifest + file hashes
-MT5 acquisition software    PASS / exact-count + spread provenance
-Windows MT5 real-history    PENDING/PASS
-Evidence manifest integrity PASS / hashes
-Fresh-machine restore       PENDING/PASS
-DEMO execution              PENDING/PASS
+Unit / deterministic CI       PASS / count
+Replay chronology              PASS
+Stress / walk-forward          PASS / declared assumptions/windows
+Dataset identity               PASS / dataset_sha256
+Portable dataset bundle        PASS / bundle manifest SHA
+MT5 acquisition software       PASS / exact-count + spread provenance
+Evidence manifest              PASS / input + manifest SHA
+Immutable evidence package     PASS / package SHA
+Windows MT5 real history       PENDING/PASS
+Fresh-machine restore          PENDING/PASS
+DEMO execution                 PENDING/PASS
 ```
 
-Do not mark pending evidence as PASS.
-
-Current deterministic checkpoint after historical acquisition adapter: **178 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic checkpoint after evidence packages: **183 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Release-blocking failures
 
 At minimum:
 
 - future-data leakage;
-- hidden validation tuning/final-holdout bypass;
-- dataset identity/tamper verification failure;
-- historical acquisition silently accepting fewer bars than declared;
-- historical acquisition inventing zero/current-live spread when historical spread is unavailable;
-- duplicate raw MT5 acquisition client that bypasses completed-candle semantics;
-- evidence/bundle leaking authority-bearing secrets;
+- optional confluence becoming hidden hard gate;
+- favorable ambiguity guessing;
+- stress rewriting structural geometry/original R;
+- hidden walk-forward tuning or holdout bypass;
+- dataset/evidence/package hash inconsistency accepted;
+- evidence package accepting a mismatched dataset bundle;
+- historical acquisition silently shrinking sample or inventing spread;
+- credential/financial-secret leakage;
 - centralized execution/DEMO guard bypass;
 - duplicate/wrong-account broker write;
-- unknown exposure treated as zero;
-- controller split-brain/stale epoch;
-- daily-loss/original-R corruption;
+- split-brain controller write;
 - critical restart-state loss;
-- autonomous self-promotion/broker bypass;
-- optional confluence acting as hidden hard gate;
-- favorable same-bar guessing;
-- stress model rewriting structural geometry/original R.
+- autonomous self-promotion/broker bypass.
 
 ## Explicit non-goals
 
-Testing must not claim profitability from software correctness, mark docs VERIFIED because Markdown is complete, present FakeReader/synthetic fixtures as real broker-history proof, or replace required real historical/DEMO evidence with mocks.
+Software correctness is not profitability proof. Synthetic fixtures are not real-market validation. Evidence packages are not broker statements and do not turn modeled P/L into realized P/L.
 
 ## Open questions
 
 - final CI coverage/static/security thresholds;
-- controlled Windows/MT5 historical acquisition test matrix/source-version convention;
-- evidence-package persistence/directory/publication tests;
-- real-data walk-forward window/sample requirements;
+- controlled Windows/MT5 historical acquisition matrix;
+- higher-level evidence catalog/publication convention;
+- real-data walk-forward sample requirements;
 - historical PRE_CLOSE/session integration;
 - empirical execution-friction calibration;
-- final controlled DEMO certification steps;
-- long-duration forward-evidence requirement;
-- optional-confluence evidence threshold.
+- final DEMO certification/forward-evidence requirement;
+- optional-confluence retention threshold.
