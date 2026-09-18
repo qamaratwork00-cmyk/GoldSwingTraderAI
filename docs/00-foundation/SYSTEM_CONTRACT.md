@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — System Contract
 
 **Status:** PROVISIONAL  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** Highest-level behavioural contract
 
 ## Core contract
@@ -83,7 +83,9 @@ A high strategy score cannot override:
 - controller ownership uncertainty;
 - unsafe execution conditions.
 
-Initial account profiles and risk boundaries are owned by `../30-risk-execution/RISK_CONTRACT.md`; current V1 uses SMALL `$100–$299`, MEDIUM `$300–$999`, NORMAL `$1,000+`, one independently risk-bearing Gold position (`0/1`), UTC risk-day accounting, governed manual-reset semantics and broker-aware all-in sizing.
+Initial account profiles and risk boundaries are owned by `../30-risk-execution/RISK_CONTRACT.md`; current V1 uses SMALL for **any positive DayStartEquity below `$300`**, MEDIUM `$300–$999.99`, NORMAL `$1,000+`, one independently risk-bearing Gold position (`0/1`), UTC risk-day accounting, governed manual-reset semantics and broker-aware all-in sizing.
+
+There is no arbitrary `$100` minimum account floor. A positive SMALL account is judged by actual executable minimum-lot risk geometry, hard risk ceiling, margin, daily lock, exposure/capacity and execution safety rather than by an extra balance threshold.
 
 ## V1 environment contract
 
