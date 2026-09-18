@@ -13,7 +13,7 @@ from math import ceil, floor
 
 from goldswingtraderai.decisions.trade_plan import PlanState, TradePlan
 from goldswingtraderai.domain.enums import HardDecision
-from goldswingtraderai.domain.market import MarketSnapshot
+from goldswingtraderai.domain.market import MarketSnapshot, SymbolSpec
 from goldswingtraderai.risk.state import (
     CooldownDecision,
     EpisodeRiskState,
@@ -94,6 +94,11 @@ class RiskContext:
     fresh_structural_event: bool
     exposure: ExposureSnapshot = ExposureSnapshot()
     friction: RiskFriction = RiskFriction()
+    broker_required_margin: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.broker_required_margin is not None and self.broker_required_margin < 0:
+            raise ValueError("broker required margin cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +117,8 @@ class RiskEvaluation:
     all_in_risk_pct: float | None
     spread_money_diagnostic: float | None
     estimated_margin: float | None
+    broker_required_margin: float | None
+    margin_verified: bool
     day: RiskDayMetrics | None
 
     @property
@@ -321,11 +328,14 @@ def evaluate_risk(
             all_in_pct=risk_pct,
         )
 
+    # This formula is only a diagnostic estimate because CFD/Gold margin modes can
+    # be broker-specific. A supplied MT5 order_calc_margin result is authoritative.
     estimated_margin = entry * spec.contract_size * volume / market.account.leverage
-    if estimated_margin > market.account.margin_free + 1e-9:
+    required_margin = context.broker_required_margin
+    if required_margin is not None and required_margin > market.account.margin_free + 1e-9:
         return _result(
             HardDecision.BLOCK,
-            "ESTIMATED_MARGIN_INSUFFICIENT",
+            "MARGIN_INSUFFICIENT",
             profile=profile,
             policy=policy,
             day=day,
@@ -336,6 +346,8 @@ def evaluate_risk(
             all_in_money=all_in_money,
             all_in_pct=risk_pct,
             estimated_margin=estimated_margin,
+            broker_required_margin=required_margin,
+            margin_verified=True,
         )
 
     spread_ticks = market.quote.spread_price / spec.tick_size
@@ -354,6 +366,8 @@ def evaluate_risk(
         all_in_pct=risk_pct,
         spread_money=spread_money,
         estimated_margin=estimated_margin,
+        broker_required_margin=required_margin,
+        margin_verified=required_margin is not None,
     )
 
 
@@ -361,7 +375,7 @@ def _choose_volume(
     raw_volume: float,
     all_in_per_lot: float,
     equity: float,
-    spec,
+    spec: SymbolSpec,
     policy: ProfilePolicy,
 ) -> tuple[float | None, RiskBand]:
     candidates = _volume_candidates(raw_volume, spec.volume_min, spec.volume_max, spec.volume_step)
@@ -420,6 +434,8 @@ def _result(
     all_in_pct: float | None = None,
     spread_money: float | None = None,
     estimated_margin: float | None = None,
+    broker_required_margin: float | None = None,
+    margin_verified: bool = False,
 ) -> RiskEvaluation:
     return RiskEvaluation(
         decision=decision,
@@ -436,5 +452,7 @@ def _result(
         all_in_risk_pct=all_in_pct,
         spread_money_diagnostic=spread_money,
         estimated_margin=estimated_margin,
+        broker_required_margin=broker_required_margin,
+        margin_verified=margin_verified,
         day=day,
     )
