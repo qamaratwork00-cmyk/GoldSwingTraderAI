@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Final Build Prompt
 
 **Status:** PROVISIONAL — FINAL HANDOFF CANDIDATE  
-**Version:** 0.6-design  
+**Version:** 0.7-design  
 **Location:** `docs/` root. This is a whole-project implementation handoff, not a competing behavioural authority.
 
 ## Role
@@ -16,10 +16,11 @@ Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for large implementation 
 2. authoritative topic document for the feature
 3. `docs/90-governance/DESIGN_DECISIONS.md`
 4. `docs/90-governance/OPEN_QUESTIONS.md`
-5. `docs/60-engineering/MODULE_STRUCTURE.md`
-6. `docs/CODER_GUIDE.md`
-7. operator/testing/release supporting docs
-8. this prompt as summary/handoff only
+5. `docs/60-engineering/CODING_STANDARD.md` for source-code quality/complexity/dependency rules
+6. `docs/60-engineering/MODULE_STRUCTURE.md`
+7. `docs/CODER_GUIDE.md`
+8. operator/testing/release supporting docs
+9. this prompt as summary/handoff only
 
 If authoritative documents conflict, resolve the documentation contradiction before coding the affected behaviour. Never silently guess a critical rule.
 
@@ -48,6 +49,40 @@ If authoritative documents conflict, resolve the documentation contradiction bef
 - One active execution controller per managed account/symbol.
 - Persistent risk/order/trade/opportunity/research/learning state survives restart and laptop migration.
 - Research/learning/invention cannot silently self-promote or bypass hard safety.
+
+## Frozen coding and implementation style
+
+The implementation must obey `docs/60-engineering/CODING_STANDARD.md`, which is **FROZEN FOR INITIAL IMPLEMENTATION**.
+
+Primary engineering objective:
+
+> **Use the minimum clear production-grade code that fully expresses the required behaviour and safety. Keep the runtime light, explicit, optimized enough for the real workload, professionally commented and easy to audit. Do not build unnecessary bulk.**
+
+Mandatory implementation rules:
+
+- target Python 3.11+;
+- standard library first; keep runtime dependencies minimal;
+- use the official `MetaTrader5` package for terminal integration;
+- do not add pandas/web frameworks/ORM/task queues/ML stacks to the live runtime without a real requirement;
+- keep heavier research dependencies isolated from production runtime;
+- prefer pure typed functions for deterministic market/risk/math calculations;
+- use classes only where real state/resource/lifecycle ownership exists;
+- use dataclasses/enums/typed IDs where they protect domain semantics; do not wrap every primitive unnecessarily;
+- build one verified snapshot and reuse derived facts rather than repeatedly hitting MT5 or recalculating the same EMA/ATR/structure facts in multiple desks;
+- a fresh execution read remains mandatory where the execution contract requires it;
+- avoid both a giant multi-thousand-line `bot.py` and hundreds of trivial micro-files;
+- do not create speculative Factory/Service/Manager abstraction layers;
+- comments/docstrings explain **why**, chronology, safety invariants and broker quirks; do not narrate obvious syntax;
+- no broad silent exception swallowing; convert boundary failures into explicit safe states/reasons;
+- keep logs concise/structured and redact authority-bearing secrets;
+- keep configuration/policy values centralized; no scattered magic trading/risk constants;
+- performance work should remove duplicate reads/calculations and unbounded work before attempting clever micro-optimization;
+- tests protect frozen behaviour, safety and regressions rather than padding test counts;
+- safety code should remain deliberately boring and step-by-step rather than clever/metaprogrammed.
+
+Before completing each phase, review code for dead code, duplicate calculations, unnecessary abstraction, mixed-responsibility modules, vague names, needless dependencies, silent exception handling, missing safety comments and noisy/sensitive logging.
+
+Do **not** weaken a documented behaviour or safety rule merely to keep the source shorter.
 
 ## Positive DEMO guard — V1
 
@@ -333,6 +368,8 @@ Do not:
 - allow research/AI to self-promote or modify hard safety;
 - generate/eval/exec arbitrary autonomous Python;
 - leak financial-authority secrets;
+- introduce unnecessary abstractions/dependencies/frameworks that make the runtime harder to audit or operate;
+- duplicate expensive market calculations/MT5 reads when a verified shared result already exists;
 - treat calibration/ordinary implementation choices as reasons to stall the entire build.
 
 ## Large implementation sequence
@@ -365,6 +402,7 @@ After every coherent phase, code, tests and relevant documentation must agree be
 - Backup existence is not recovery proof; fresh-machine restore must be tested.
 - Learning/promotion must prove production cannot silently mutate.
 - Dashboard/reason traces are tested behaviour, not decoration.
+- Passing tests does not excuse unnecessary complexity that violates the frozen Coding Standard.
 
 ## Implementation readiness
 
