@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.1-design
+**Version:** 1.2-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -54,6 +54,17 @@ NORMAL   1.0–2.0%      >2.0–3.5%        4%               7%
 
 **Resolved V1 capacity:** one independently risk-bearing Gold position (`0/1`); external Gold exposure blocks new bot entry.
 
+**Resolved daily safety P/L:** daily lock is driven by cash-flow-adjusted account-equity change:
+
+```text
+AccountSafetyPL
+= CurrentVerifiedEquity
+- DayStartEquity
+- NetNonTradingCashFlowSinceDayStart
+```
+
+Floating drawdown therefore counts immediately. Bot strategy-performance P/L remains separate from account-safety P/L. Manual reset creates a new audited risk-cycle reference while cumulative UTC-day P/L remains visible.
+
 **Resolved manual reset:** OFF by default; if enabled, max one `R,R` reset per UTC day, only from `LOSS_LOCKED`, with cumulative P/L/history preserved.
 
 **Resolved cooldown:** one ordinary loss does not trigger global cooldown; one fresh same-episode re-entry maximum; second same-episode loss locks that episode; 3 consecutive closed bot losses trigger minimum 30-minute cooldown plus fresh completed M15 context/fresh opportunity requirement.
@@ -62,8 +73,8 @@ Remaining risk questions:
 
 - Emergency safety ceiling and aggregate-risk semantics for future multi-position design.
 - Policy for accounts below `$100`.
-- Exact slippage-reserve model and commission treatment by broker/account type.
-- Exact realized/floating P/L accounting formula for applying daily locks/reset reference.
+- Exact slippage-reserve model and commission treatment by broker/account type beyond costs already represented in broker equity/executable geometry.
+- Exact classification of unusual broker balance/credit adjustments as trading versus non-trading cash flow.
 - Exact keyboard timing window for `R,R`.
 - Exact drawdown-aware target-band reduction curve.
 - Emergency maximum-trade/runaway circuit-breaker value.
@@ -73,6 +84,22 @@ Remaining risk questions:
 ## Session / news / position holding
 
 **Resolved V1 holding policy:** flatten managed Gold before daily XAU break/weekend closure.
+
+**Resolved initial close/reopen timing:**
+
+```text
+Daily break:
+T-20m no new entry
+T-10m mandatory flatten
+Reopen: normalized conditions + 1 clean completed M5
+
+Weekend:
+T-60m no new entry
+T-30m mandatory flatten
+Reopen: gap assessment + normalized conditions + 2 clean completed M5
+```
+
+Timing is relative to verified broker XAU session schedule, not a guessed fixed clock.
 
 **Resolved initial news policy:**
 
@@ -86,20 +113,26 @@ Known linked TIER 1 clusters remain blocked through final critical item +15 min.
 
 Remaining session/news questions:
 
-- Exact PRE_CLOSE no-new-entry and mandatory-flatten lead time.
-- Exact REOPEN_WARMUP evidence/fresh-candle requirements.
 - Final production event provider(s), freshness TTL and provider-specific mapping table.
 - Detailed handling of unusual long-duration speeches/unscheduled event classification.
 - Future research-backed changes, if any, to frozen initial event tiers/windows.
 - Exact holiday/liquidity-caution adjustments, if any, to soft scoring.
+- Future research-backed changes, if any, to initial close/reopen timing.
 
 ## Execution / broker safety
 
-- Exact price-drift and spread limits by broker/volatility context.
+**Resolved initial spread policy:** use healthy broker/symbol spread baseline. `SpreadRatio <=1.50` normal; `>1.50–2.25` elevated with full revalidation but not automatic block; `>2.25` block current entry. Independent guard blocks if spread exceeds 25% of approved entry-to-structural-SL price distance.
+
+**Resolved initial price-drift policy:** adverse drift normalized by planned stop distance. `<=10%` normal revalidation; `>10–20%` elevated full revalidation; `>20%` blocks current Execution Intent/returns to WAIT when thesis survives. Risk/stop/target-room/chase invalidation blocks regardless of ratio.
+
+Remaining execution questions:
+
+- Exact healthy-spread rolling sampling window, minimum valid sample count and persisted-baseline expiry.
 - Exact DEMO-to-future-REAL approval/config mechanism; REAL uses same centralized gate/engine.
 - Exact execution-controller/lease mechanism, timeout/clock/failover semantics and coordination store.
 - Exact broker comment/magic/lineage conventions.
 - Exact retry policy for safe read-only/before-submit operations; irreversible ambiguous writes remain no-blind-retry.
+- Future research-backed changes, if any, to initial spread/drift bands.
 
 ## Persistence / backup / migration
 
