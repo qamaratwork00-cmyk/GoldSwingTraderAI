@@ -1,77 +1,52 @@
 # GoldSwingTraderAI — Technical Structure and Levels
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-implementation-baseline  
 **Authority:** Support/resistance zones, structural level lifecycle, range geometry, location quality and target-room context.  
 **Depends on:** `CANDLE_STRUCTURE.md`, `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
 
-This document defines how confirmed market structure is converted into usable technical zones and location context. It does **not** redefine swing, BOS or MSS semantics; those remain owned by `CANDLE_STRUCTURE.md`.
-
-Core distinction:
+This document defines how confirmed market structure is converted into usable technical zones and location context. It does **not** redefine swing, BOS or MSS semantics.
 
 > **Structure tells what the market is doing. Location tells where current price stands relative to meaningful structure.**
 
+## Phase 3 implementation checkpoint
+
+Implemented in:
+
+```text
+src/goldswingtraderai/intelligence/technical.py
+```
+
+The current baseline consumes an existing `StructureReport` + `QuantReport`; it never re-runs candle structure or ATR itself.
+
+It publishes:
+- adaptive support/resistance zones derived from confirmed/protected swings;
+- zone side/state/quality/source count/protected-source flag;
+- compatible-zone merging to reduce double counting;
+- nearest support/resistance;
+- BUY and SELL location categories;
+- BUY/SELL target-room distance;
+- equilibrium where both sides exist;
+- structural conflict flag;
+- evidence coverage.
+
+Current numerical values in `TechnicalConfig` are initial implementation defaults for replay calibration, not frozen market truth.
+
 ## Zones, not exact lines
 
-Support/resistance should be represented as adaptive price zones rather than single-price certainties. Zone width may use:
+Support/resistance is represented as volatility/tick-aware zones rather than exact-price certainty. Baseline width uses:
 
-- volatility/ATR;
-- swing geometry;
-- reaction-candle range;
-- clustering of repeated reactions;
-- displacement origin;
-- broker tick/point precision.
+```text
+max(broker tick-size floor, ATR fraction)
+```
 
-A fixed-dollar or fixed-pip width is not the intended design.
+Confirmed/protected swing geometry is the source. Future validated sources may include role-reversed break boundaries, session levels and displacement-origin zones without changing swing semantics here.
 
-## Technical level types
+## Zone quality and lifecycle
 
-The Technical Structure engine may publish:
-
-- confirmed/protected/external swing zones;
-- prior qualified-break/BOS boundaries;
-- failed-break boundaries;
-- range high, range low and equilibrium;
-- prior-day/session high/low as technical reference facts;
-- repeated support/resistance reaction zones;
-- displacement-origin reaction areas.
-
-Liquidity-specific interpretations such as equal highs/lows, sweep zones, FVG and qualified Order Blocks are owned by `LIQUIDITY_AND_SMC.md`.
-
-## Zone quality
-
-Each zone should expose bounded quality evidence such as:
-
-- structural significance;
-- timeframe relevance;
-- freshness;
-- number and quality of reactions;
-- displacement produced from the zone;
-- whether it caused or supported a qualified break;
-- penetration/consumption history;
-- higher-timeframe overlap;
-- current validity.
-
-Exact weights are not frozen.
-
-## Freshness and consumption
-
-A zone is not strengthened indefinitely by repeated touches. The engine should consider:
-
-- depth of penetration;
-- number of meaningful tests;
-- time spent inside the zone;
-- completed closes through it;
-- quality of recovery/rejection;
-- whether newer structure supersedes it.
-
-Repeated use may weaken or consume a level.
-
-## Zone lifecycle
-
-Provisional states:
+Typed lifecycle baseline includes:
 
 ```text
 ACTIVE
@@ -83,57 +58,21 @@ CONSUMED
 STALE
 ```
 
-A broken level should not simply disappear. Role-transition examples include:
+The initial implementation focuses on current structural zones and bounded quality. Richer chronological transition/consumption logic remains a replay-calibration extension and must not be backfilled using future knowledge.
 
-```text
-RESISTANCE → BROKEN_UP → RETEST_CANDIDATE → ACCEPTED_AS_SUPPORT
-```
+Quality is influenced by source significance, protected status and merged source count rather than treating many nearby levels as independent proof.
 
-or:
+## Compatible zones and conflict
 
-```text
-RESISTANCE → BROKEN_UP → FAILED_BREAK → RESISTANCE_RECLAIMED
-```
+Nearby zones of the same side may be merged into a composite zone using ATR-aware tolerance. Opposing support/resistance is not blindly merged.
 
-The exact transition criteria remain research/calibration items.
-
-## Composite zones and conflict
-
-Compatible overlapping zones may be represented as one composite zone to reduce double-counting, for example:
-
-```text
-H1 support + M15 support + BOS retest
-→ COMPOSITE SUPPORT
-```
-
-Opposing zones must not be merged blindly. Meaningful overlap between support and resistance may be reported as a `STRUCTURAL_CONFLICT_ZONE`.
+When price is effectively constrained by nearby meaningful structure on both sides, the report can expose structural conflict rather than manufacturing directional certainty.
 
 ## Location Engine
 
-The Location Engine should evaluate BUY and SELL location independently.
+BUY and SELL location are evaluated independently using distance to supporting structure, opposing structure, ATR normalization and available target room.
 
-Typical BUY questions:
-
-- Is price near meaningful support/protected structure?
-- Is price inside a valid retest/reclaim area?
-- How much room remains to opposing structure?
-- Is the entry extended/chased relative to the active leg?
-- Is price directly below a major target/resistance area?
-
-SELL logic is the directional inverse.
-
-Suggested outputs:
-
-- BUY Location Score;
-- SELL Location Score;
-- nearest meaningful support;
-- nearest meaningful resistance;
-- target-room estimate;
-- extension state;
-- structural-conflict state;
-- concise reasons/counter-reasons.
-
-Human-facing location categories may include:
+Typed categories:
 
 ```text
 EXCELLENT
@@ -141,118 +80,88 @@ GOOD
 NEUTRAL
 POOR
 DANGEROUS
+UNKNOWN
 ```
 
-These are soft market evidence, not universal hard gates.
-
-## Range context
-
-The engine should identify usable range geometry when appropriate:
-
-- range high;
-- range low;
-- equilibrium/mid-area;
-- internal rotations;
-- breakout boundaries.
-
-The middle of a mature range is usually low-quality location, while range edges may support family-specific reversal or breakout logic.
+These are soft evidence. A poor location may matter strongly to a pullback family while a breakout family may interpret the same resistance area as its reference level.
 
 ## Target-room context
 
-Location should publish remaining structural room toward:
+The desk publishes remaining room toward the nearest meaningful opposing structure. This is a factual input for strategy/Trade Plan and does not decide broker TP placement.
 
-- the nearest material obstacle;
-- the primary structural objective;
-- the next higher-timeframe/external objective where known.
-
-These facts support the Trade Plan and Target Desk. This document does not decide broker TP placement.
-
-## Strategy-aware interpretation
-
-The same zone can mean different things for different families.
-
-Example: a major resistance zone may be:
-
-- poor BUY location for `TREND_PULLBACK_CONTINUATION`;
-- useful breakout reference for `BREAKOUT_EXPANSION` if acceptance occurs beyond it;
-- strong SELL context for `FAILED_BREAKOUT_REVERSAL` if acceptance fails.
-
-Therefore the Location Engine publishes facts/quality; strategy families apply family semantics.
+Future target hierarchy remains owned by `../20-trading-decisions/TRADE_PLAN.md`.
 
 ## Multi-timeframe hierarchy
 
-Typical context:
+Each timeframe produces its own report:
 
 ```text
-H4  major macro zones / external boundaries
+H4  major context
 H1  directional structural zones
-M15 working opportunity/location zones
-M5  execution/local zones
+M15 primary opportunity/location
+M5  local/timing location
 ```
 
-Higher-timeframe zones provide stronger context but are not automatic vetoes for all strategies.
+`intelligence/snapshot.py` keeps these reports separate inside one `IntelligenceSnapshot`; lower-timeframe zones do not overwrite higher-timeframe zones.
 
-## Outputs
+## Runtime integration
 
-The Technical Structure / Location desk should expose at least:
+```text
+StructureReport + QuantReport + current mid price + tick size
+→ TechnicalReport
+→ strategy/decision consumers
+```
 
-- active zones with IDs, bounds, type, timeframe and state;
-- zone quality/freshness/consumption;
-- current range state where applicable;
-- BUY/SELL Location scores;
-- nearest opposing/supporting structure;
-- target-room facts;
-- extension/chase context supplied to timing;
-- structural-conflict flags;
-- reasons/counter-evidence.
+No MT5 query, risk sizing or execution permission exists here.
 
 ## Failure behaviour
 
-If required structural source data is invalid, the desk returns UNKNOWN/DEGRADED rather than inventing levels. Missing optional zones do not become zero score by default.
+If structure or ATR evidence is unavailable, outputs degrade through empty/UNKNOWN/coverage semantics rather than inventing levels. Missing optional zones are not automatically negative evidence.
 
-## Replay and persistence
+## Replay requirements
 
-Zone creation, break, reclaim and stale transitions must be chronological and reproducible from information available at the time. Rebuilt state after restart must not expose future-confirmed structure early.
+Zone creation/merge/transition must remain chronological. Future richer lifecycle logic must preserve when each source swing or broken level became knowable.
 
 ## Dashboard visibility
 
-The main dashboard should show only compact location information, for example:
+Compact future example:
 
 ```text
-Location       GOOD BUY
+Location        GOOD BUY
 Nearest Support 4312–4315
 Nearest Resist  4346–4349
 Target Path     OPEN
 Conflict        LOW
 ```
 
-Detailed zone maps belong in diagnostics/research.
+## Tests required / current evidence
 
-## Tests required
-
-- zone lifecycle transitions;
-- role reversal after qualified breaks;
-- repeated-test weakening/consumption;
-- multi-timeframe zone separation;
-- composite-zone double-count protection;
-- conflict-zone handling;
+Required:
+- adaptive zone construction;
+- compatible-zone merge/double-count protection;
+- role reversal/lifecycle when implemented;
+- repeated-test weakening/consumption when implemented;
+- multi-timeframe separation;
+- conflict handling;
 - target-room calculations;
 - deterministic replay/rebuild.
 
+Phase-3 deterministic baseline coverage exists in `tests/test_technical_liquidity.py` and unified integration in `tests/test_intelligence_snapshot.py`.
+
 ## Explicit non-goals
 
-This engine must not:
-
+This desk must not:
 - redefine BOS/MSS or swing confirmation;
 - interpret FVG/OB/sweeps as its own concepts;
 - place orders;
-- make location a universal hard trade gate;
+- make location a universal hard gate;
 - convert premium/discount alone into BUY/SELL authority.
 
-## Open questions
+## Open calibration questions
 
-- exact zone-width normalization;
-- exact zone-quality weights;
-- exact consumption/decay thresholds;
-- exact family-specific location influence;
-- exact composite-zone merge tolerance.
+- zone-width ATR fraction/tick floor;
+- zone-quality weighting;
+- merge tolerance;
+- lifecycle consumption/decay rules;
+- family-specific location influence;
+- whether additional level sources materially improve results without duplicate evidence.
