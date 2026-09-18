@@ -12,7 +12,7 @@ from enum import StrEnum
 
 from goldswingtraderai.domain.enums import BreakState, Direction, SwingRole, SwingSide, Timeframe
 from goldswingtraderai.domain.market import Candle
-from goldswingtraderai.intelligence.candle_structure import BreakEvent, StructureReport, SwingPoint
+from goldswingtraderai.intelligence.candle_structure import StructureReport, SwingPoint
 from goldswingtraderai.intelligence.indicators import QuantReport
 
 
