@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from scripts.scan_financial_secrets import scan_text
+import importlib.util
+from pathlib import Path
+
+_SCANNER_PATH = Path(__file__).resolve().parents[1] / "scripts" / "scan_financial_secrets.py"
+_SPEC = importlib.util.spec_from_file_location("scan_financial_secrets", _SCANNER_PATH)
+assert _SPEC is not None and _SPEC.loader is not None
+_SCANNER = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_SCANNER)
+scan_text = _SCANNER.scan_text
 
 
 def test_scanner_detects_credential_assignment() -> None:
