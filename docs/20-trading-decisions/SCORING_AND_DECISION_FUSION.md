@@ -1,8 +1,9 @@
 # GoldSwingTraderAI — Scoring and Decision Fusion
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
-**Authority:** Analytical scoring and trade-decision fusion
+**Version:** 0.2-design  
+**Authority:** Analytical scoring, BUY/SELL thesis fusion, conflict handling and final decision/blocker attribution.  
+**Depends on:** `STRATEGY_FLOOR.md`, `ENTRY_TIMING.md`, `TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Core principle
 
@@ -10,24 +11,24 @@ Specialist desks operate in parallel. Final trade quality is not a simple averag
 
 Safety/risk are excluded from weighted market scoring and retain separate hard authority.
 
-## Core outputs
+## Core analytical outputs
 
 The fusion system maintains at least:
 
-- BUY Thesis
-- SELL Thesis
-- Directional Edge
-- Conflict Score
-- Red-Team Objection
-- Opportunity Score
-- Entry Timing Score
-- Evidence Coverage
-- Confidence
-- Final Trade Score for operator visibility
+- BUY Thesis;
+- SELL Thesis;
+- Directional Edge;
+- Conflict Score;
+- Red-Team Objection;
+- Opportunity Score;
+- Entry Timing Score;
+- Evidence Coverage;
+- Confidence;
+- Final Trade Score for operator visibility.
 
 ## Independent BUY and SELL theses
 
-BUY and SELL are scored independently from the same market snapshot.
+BUY and SELL are scored independently from the same verified market snapshot.
 
 Example:
 
@@ -51,25 +52,25 @@ A high leading score with equally strong opposition is conflict, not conviction.
 
 To reduce double-counting, related evidence should be grouped conceptually:
 
-- Price Action: candle behaviour, structure, displacement.
-- Location: liquidity, FVG/OB context, premium/discount, session/HTF levels.
-- Momentum/Expansion: volatility state, expansion phase, bounded indicator context.
-- Context: H4/H1, session, macro/fundamental context.
-- Strategy: production-family hypotheses.
-- Timing: retest/reclaim, entry structure, chase risk, immediate momentum/location.
+- Price Action: candle behaviour, structure, displacement;
+- Location: technical zones, liquidity, FVG/OB, premium/discount, session/HTF levels;
+- Momentum/Expansion: volatility state, expansion phase, bounded indicators;
+- Context: H4/H1, session, macro/fundamental context;
+- Strategy: production-family hypotheses;
+- Timing: retest/reclaim, entry structure, chase, immediate momentum/location.
 
-Correlated evidence may add a bounded synergy bonus; it must not be counted repeatedly as independent certainty.
+Correlated evidence may add bounded synergy but must not be counted repeatedly as independent certainty.
 
 ## Opportunity Score
 
-Answers: **Is this trade idea worth pursuing?**
+Answers: **Is this market idea worth pursuing?**
 
 Typical components:
 
 - structure quality;
 - location quality;
 - expansion potential;
-- target quality;
+- target/path quality;
 - strategy evidence;
 - liquidity context;
 - HTF/regime suitability.
@@ -88,76 +89,189 @@ Typical components:
 - current location;
 - momentum phase;
 - chase/extension risk;
-- freshness/executability.
+- freshness/executability context.
 
 ## Unknown evidence
 
 Unavailable optional evidence must not automatically become `0`.
 
-Example:
+Examples:
 
-- Optional macro opinion unavailable → mark UNKNOWN and adjust coverage/weighting.
-- Scheduled-news safety unknown when policy requires verification → hard BLOCK outside the score engine.
+- optional macro opinion unavailable → `UNKNOWN`, reduce coverage/reweight as defined;
+- required scheduled-news safety unavailable → hard block outside the score engine;
+- missing optional FVG/OB → absent/unknown support, not automatic strategy failure.
 
 ## Conflict and Red Team
 
 The system explicitly measures contradiction. Red Team challenges the leading thesis with concrete evidence such as:
 
 - credible opposite structure;
-- failed breakout risk;
+- failed-breakout risk;
 - late/chased entry;
 - insufficient target room;
 - exhaustion/reversal evidence;
-- duplicated/correlated supporting evidence.
+- duplicated/correlated support.
 
-The Red Team may lower confidence or recommend WAIT but may not invent arbitrary blockers.
+Red Team may lower confidence or recommend WAIT but may not invent arbitrary blockers.
 
 ## Score bands
 
 Exact thresholds remain open to calibration. Initial conceptual bands:
 
-- 0–49: weak/no edge
-- 50–64: developing/watch
-- 65–74: valid/armable
-- 75–84: strong
-- 85–100: exceptional
+- 0–49: weak/no edge;
+- 50–64: developing/watch;
+- 65–74: valid/armable;
+- 75–84: strong;
+- 85–100: exceptional.
 
-These bands are not automatic entry rules. A moderate but valid opportunity with excellent timing may be tradeable, while an exceptional opportunity with poor timing should wait.
+These are not automatic entry rules.
 
 ## Dynamic decision surface
 
-Opportunity and timing should interact without collapsing into one hidden number.
+Opportunity and timing interact without collapsing into one hidden number.
+
+A very strong Opportunity may tolerate merely acceptable timing, while poor timing must not be rescued by a high Opportunity score. Exact decision surface remains open.
+
+## Evidence coverage and confidence
+
+Coverage reports how much expected analytical evidence is trustworthy. Confidence describes how trustworthy a directional/quality score is. They are not the same as score.
+
+A high score with very low coverage is not equivalent to the same score with broad verified evidence.
+
+## Final Trade Score
+
+The operator-facing Final Trade Score may summarize opportunity, timing and directional clarity with bounded conflict/synergy adjustments. It must not hide the component scores or become sole internal authority.
+
+Exact weights/family thresholds are intentionally not frozen and should be calibrated through replay, ablation and forward evidence.
+
+## Final action and authority trace
+
+The final system decision should distinguish at least:
+
+```text
+ENTER BUY
+ENTER SELL
+WAIT
+MISSED
+INVALID
+BLOCKED
+```
+
+The system must also record the authority path that led to the action. A compact conceptual trace:
+
+```text
+Data
+Market / Strategy
+Entry Timing
+Trade Plan
+News Safety
+Risk
+Execution
+```
+
+Each stage should report a result such as `PASS`, `WAIT`, `BLOCK`, `NOT_READY`, `NOT_EVALUATED` or `NOT_REACHED` as appropriate.
+
+## Why-no-trade / blocker attribution
+
+Every final non-entry must have a stable machine-readable reason code plus concise human explanation.
+
+Examples:
+
+```text
+MARKET_NO_EDGE
+DIRECTION_CONFLICT
+OPPORTUNITY_WEAK
+ENTRY_NOT_READY
+ENTRY_EXTENDED
+TARGET_ROOM_POOR
+SETUP_INVALIDATED
+NEWS_BLACKOUT
+DAILY_LOSS_LIMIT_REACHED
+MIN_LOT_UNAFFORDABLE
+SPREAD_TOO_HIGH
+QUOTE_STALE
+PRICE_DRIFT_TOO_HIGH
+POSITION_CAPACITY_FULL
+ORDER_STATE_UNKNOWN
+DATA_STALE
+```
+
+The owning subsystem defines the semantics of hard risk/execution/system codes. Decision Fusion records and exposes them; it does not redefine them.
+
+## Primary and secondary blockers
+
+If multiple hard blockers exist, record a primary blocker according to authority/severity while preserving secondary blockers.
 
 Example:
 
 ```text
-Opportunity 92
-Timing      70
+Primary: DAILY_LOSS_LIMIT_REACHED
+Secondary: NEWS_BLACKOUT, SPREAD_TOO_HIGH
 ```
 
-may still be valid if directional edge is strong and conflict is low.
+Do not hide additional relevant blockers simply because one already prevents entry.
 
-But:
+## Would otherwise trade?
+
+Where the decision state supports a valid counterfactual, record whether all market/timing/plan conditions had otherwise qualified before the hard block.
+
+Example:
 
 ```text
-Opportunity 95
-Timing      25
+Opportunity     87
+Entry           82
+Trade Plan      PASS
+Risk            BLOCK
+Would otherwise trade? YES
 ```
 
-should not be rescued by the opportunity score; the system should normally WAIT.
+This is useful for research attribution but does not bypass the blocker and must not be treated as actual P/L.
 
-## Evidence coverage
+If the market thesis itself is weak, `Would otherwise trade? NO`.
 
-Coverage reports how much of the expected analytical floor has trustworthy evidence.
+## Decision versus system fault
 
-A high score with very low coverage should not be treated as equivalent to the same score with broad verified evidence.
+A normal `WAIT`, `MISSED`, `OPPORTUNITY_WEAK` or expected `NEWS_BLACKOUT` is not automatically a system fault.
 
-## Confidence versus score
+System-health incidents such as stale data, account mismatch or unresolved broker state are reported by the owning subsystem and aggregated by `../60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`.
 
-A desk may have a directional score and a separate confidence value. Score describes direction/quality; confidence describes how trustworthy the desk's current evidence is.
+## Persistence / research
 
-## Final Trade Score
+Decision traces, reason codes, blockers and `Would otherwise trade?` attribution should be journaled with Opportunity/Episode/strategy/policy versions. This allows research to distinguish strategy, timing, risk, execution and system-health causes.
 
-The operator-facing Final Trade Score combines opportunity quality, timing quality and directional clarity with bounded conflict/synergy adjustments. It must not hide the component scores or become the sole internal authority.
+## Dashboard visibility
 
-Exact weights and family thresholds are intentionally not frozen yet. They should begin with bounded sensible defaults and be calibrated through replay, ablation and forward evidence rather than guessed permanently.
+The dashboard should show BUY/SELL theses, Opportunity, Entry, Conflict/Coverage, final action, primary reason and a compact authority trace. It must never reduce all non-trades to generic `NO TRADE`.
+
+## Tests required
+
+- independent BUY/SELL thesis conflict cases;
+- optional UNKNOWN evidence not zero;
+- correlation/synergy caps;
+- Opportunity vs Entry separation;
+- WAIT cannot be rescued by high Opportunity when timing is truly poor;
+- reason-code attribution by authority;
+- primary/secondary blockers;
+- `Would otherwise trade?` correctness;
+- normal WAIT not labeled system fault;
+- decision trace persistence/research attribution.
+
+## Explicit non-goals
+
+Decision Fusion must not:
+
+- let score override hard risk/news/broker/data authority;
+- convert every missing optional primitive into bearish/zero evidence;
+- invent hard blockers;
+- silently hide the subsystem that stopped a trade;
+- treat a counterfactual blocked trade as actual execution/P&L.
+
+## Open questions
+
+- initial desk/group weights;
+- maximum synergy bonus;
+- conflict penalty formula;
+- Red-Team calibration;
+- minimum evidence coverage for executable decision;
+- exact Opportunity/Entry decision surface;
+- final reason-code taxonomy/precedence for primary blockers.
