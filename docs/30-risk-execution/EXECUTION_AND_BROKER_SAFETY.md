@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Execution and Broker Safety
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.7-implementation  
-**Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, controller ownership and reconciliation.  
+**Status:** PROVISIONAL — IMPLEMENTED BASELINE + DURABLE COORDINATION FOUNDATION  
+**Version:** 0.8-implementation  
+**Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, controller ownership/fencing, takeover reconciliation and broker reconciliation.  
 **Depends on:** `RISK_CONTRACT.md`, `SESSION_AND_RISK_STATE_MACHINE.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
@@ -11,7 +11,7 @@ This document owns the irreversible broker-write boundary.
 
 > **Analysis may be wrong and lose a trade. Execution safety must not create duplicate, wrong-account, wrong-volume or uncontrolled exposure.**
 
-## Current implementation checkpoint — Phase 7
+## Current implementation checkpoint
 
 Implemented owners:
 
@@ -21,18 +21,19 @@ execution/intent_store.py
 execution/gate.py
 execution/checks.py
 execution/controller.py
+execution/sqlite_coordination.py
 execution/mt5_writer.py
 execution/service.py
 execution/reconcile.py
 ```
 
-Deterministic CI currently proves the centralized gate, one-shot Intent lifecycle, persist-before-send ordering, stale-fencing rejection, no blind retry, OPEN/MODIFY/CLOSE request construction and broker reconciliation behaviour.
+Deterministic CI proves the centralized gate, one-shot Intent lifecycle, persist-before-send ordering, stale-fencing rejection, no blind retry, OPEN/MODIFY/CLOSE request construction, broker reconciliation, durable monotonic controller epochs and reconciliation-gated takeover behaviour.
 
 A successful MT5 `order_send` retcode is treated as **broker acknowledgement, not final truth**. The intent remains unresolved until positions/orders/deals or action-specific broker state verifies the result. Local trade state may not pretend an ambiguous modify/close succeeded.
 
-The current `InMemoryCoordinationStore` exists only for deterministic lease/fencing tests. It is **not** a production cross-laptop backend. A shared backend satisfying the frozen atomic lease + authoritative expiry + monotonic fencing contract is still required before cross-machine failover can be certified.
+`InMemoryCoordinationStore` remains deterministic-test-only. `SQLiteCoordinationStore` now provides transactional acquire/renew/release, one-winner contention and durable monotonic fencing across independent processes opening the same coordination database. This is a software coordination foundation, **not automatic cross-laptop certification**: the actual shared deployment/filesystem locking semantics still require controlled proof.
 
-Live Windows MT5 DEMO execution/fault-injection evidence remains pending; therefore this document is not VERIFIED.
+Live Windows MT5 DEMO execution/fault-injection and real cross-laptop deployment evidence remain pending; therefore this document is not VERIFIED.
 
 ## Governed execution path
 
@@ -209,11 +210,51 @@ monotonic fencing epoch
 fresh ownership verification before every broker write
 ```
 
-The production coordination backend must support atomic acquire/CAS-equivalent semantics, one winner under contention, authoritative expiry/time semantics, monotonic fencing and sufficient durability across process/laptop failure. A local-only file lock is not sufficient.
+The coordination backend must support atomic acquire/CAS-equivalent semantics, one winner under contention, authoritative expiry/time semantics, monotonic fencing and sufficient durability across process/laptop failure. A local-only file lock is not sufficient.
 
-If another valid holder exists, the second instance is Observer for writes. After prior lease expiry a standby may atomically acquire a new epoch, but remains RECOVERING/RECONCILING until durable state and broker truth reconcile and all account/risk/session/execution checks pass.
+### Durable SQLite coordination foundation
 
-A returned stale primary cannot write with an old epoch. Coordination uncertainty prevents irreversible writes while read-only analysis/dashboard may continue.
+`SQLiteCoordinationStore` implements the `CoordinationStore` contract with `BEGIN IMMEDIATE` transactional ownership changes and a separate durable epoch ledger.
+
+Deterministic guarantees now covered:
+
+- independent store instances contending on one database yield exactly one holder;
+- expiry permits a later holder to obtain a strictly higher epoch;
+- graceful release does not reset the epoch ledger;
+- stale holders cannot renew or release a newer holder's lease;
+- persisted lease/epoch integrity is checked;
+- `shared_locking_verified` defaults false and only records an explicit deployment assertion.
+
+The code cannot prove that an arbitrary network/shared filesystem correctly preserves SQLite locking/durability. Cross-laptop use therefore remains uncertified until the exact deployment is fault-tested.
+
+### Takeover is not immediate write authority
+
+If another valid holder exists, the second instance is Observer for writes. If the prior lease expires, a standby may atomically acquire the next epoch, but acquisition returns:
+
+```text
+BLOCK — CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED
+```
+
+The new holder owns the epoch but **cannot perform broker writes yet**. Renewing the lease preserves this blocked takeover state.
+
+Required sequence:
+
+```text
+expired prior holder
+→ standby acquires higher epoch
+→ takeover reconciliation required
+→ restore/verify durable state
+→ query current broker positions/orders/deals
+→ reconcile unresolved Intent/open-trade state
+→ verify account/risk/session/execution facts
+→ freshly verify same holder + same epoch still authoritative
+→ complete_takeover_reconciliation()
+→ CONTROLLER_PRIMARY / write authority may PASS
+```
+
+If ownership is lost or the epoch changes during reconciliation, completion fails and the stale takeover remains unable to write. A returned old primary also fails fresh holder/epoch verification.
+
+Coordination uncertainty prevents irreversible writes while read-only analysis/dashboard may continue.
 
 ## Failure / runtime states
 
@@ -225,6 +266,7 @@ BROKER_REJECTED
 AMBIGUOUS_ACK
 ACCEPTED_VERIFIED
 RECONCILIATION_FAILED
+CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED
 ```
 
 Runtime execution states include `READY`, `DEGRADED`, `RECONCILING`, `BLOCKED`. `RECONCILING` prevents conflicting new writes until uncertainty resolves.
@@ -245,9 +287,13 @@ Expose enough state for operator/audit visibility:
 - reconciliation result;
 - ownership/capacity;
 - controller ID/epoch/lease status;
+- takeover-reconciliation-required state;
+- shared-coordination deployment certification/assertion state;
 - gate primary/secondary reasons.
 
-## Tests required
+## Tests required / current evidence
+
+Deterministic coverage includes:
 
 - centralized gate is the only route to raw irreversible writes;
 - positive DEMO guard composition;
@@ -262,11 +308,20 @@ Expose enough state for operator/audit visibility:
 - restart with `SUBMITTING/ACCEPTED_UNKNOWN` reconciles before new writes;
 - OPEN/MODIFY/CLOSE action-specific reconciliation;
 - manual/foreign ownership protection;
-- two controller contenders yield one holder;
+- multi-instance SQLite contention yields one holder;
+- fencing epoch survives release/reopen and increases monotonically;
+- stale lease cannot renew/release after takeover;
+- expired-lease takeover remains BLOCKED until explicit reconciliation completion;
+- reconciliation completion fails if holder/epoch authority was lost;
 - stale fencing epoch cannot write;
-- coordination outage prevents writes;
-- takeover must reconcile before PRIMARY READY;
-- controlled real MT5 DEMO fault-injection proof before VERIFIED release.
+- coordination outage prevents writes.
+
+Current repository checkpoint after takeover enforcement: **209 tests PASS**, Ruff PASS and financial-secret scan PASS.
+
+Still required before VERIFIED release:
+
+- controlled shared-filesystem/cross-laptop locking and failover proof;
+- controlled real MT5 DEMO takeover/reconciliation/fault-injection proof.
 
 ## Explicit non-goals
 
@@ -274,7 +329,8 @@ Execution must not decide strategy direction, increase risk, redesign structural
 
 ## Remaining implementation / calibration work
 
-- production shared cross-laptop coordination backend satisfying frozen lease/fencing semantics;
+- certify or replace the shared coordination deployment after real cross-laptop fault tests; SQLite code alone is not deployment proof;
+- integrate takeover completion with the final startup/recovery orchestrator so callers cannot mark reconciliation complete prematurely;
 - real MT5 account/symbol/filling/order-check/modify/close DEMO validation;
 - healthy-spread baseline sampling/persistence details;
 - broker-specific magic/comment values and safe read-only retry/backoff configuration;
