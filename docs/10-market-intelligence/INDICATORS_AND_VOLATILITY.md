@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Indicators and Volatility
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-implementation-baseline  
 **Authority:** EMA/RSI/ATR evidence, volatility normalization, momentum phase, compression/expansion quantification, extension/chase and exhaustion metrics.  
 **Depends on:** `CANDLE_STRUCTURE.md`, `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
@@ -11,67 +11,65 @@ Indicators support and normalize price behaviour; they do not replace structure 
 
 > **Indicators explain and quantify market behaviour. Structure remains primary market language.**
 
-## Initial indicator set
+## Phase 3 implementation checkpoint
 
-Initial production-supporting indicators are provisionally:
+Implemented in:
 
-- EMA20;
-- EMA50;
-- RSI;
-- ATR.
+```text
+src/goldswingtraderai/intelligence/indicators.py
+```
 
-Exact periods/thresholds may be calibrated later, but any change must preserve interpretability and avoid indicator filter soup.
+Current baseline periods are:
+
+```text
+EMA fast   20
+EMA slow   50
+RSI        14 (Wilder)
+ATR        14 (Wilder)
+```
+
+These are initial implementation defaults, not permanently frozen profitability assumptions. Research/replay may calibrate them later without turning the system into indicator filter soup.
+
+`IndicatorSeries` is chronological and uses `None` before enough completed history exists. The unified `intelligence/snapshot.py` computes the series once per timeframe and shares ATR with Candle Structure so the same deterministic fact is not redundantly recalculated in normal runtime.
 
 ## EMA evidence
 
-EMA evidence may include:
+EMA evidence includes:
 
 - EMA20 versus EMA50 ordering;
-- slopes;
-- separation/compression;
-- price distance from EMA20/EMA50;
-- pullback depth relative to the active trend leg.
+- current trend-support direction;
+- price distance from the fast EMA for extension context.
 
-`EMA20 > EMA50` is not a BUY signal by itself. EMA may support trend flow but cannot override contrary structural evidence.
+Future bounded improvements may add slope/separation/pullback-depth detail. `EMA20 > EMA50` is never a BUY signal by itself.
 
 ## RSI evidence
 
-RSI should be used for momentum/pressure context, reset behaviour and deterioration—not rigid `>70 SELL` / `<30 BUY` logic.
+RSI is used for momentum/pressure context, not rigid `>70 SELL` / `<30 BUY` reversal logic.
 
-Useful concepts may include:
+The Phase-3 momentum phase uses RSI as one supporting input alongside EMA flow, directional progress, candle body and extension.
 
-```text
-STRONG_BEAR
-BEARISH
-NEUTRAL
-BULLISH
-STRONG_BULL
-EXTREME
-```
-
-Exact numeric bands remain open. Divergence may be researched as supporting evidence but is not standalone authority.
+Divergence remains a future research primitive and is not production authority.
 
 ## ATR and normalization
 
-ATR is a normalization tool for:
+ATR normalizes:
 
 - candle strength;
-- swing significance;
-- zone width;
-- displacement quality;
-- extension/chase;
-- stop-buffer context;
-- target-distance context;
+- swing confirmation/significance;
+- technical zone width;
+- liquidity clustering;
 - volatility regime;
-- spread quality.
+- extension/chase context;
+- future stop/target/spread context.
 
-ATR does not automatically set the final SL or TP.
+ATR does not automatically set final broker SL or TP.
 
 ## Volatility states
 
-Provisional states:
+Current typed states are:
 
 ```text
+UNKNOWN
 QUIET
 NORMAL
 BUILDING
@@ -80,37 +78,34 @@ EXTREME
 DISLOCATED
 ```
 
-`EXTREME` may still be tradeable. `DISLOCATED` indicates market/data/execution quality may be unsafe and can feed hard safety elsewhere.
+The implementation compares current ATR with the median of a rolling ATR context. Baseline ratios are explicit configuration values inside `QuantConfig` so replay/research can calibrate them.
+
+`EXTREME` may still be tradeable. `DISLOCATED` is evidence that later market-data/execution safety may need to block/revalidate.
 
 ## Relative volatility
 
-Absolute Gold movement is not sufficient. Quantification should prefer normalized facts such as:
+The desk prefers normalized facts such as:
 
-- current range / ATR;
-- current range / recent median range;
-- body size / recent median body;
-- ATR percentile over a rolling historical context.
+- current ATR / recent median ATR;
+- latest candle range / ATR through Candle Structure;
+- future percentile/distribution context where validated.
 
-Exact percentile bands remain open.
+Absolute Gold movement alone is not treated as stable market truth.
 
 ## Momentum
 
-The desk should expose independent BUY and SELL momentum evidence from bounded, non-duplicative inputs such as:
+Phase-3 implementation exposes a bounded momentum phase from:
 
-- EMA slope;
-- directional progress;
-- body/range expansion;
-- close efficiency;
+- EMA flow;
+- latest directional progress;
+- body size normalized by ATR;
 - RSI pressure;
-- persistence/follow-through.
+- extension state.
 
-Correlated features should be grouped/capped rather than counted as independent certainty.
-
-## Momentum phase
-
-Provisional momentum phases:
+Typed phases:
 
 ```text
+UNKNOWN
 BUILDING
 EXPANDING
 MATURE
@@ -118,98 +113,57 @@ EXHAUSTING
 REVERSING
 ```
 
-Strong momentum does not automatically mean good entry timing. A mature/extended move can have high momentum and poor entry efficiency.
+Strong momentum does not automatically mean good entry timing.
 
 ## Extension / chase metrics
 
-The desk computes raw extension facts for Entry Timing, including distance from:
-
-- last structural base;
-- breakout/retest level;
-- recent M5/M15 pullback origin;
-- EMA references where useful;
-- current move size relative to ATR;
-- remaining structural target room.
-
-Human state may include:
+The current Quant baseline measures price distance from EMA20 in ATR units and classifies:
 
 ```text
+UNKNOWN
 FRESH
 NORMAL
 EXTENDED
 SEVERELY_EXTENDED
 ```
 
-Chase risk should consider distance already travelled **relative to distance remaining**, not only EMA distance.
+This is only one extension primitive. Later Entry Timing must also consider structural base, breakout/retest location and remaining target room before deciding whether an entry is chased.
 
-## Compression and expansion quantification
+## Compression and expansion
 
-Quantitative compression evidence may include:
-
-- falling ATR;
-- shrinking median range/body;
-- increasing overlap;
-- narrowing local swing amplitude.
-
-Expansion quality may include:
-
-- normalized range/body expansion;
-- close efficiency;
-- directional progress;
-- follow-through.
-
-Candle Structure owns the underlying price-action definition; this desk owns quantitative normalization/support.
+Quant supplies volatility normalization. Candle Structure owns candle-sequence compression/expansion classification. Technical/Strategy consumers may combine those reports but must not double-count the same market event as independent certainty.
 
 ## Exhaustion risk
 
-Potential inputs:
+Current baseline can classify `EXHAUSTING` when a severely extended move loses normalized body efficiency. Future validated inputs may include rejection, follow-through deterioration and target proximity.
 
-- extreme extension percentile;
-- declining body efficiency;
-- increasing opposite wick/rejection;
-- RSI/momentum deterioration;
-- reduced follow-through;
-- target proximity.
-
-Exhaustion remains evidence, not an automatic exit/reversal rule.
+Exhaustion remains evidence, not automatic exit/reversal authority.
 
 ## Spread quality
 
-The desk may expose descriptive spread quality using normalized measures such as spread/ATR or spread/expected move:
-
-```text
-GOOD
-ELEVATED
-POOR
-```
-
-Hard execution permission remains owned by risk/execution documents.
+Hard spread permission is not implemented in this desk. Market-data provides live spread facts; the later execution layer owns the frozen spread-ratio and stop-distance safety rules.
 
 ## Outputs
 
-At minimum:
+`QuantReport` currently publishes:
 
-- BUY Trend Support;
-- SELL Trend Support;
-- BUY Momentum;
-- SELL Momentum;
-- Momentum Phase;
-- Volatility State;
-- ATR/volatility percentile context;
-- Compression Score;
-- Expansion Quality;
-- Extension State;
-- Exhaustion Risk;
-- Spread Quality;
-- confidence/coverage and reasons.
+- timeframe;
+- EMA fast/slow;
+- RSI;
+- ATR;
+- trend support direction;
+- volatility state + ratio;
+- momentum phase;
+- extension state + ATR-normalized extension;
+- evidence coverage.
 
 ## Missing evidence
 
-Unavailable optional indicators are `UNKNOWN`, not score zero. If a required normalization primitive such as ATR is unavailable, dependent outputs should become UNKNOWN/DEGRADED and affected downstream logic must not invent substitutes.
+Unavailable indicators remain `None`/`UNKNOWN`; they are not silently converted to bearish/bullish score zero. Dependent consumers must respect coverage.
 
 ## Multi-timeframe use
 
-Typical use:
+Typical use remains:
 
 ```text
 H4/H1  trend/context support
@@ -219,9 +173,22 @@ M5     timing/momentum/extension
 
 The system must not create an all-timeframe indicator veto matrix.
 
+## Runtime integration
+
+```text
+completed CandleSeries
+→ compute IndicatorSeries once
+→ QuantReport
+→ same ATR series passed to Candle Structure
+→ Technical/Liquidity consume QuantReport
+→ reusable IntelligenceSnapshot
+```
+
+No indicator module queries MT5 directly.
+
 ## Dashboard visibility
 
-Compact example:
+Compact future example:
 
 ```text
 EMA Flow        BUY
@@ -229,18 +196,20 @@ RSI             61 BULLISH
 Volatility      EXPANDING
 Momentum        BUILDING
 Extension       NORMAL
-Exhaustion      LOW
 ```
 
-## Tests required
+## Tests required / current evidence
 
+Required:
 - indicator chronology/no future values;
 - ATR normalization invariance;
 - missing-indicator UNKNOWN handling;
 - volatility-state transitions;
-- extension versus target-room logic;
+- extension logic;
 - correlated-feature double-count protection;
 - quant/candle-structure ownership separation.
+
+Phase-3 tests cover chronological EMA/RSI/ATR, no-future prefix behaviour and shared ATR reuse in `tests/test_indicators_structure.py` and `tests/test_intelligence_snapshot.py`.
 
 ## Explicit non-goals
 
@@ -252,10 +221,10 @@ This desk must not:
 - hard-block trades for one imperfect soft indicator;
 - place orders.
 
-## Open questions
+## Open calibration questions
 
-- exact indicator periods at V1 freeze;
-- exact RSI state boundaries;
-- ATR percentile bands;
-- compression/expansion/exhaustion calibration;
-- exact extension/chase normalization.
+- whether EMA20/EMA50/RSI14/ATR14 remain best after replay;
+- volatility-ratio bands;
+- extension/chase thresholds;
+- future RSI state labels/divergence value;
+- whether percentile-based volatility adds useful information without complexity.
