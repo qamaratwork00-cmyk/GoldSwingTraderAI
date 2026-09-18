@@ -1,8 +1,7 @@
-"""Governed challenger lifecycle with one-shot holdout and explicit promotion approval.
+"""Governed challenger lifecycle with one-shot holdout and explicit approval.
 
-Research candidates may advance through evidence stages but never self-promote or
-gain raw broker authority here. Promotion approval remains an explicit operator/
-governance action outside autonomous discovery.
+Research may advance evidence stages, but this module never grants direct broker
+authority. A locked candidate cannot change semantics and still reuse its holdout.
 """
 
 from __future__ import annotations
@@ -60,15 +59,20 @@ class PromotionRecord:
             _require_utc(self.promoted_at_utc)
         if self.holdout_consumed and not (self.holdout_id or "").strip():
             raise ValueError("consumed holdout requires holdout identity")
-        if self.stage in {PromotionStage.REJECTED, PromotionStage.HOLDOUT_FAILED, PromotionStage.STRESS_FAILED, PromotionStage.DISABLED} and not (self.rejection_reason or "").strip():
+        failed = {
+            PromotionStage.REJECTED,
+            PromotionStage.HOLDOUT_FAILED,
+            PromotionStage.STRESS_FAILED,
+            PromotionStage.DISABLED,
+        }
+        if self.stage in failed and not (self.rejection_reason or "").strip():
             raise ValueError("failed/disabled promotion state requires reason")
         if self.stage is PromotionStage.PROMOTED and self.promoted_at_utc is None:
             raise ValueError("promoted state requires promoted timestamp")
 
     @property
     def broker_authority(self) -> bool:
-        # This registry never grants direct execution authority. Even DEMO canary
-        # must enter through the ordinary Risk/Execution gate.
+        # Even DEMO canary must pass the ordinary Risk/Execution path.
         return False
 
 
@@ -92,7 +96,7 @@ _ALLOWED: dict[PromotionStage, frozenset[PromotionStage]] = {
 
 
 class PromotionRegistry:
-    """Durable challenger lifecycle; autonomous code cannot bypass stages."""
+    """Durable challenger lifecycle; no skipped stages or self-promotion."""
 
     def __init__(self, store: StateStore, scope: str = "default") -> None:
         self._store = store
@@ -100,7 +104,12 @@ class PromotionRegistry:
         if not self._scope:
             raise ValueError("promotion registry scope cannot be empty")
 
-    def create(self, candidate_id: EntityId, policy_version: str, now_utc: datetime) -> PromotionRecord:
+    def create(
+        self,
+        candidate_id: EntityId,
+        policy_version: str,
+        now_utc: datetime,
+    ) -> PromotionRecord:
         _require_utc(now_utc)
         if any(item.candidate_id == candidate_id for item in self.all()):
             raise ValueError("candidate already has a promotion record")
@@ -132,28 +141,43 @@ class PromotionRegistry:
                 return item
         raise KeyError(f"promotion record not found: {candidate_id}")
 
-    def advance(self, candidate_id: EntityId, target: PromotionStage, now_utc: datetime) -> PromotionRecord:
-        """Advance ordinary non-holdout/non-promotion stages in strict order."""
+    def advance(
+        self,
+        candidate_id: EntityId,
+        target: PromotionStage,
+        now_utc: datetime,
+    ) -> PromotionRecord:
+        """Advance ordinary success stages; special/failure stages use dedicated methods."""
         _require_utc(now_utc)
-        if target in {PromotionStage.HOLDOUT_PASSED, PromotionStage.HOLDOUT_FAILED, PromotionStage.PROMOTED, PromotionStage.DISABLED, PromotionStage.ROLLED_BACK}:
+        special = {
+            PromotionStage.LOCKED,
+            PromotionStage.HOLDOUT_PASSED,
+            PromotionStage.HOLDOUT_FAILED,
+            PromotionStage.PROMOTED,
+            PromotionStage.REJECTED,
+            PromotionStage.STRESS_FAILED,
+            PromotionStage.DISABLED,
+            PromotionStage.ROLLED_BACK,
+        }
+        if target in special:
             raise ValueError("target requires its dedicated governed method")
         current = self.get(candidate_id)
         if target not in _ALLOWED[current.stage]:
             raise ValueError(f"invalid promotion transition: {current.stage} -> {target}")
-        reason = None
-        if target in {PromotionStage.REJECTED, PromotionStage.STRESS_FAILED}:
-            raise ValueError("failure transition requires explicit reason")
-        updated = replace(current, stage=target, updated_at_utc=now_utc, rejection_reason=reason)
+        updated = replace(current, stage=target, updated_at_utc=now_utc)
         self._save(updated, f"PROMOTION_STAGE_{target.value}")
         return updated
 
-    def lock(self, candidate_id: EntityId, fingerprint: str, now_utc: datetime) -> PromotionRecord:
+    def lock(
+        self,
+        candidate_id: EntityId,
+        fingerprint: str,
+        now_utc: datetime,
+    ) -> PromotionRecord:
         current = self.get(candidate_id)
         if current.stage is not PromotionStage.VALIDATED:
             raise ValueError("candidate must be VALIDATED before lock")
-        cleaned = fingerprint.strip()
-        if len(cleaned) != 64:
-            raise ValueError("locked candidate fingerprint must be SHA-256 hex")
+        cleaned = _fingerprint(fingerprint)
         _require_utc(now_utc)
         updated = replace(
             current,
@@ -164,24 +188,32 @@ class PromotionRegistry:
         self._save(updated, "CANDIDATE_LOCKED")
         return updated
 
-    def consume_holdout(self, candidate_id: EntityId, holdout_id: str, passed: bool, now_utc: datetime, *, failure_reason: str | None = None) -> PromotionRecord:
+    def consume_holdout(
+        self,
+        candidate_id: EntityId,
+        holdout_id: str,
+        candidate_fingerprint: str,
+        passed: bool,
+        now_utc: datetime,
+        *,
+        failure_reason: str | None = None,
+    ) -> PromotionRecord:
         current = self.get(candidate_id)
         if current.stage is not PromotionStage.LOCKED:
             raise ValueError("final holdout requires LOCKED candidate")
         if current.holdout_consumed:
             raise ValueError("final holdout is one-shot and already consumed")
+        fingerprint = _fingerprint(candidate_fingerprint)
+        if fingerprint != current.locked_fingerprint:
+            raise ValueError("candidate changed after lock; create a new candidate/version")
         identity = holdout_id.strip()
         if not identity:
             raise ValueError("holdout identity cannot be empty")
         _require_utc(now_utc)
-        if passed:
-            stage = PromotionStage.HOLDOUT_PASSED
-            reason = None
-        else:
-            stage = PromotionStage.HOLDOUT_FAILED
-            reason = (failure_reason or "").strip()
-            if not reason:
-                raise ValueError("failed holdout requires reason")
+        stage = PromotionStage.HOLDOUT_PASSED if passed else PromotionStage.HOLDOUT_FAILED
+        reason = None if passed else (failure_reason or "").strip()
+        if not passed and not reason:
+            raise ValueError("failed holdout requires reason")
         updated = replace(
             current,
             stage=stage,
@@ -193,8 +225,18 @@ class PromotionRegistry:
         self._save(updated, f"FINAL_HOLDOUT_{'PASS' if passed else 'FAIL'}")
         return updated
 
-    def fail(self, candidate_id: EntityId, target: PromotionStage, reason: str, now_utc: datetime) -> PromotionRecord:
-        if target not in {PromotionStage.REJECTED, PromotionStage.STRESS_FAILED, PromotionStage.DISABLED}:
+    def fail(
+        self,
+        candidate_id: EntityId,
+        target: PromotionStage,
+        reason: str,
+        now_utc: datetime,
+    ) -> PromotionRecord:
+        if target not in {
+            PromotionStage.REJECTED,
+            PromotionStage.STRESS_FAILED,
+            PromotionStage.DISABLED,
+        }:
             raise ValueError("unsupported failure target")
         current = self.get(candidate_id)
         if target not in _ALLOWED[current.stage]:
@@ -203,11 +245,23 @@ class PromotionRegistry:
         if not cleaned:
             raise ValueError("failure reason cannot be empty")
         _require_utc(now_utc)
-        updated = replace(current, stage=target, rejection_reason=cleaned, updated_at_utc=now_utc)
+        updated = replace(
+            current,
+            stage=target,
+            rejection_reason=cleaned,
+            updated_at_utc=now_utc,
+        )
         self._save(updated, f"PROMOTION_{target.value}")
         return updated
 
-    def promote(self, candidate_id: EntityId, now_utc: datetime, *, operator_approved: bool, rollback_target: str) -> PromotionRecord:
+    def promote(
+        self,
+        candidate_id: EntityId,
+        now_utc: datetime,
+        *,
+        operator_approved: bool,
+        rollback_target: str,
+    ) -> PromotionRecord:
         current = self.get(candidate_id)
         if current.stage is not PromotionStage.PROMOTION_READY:
             raise ValueError("candidate is not PROMOTION_READY")
@@ -227,7 +281,13 @@ class PromotionRegistry:
         self._save(updated, "CANDIDATE_PROMOTED")
         return updated
 
-    def rollback(self, candidate_id: EntityId, now_utc: datetime, *, reason: str) -> PromotionRecord:
+    def rollback(
+        self,
+        candidate_id: EntityId,
+        now_utc: datetime,
+        *,
+        reason: str,
+    ) -> PromotionRecord:
         current = self.get(candidate_id)
         if current.stage is not PromotionStage.PROMOTED:
             raise ValueError("only promoted candidate can roll back")
@@ -261,6 +321,13 @@ class PromotionRegistry:
         )
 
 
+def _fingerprint(value: str) -> str:
+    cleaned = value.strip().lower()
+    if len(cleaned) != 64 or any(char not in "0123456789abcdef" for char in cleaned):
+        raise ValueError("candidate fingerprint must be SHA-256 hex")
+    return cleaned
+
+
 def _payload(record: PromotionRecord) -> dict[str, object]:
     return {
         "candidate_id": str(record.candidate_id),
@@ -272,7 +339,9 @@ def _payload(record: PromotionRecord) -> dict[str, object]:
         "holdout_consumed": record.holdout_consumed,
         "rejection_reason": record.rejection_reason,
         "rollback_target": record.rollback_target,
-        "promoted_at_utc": record.promoted_at_utc.isoformat() if record.promoted_at_utc else None,
+        "promoted_at_utc": (
+            record.promoted_at_utc.isoformat() if record.promoted_at_utc else None
+        ),
     }
 
 
@@ -287,11 +356,23 @@ def _from_payload(payload: object) -> PromotionRecord:
         stage=PromotionStage(str(payload["stage"])),
         policy_version=str(payload["policy_version"]),
         updated_at_utc=updated,
-        locked_fingerprint=str(payload["locked_fingerprint"]) if payload.get("locked_fingerprint") else None,
+        locked_fingerprint=(
+            str(payload["locked_fingerprint"])
+            if payload.get("locked_fingerprint")
+            else None
+        ),
         holdout_id=str(payload["holdout_id"]) if payload.get("holdout_id") else None,
         holdout_consumed=bool(payload.get("holdout_consumed", False)),
-        rejection_reason=str(payload["rejection_reason"]) if payload.get("rejection_reason") else None,
-        rollback_target=str(payload["rollback_target"]) if payload.get("rollback_target") else None,
+        rejection_reason=(
+            str(payload["rejection_reason"])
+            if payload.get("rejection_reason")
+            else None
+        ),
+        rollback_target=(
+            str(payload["rollback_target"])
+            if payload.get("rollback_target")
+            else None
+        ),
         promoted_at_utc=promoted,
     )
 
