@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — ChatGPT Project Build and Recovery Guide
 
 **Status:** PROVISIONAL  
-**Version:** 1.0-design  
+**Version:** 1.1-design  
 **Authority:** Whole-project implementation sequencing, phase completion, resume/recovery and build-navigation process. This file does **not** redefine trading behaviour.
 
 ## Purpose
@@ -22,13 +22,38 @@ When starting, resuming or recovering work, read in this order:
 4. relevant authoritative topic document
 5. `docs/90-governance/DESIGN_DECISIONS.md`
 6. `docs/90-governance/OPEN_QUESTIONS.md`
-7. `docs/60-engineering/MODULE_STRUCTURE.md`
-8. `docs/CODER_GUIDE.md`
-9. `docs/FINAL_BUILD_PROMPT.md`
-10. this guide
-11. current code, tests, state schema, latest commits and executable evidence
+7. `docs/60-engineering/CODING_STANDARD.md`
+8. `docs/60-engineering/MODULE_STRUCTURE.md`
+9. `docs/CODER_GUIDE.md`
+10. `docs/FINAL_BUILD_PROMPT.md`
+11. this guide
+12. current code, tests, state schema, latest commits and executable evidence
 
 If docs conflict, stop the affected implementation path and resolve the contradiction in the authoritative docs first. Do not silently pick whichever rule is easiest to code.
+
+## Frozen implementation-quality rule
+
+Every implementation phase must obey `docs/60-engineering/CODING_STANDARD.md`.
+
+The build target is not merely code that works; it is **lightweight production-grade code** that is clear, auditable and efficient enough for the actual workload without unnecessary architecture.
+
+Before a phase closes, review affected code for:
+
+```text
+duplicate MT5 reads / duplicate derived calculations
+unnecessary abstraction / speculative classes
+mixed-responsibility oversized modules
+dead code
+scattered magic thresholds
+vague names
+missing safety/chronology comments
+broad or silent exception handling
+needless runtime dependencies
+noisy or secret-leaking logs
+weak tests around frozen invariants
+```
+
+Do not perform cosmetic rewrites for their own sake, but do not allow known avoidable bulk/complexity to accumulate phase after phase.
 
 ## Large implementation phases
 
@@ -45,43 +70,52 @@ Deliverables:
 - deterministic IDs/version metadata;
 - basic structured logging;
 - secret-safe config pattern;
-- initial unit-test harness.
+- initial unit-test harness;
+- frozen Coding Standard applied to the initial source skeleton.
 
-Exit gate: package imports/runs, config errors fail clearly, secrets are not committed, core contracts have tests.
+Exit gate: package imports/runs, config errors fail clearly, secrets are not committed, core contracts have tests, and the initial code passes the Coding Standard quality review.
 
 ### PHASE 2 — MT5 read layer, Gold symbol facts and market data
 
 Build MT5 connection/read adapter, XAUUSD/XAUUSDm resolution, broker symbol facts, Bid/Ask, history loading, H4/H1/M15/M5 synchronization, completed-candle chronology and data-quality checks.
 
-Exit gate: verified DEMO account/symbol facts, deterministic candle snapshots, stale/missing data states, no-lookahead data tests.
+Prefer one normalized verified snapshot and reusable derived inputs rather than repeated MT5 calls in downstream components.
+
+Exit gate: verified DEMO account/symbol facts, deterministic candle snapshots, stale/missing data states, no-lookahead data tests, no duplicate unnecessary MT5 read paths.
 
 ### PHASE 3 — Full market intelligence
 
 Build Candle Structure, Technical Structure/Levels, Liquidity/SMC, EMA/RSI/ATR/volatility, session context and fundamental/news fact adapters.
 
-Exit gate: every desk publishes typed evidence from the same snapshot; no desk gains broker authority; chronological replay parity tests pass for implemented logic.
+Compute deterministic facts once per appropriate snapshot/scope and share typed results rather than re-running the same indicator/structure work independently in every strategy.
+
+Exit gate: every desk publishes typed evidence from the same snapshot; no desk gains broker authority; chronological replay parity tests pass for implemented logic; unnecessary duplicated calculations are removed.
 
 ### PHASE 4 — Strategy floor, BUY/SELL theses and decision fusion
 
 Implement the six V1 strategy families in parallel, independent BUY and SELL theses, evidence coverage, conflict/Red-Team handling, Opportunity lifecycle and Entry Timing.
 
-Exit gate: no filter-soup pipeline; valid setup can remain ARMED/WAIT; reasons for WAIT/MISSED/INVALID are deterministic and testable.
+Exit gate: no filter-soup pipeline; valid setup can remain ARMED/WAIT; reasons for WAIT/MISSED/INVALID are deterministic and testable; strategy code remains direct rather than framework-heavy.
 
 ### PHASE 5 — Trade Plan, targets and Risk Engine
 
 Implement structural invalidation/SL, volatility buffer, objective hierarchy, immutable original R, frozen RR guard, hybrid account-size sizing, minimum-lot handling, daily Account Safety P/L, loss lock, manual reset and cooldown.
 
-Exit gate: structural stop is never distorted to fit risk; all-in risk is broker-aware; profile ceilings/daily locks and original R invariants pass tests.
+Exit gate: structural stop is never distorted to fit risk; all-in risk is broker-aware; profile ceilings/daily locks and original R invariants pass tests; risk code remains explicit/auditable.
 
 ### PHASE 6 — Session/news safety, persistence and recovery foundation
 
 Implement news states/windows, PRE_CLOSE/reopen rules, durable risk/order/trade/opportunity state, schema/versioning, atomic writes, restart reconstruction and broker reconciliation primitives.
+
+Use the smallest persistence stack that safely satisfies the frozen requirements; do not introduce an ORM/service layer without a real need.
 
 Exit gate: restart does not erase risk/order state; scheduled close/reopen policy is testable; corrupt/unknown critical state fails safely.
 
 ### PHASE 7 — Central execution gate, controller lease and MT5 writes
 
 Implement one centralized Execution Permission Gate, positive DEMO guard, account identity pinning, spread/drift checks, margin/stop/volume checks, controller lease/fencing, durable Execution Intent, one-shot create/modify/close and ambiguous-result reconciliation.
+
+Keep safety code intentionally direct and easy to audit.
 
 Exit gate: raw irreversible MT5 writes exist only behind the governed boundary; duplicate/fault-injection tests pass; second controller cannot write; DEMO execution works only when all required authorities pass.
 
@@ -97,11 +131,15 @@ Implement the compact dashboard and preserve useful GoldScalperAI observability:
 
 Update `docs/USER_MANUAL.md` and `docs/SETUP_AND_RUN_GUIDE.md` with real commands/keys only after they actually exist.
 
+Dashboard refresh remains presentation work and must not duplicate strategy/order triggering.
+
 Exit gate: operator can understand exactly why the bot is WAIT/ENTER/BLOCKED and what state requires action.
 
 ### PHASE 10 — Replay, research, learning and governed invention
 
 Implement deterministic chronological replay, taken/missed/blocked/invalidated metrics, MFE/MAE/capture efficiency, Entry/Exit Learning, StrategyMemory, candidate registry, declarative strategy discovery/invention and promotion stages.
+
+Research may use heavier analytical libraries when justified, but these must remain isolated from normal production runtime dependencies.
 
 Exit gate: no lookahead; learning cannot mutate hard safety; candidates cannot self-promote or execute arbitrary Python.
 
@@ -119,11 +157,12 @@ Exit gate: required evidence exists in `TESTING_AND_VERIFICATION.md`, `RELEASE_C
 
 ## Phase completion rule
 
-A phase is complete only when all four are true:
+A phase is complete only when all five are true:
 
 ```text
 CODE EXISTS
 + REQUIRED TESTS PASS
++ FROZEN CODING STANDARD QUALITY REVIEW PASSES
 + DOCUMENTATION MATCHES CODE
 + NO KNOWN CRITICAL CONTRADICTION
 ```
@@ -132,6 +171,7 @@ After every coherent phase update, as applicable:
 - authoritative topic document;
 - `docs/90-governance/DESIGN_DECISIONS.md`;
 - `docs/90-governance/OPEN_QUESTIONS.md`;
+- `docs/60-engineering/CODING_STANDARD.md` only if a governed engineering-standard change is explicitly approved;
 - `docs/60-engineering/MODULE_STRUCTURE.md`;
 - `docs/CODER_GUIDE.md`;
 - operator docs;
@@ -152,6 +192,7 @@ inspect repository tree
 → read SYSTEM_CONTRACT
 → read DESIGN_DECISIONS
 → read OPEN_QUESTIONS
+→ read CODING_STANDARD
 → read MODULE_STRUCTURE + CODER_GUIDE
 → read FINAL_BUILD_PROMPT + this guide
 → inspect latest code/tests/commits
@@ -169,8 +210,9 @@ Repository truth beats remembered conversation wording when the repository conta
 4. Finish the smallest missing dependency first.
 5. Run focused tests.
 6. Run that phase's integration tests.
-7. Sync docs.
-8. Continue; do not rewrite already verified subsystems without cause.
+7. Run the Coding Standard quality review on affected code.
+8. Sync docs.
+9. Continue; do not rewrite already verified subsystems without cause.
 
 ## What to do if something important was missed
 
@@ -216,6 +258,8 @@ reproduce deterministically
 ```
 
 A flaky broker/network test should be separated from deterministic logic tests, not deleted.
+
+A passing test suite is necessary but does not by itself prove the code is acceptably simple/maintainable; the Coding Standard quality review remains part of the phase gate.
 
 ## What to do if GitHub/local state differ
 
@@ -286,7 +330,9 @@ To finish quickly without sacrificing correctness:
 
 - work in the large phases above;
 - batch related files/tests/doc updates;
-- avoid repeated cosmetic refactors during design implementation;
+- follow the frozen Coding Standard instead of repeatedly redesigning source style;
+- prefer the smallest implementation that fully satisfies the authoritative contract;
+- avoid repeated cosmetic refactors during implementation;
 - choose ordinary libraries/file layouts as implementation choices where `OPEN_QUESTIONS.md` permits it;
 - calibrate market thresholds through replay/research instead of blocking the build;
 - do not reopen already frozen decisions unless evidence or the user explicitly changes them.
@@ -299,6 +345,7 @@ Project completion requires:
 
 - all required phases implemented;
 - authoritative docs synchronized;
+- frozen Coding Standard respected across production source;
 - no known safety bypass;
 - no-lookahead replay evidence;
 - risk/session/news/execution invariants tested;
