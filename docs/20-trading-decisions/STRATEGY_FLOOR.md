@@ -1,104 +1,176 @@
 # GoldSwingTraderAI — Strategy Floor
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-implementation-baseline  
 **Authority:** Production strategy-family architecture
 
 ## Core principle
 
-Strategy families run in parallel against the same verified market snapshot. No family is evaluated only after another family fails. Each family is an independent market hypothesis built from shared audited market primitives.
+Strategy families run in parallel against the same verified `IntelligenceSnapshot`. No family waits for another family to fail. Each family is an independent market hypothesis built from shared audited primitives.
 
-## Provisional production families
+> **Parallel hypotheses, bounded evidence, no sequential filter soup.**
+
+## Phase 4 implementation checkpoint
+
+Implemented in:
+
+```text
+src/goldswingtraderai/strategies/floor.py
+```
+
+The implementation evaluates all six families in one call to `evaluate_strategy_floor()` and returns independent BUY and SELL cases for every family.
+
+Each `DirectionalFamilyCase` currently includes:
+- score;
+- evidence coverage;
+- supporting evidence names;
+- conflicting evidence names;
+- nearest structural target where available;
+- normalized expansion potential.
+
+Each `FamilyReport` includes:
+- family identity;
+- BUY case;
+- SELL case;
+- preferred timing profile;
+- derived leading direction/quality for operator/research convenience.
+
+The numerical feature weights and score mappings in `StrategyFloorConfig` / helper functions are **initial implementation baselines for replay calibration**, not frozen profitability assumptions.
+
+Missing optional evidence is omitted/reweighted rather than silently converted to zero.
+
+## Production families
 
 ### 1. TREND_PULLBACK_CONTINUATION
 
-Directional H1/M15 structure remains intact, price corrects into a meaningful location, and M5 timing shows evidence that the correction is ending and continuation is resuming.
+Current baseline consumes bounded evidence from:
+- H4 context;
+- H1/M15 structure;
+- M15 location;
+- M5 resumption sequence;
+- M15 EMA flow;
+- remaining target room.
 
-FVG/OB/liquidity/EMA context may improve the setup but are not all mandatory.
+FVG/OB/liquidity primitives are not mandatory.
 
 ### 2. BREAKOUT_EXPANSION
 
-A meaningful range/structure/compression resolves with decisive directional acceptance and enough remaining room to justify participation before a perfect retest occurs.
+Current baseline consumes:
+- H1 context;
+- M15 qualified/confirmed break evidence;
+- M15/M5 directional expansion/acceptance;
+- M5 momentum;
+- volatility state;
+- accepted liquidity break where present;
+- remaining target room.
 
-The family must distinguish genuine acceptance from a wick-only breakout and must control late-entry/chase risk.
+A wick-only probe is weaker than accepted break evidence. Perfect retest is not mandatory.
 
 ### 3. BREAKOUT_RETEST_CONTINUATION
 
-A meaningful structural break occurs, price returns to the broken area, and subsequent behaviour confirms acceptance/rejection consistent with continuation.
+Current baseline consumes:
+- prior meaningful break;
+- M15 location/retest context;
+- M5 rejection/continuation;
+- local structure;
+- liquidity acceptance where present;
+- target room.
 
 ### 4. LIQUIDITY_SWEEP_REVERSAL
 
-Meaningful liquidity is taken, price fails to accept beyond the level, reclaims, and develops credible opposing structural/candle evidence.
+Current baseline consumes:
+- M15/M5 confirmed sweep evidence;
+- M5 rejection;
+- M5 MSS/structure-shift evidence;
+- M15 location;
+- non-hostile H1 context;
+- target room.
 
-A long wick by itself is not sufficient.
+A long wick without an existing liquidity pool/reclaim narrative is not sufficient.
 
 ### 5. FAILED_BREAKOUT_REVERSAL
 
-Price attempts and appears to break an important area but cannot maintain acceptance, returns into the prior structure/range, and develops credible opposite-direction evidence.
+Current baseline consumes:
+- M15/M5 `FAILED_BREAK` evidence in the attempted opposite direction;
+- M5 opposing response/MSS;
+- M15 location;
+- non-hostile H1 context;
+- target room.
 
-This is related to liquidity reversal but is treated as a distinct market narrative.
+This remains distinct from the liquidity-sweep family even when the same market episode supplies related evidence.
 
 ### 6. COMPRESSION_EXPANSION
 
-Volatility and structure contract, liquidity accumulates, then the market resolves with directional expansion/acceptance. The family does not predict direction before evidence appears; BUY and SELL release cases compete.
+Current baseline consumes:
+- M15 compression;
+- M5 directional release;
+- M15 break evidence;
+- M5 momentum/volatility build;
+- H1 context;
+- liquidity path;
+- target room.
 
-## Evidence primitives, not automatic strategies
+The family does not guess release direction before evidence appears; BUY and SELL cases are evaluated independently.
 
-Initially these are shared evidence primitives rather than guaranteed standalone production families:
+## Shared evidence primitives, not standalone automatic strategies
 
-- FVG
-- qualified Order Block
-- premium/discount
-- session highs/lows
-- liquidity pools
-- EMA
-- RSI
-- ATR
-- individual candle patterns
-- support/resistance
+These remain shared inputs unless governed research later promotes a new family:
 
-A future governed research process may demonstrate that a primitive or newly discovered behaviour deserves its own production-family candidate.
+- FVG;
+- qualified Order Block;
+- premium/discount;
+- session highs/lows;
+- liquidity pools;
+- EMA;
+- RSI;
+- ATR;
+- individual candle patterns;
+- support/resistance.
 
-## Standard family output
+## Correlation / consensus
 
-Each strategy desk should eventually return a structured contract containing at least:
+Multiple family labels may describe the same underlying market event. Raw family scores are therefore not summed as independent certainty.
 
-```text
-family
-BUY score
-SELL score
-direction / neutral
-family quality
-freshness
-stage
-primary evidence
-supporting evidence
-conflicting evidence
-preferred timing profile
-invalidation
-structural target
-expansion potential
-```
+`decisions/fusion.py` owns bounded cross-family synergy/conflict. This document only requires that family output preserves enough evidence labels/coverage for correlation handling.
 
-## Parallel consensus
+## Market Episode identity
 
-Compatible families may support the same direction. Agreement can add a bounded consensus bonus but correlated evidence must not be counted as independent certainty multiple times.
+Phase 4 implements durable-style `episode_id` and `opportunity_id` in `decisions/opportunity.py`.
 
-Likewise, strong opposing families should increase conflict rather than be silently ignored.
+A surviving thesis preserves those IDs across WAIT/READY lifecycle updates. A missed opportunity may be re-armed only when a caller proves a genuinely fresh structural/timing event; blind unchanged re-entry is rejected.
 
-## Market episode identity
-
-Multiple strategy labels may describe different phases of the same underlying market move. A future `Market Episode` identity should allow the system to understand relationships such as:
-
-```text
-Compression Expansion
-→ Breakout
-→ Breakout Retest
-→ Trend Continuation
-```
-
-This helps prevent duplicate entries, supports legitimate re-entry, and improves post-trade research.
+Later persistence will make these identities durable across restart.
 
 ## Frequency philosophy
 
-The floor should maximize valid opportunity coverage, not raw trade count. A strategy is not penalized merely for being selective, but the overall system should not become so restrictive that it detects only a tiny fraction of objectively valid large-move opportunities.
+The floor should maximize valid opportunity coverage, not raw trade count and not ultra-rare perfection. Soft imperfections remain scores/conflicts; true hard safety remains outside strategy scoring.
+
+## Runtime path
+
+```text
+IntelligenceSnapshot
+→ evaluate six strategy families in parallel
+→ StrategyFloorReport
+→ independent BUY/SELL thesis fusion
+```
+
+Strategy code has no MT5, lot sizing, reset, broker-write or execution-permission authority.
+
+## Tests / evidence
+
+Phase-4 deterministic tests in `tests/test_strategy_decisions.py` prove:
+- all six families execute from the same shared snapshot;
+- BUY/SELL family outputs remain bounded;
+- strategy/decision modules contain no `order_send`/MetaTrader5 boundary;
+- downstream fusion preserves strong opposition as conflict rather than hiding it.
+
+Full profitability/threshold calibration remains Phase-10 replay/research work.
+
+## Open calibration questions
+
+- family feature weights;
+- evidence-score mappings;
+- minimum useful family coverage;
+- family-specific target-room influence;
+- correlated-evidence grouping/synergy strength;
+- which early versus confirmed structure maturity each family should prefer.
