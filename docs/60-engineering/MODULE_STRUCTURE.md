@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** DRAFT  
-**Version:** 1.2-implementation-map  
+**Version:** 1.3-implementation-map  
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.  
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -19,7 +19,17 @@ src/goldswingtraderai/
 ├── domain/
 ├── market_data/
 ├── intelligence/
+│   ├── indicators.py
+│   ├── candle_structure.py
+│   ├── technical.py
+│   ├── liquidity.py
+│   ├── session.py
+│   ├── news.py
+│   ├── confluence.py
+│   └── snapshot.py
 ├── strategies/
+│   ├── floor.py
+│   └── confluence.py
 ├── decisions/
 ├── risk/
 ├── persistence/
@@ -37,7 +47,7 @@ src/goldswingtraderai/
     └── promotion.py
 ```
 
-Detailed pre-Phase-10 file ownership remains in `docs/CODER_GUIDE.md`; this document focuses on dependency boundaries.
+Detailed file ownership remains in `docs/CODER_GUIDE.md`; this document focuses on dependency boundaries.
 
 ## Dependency direction
 
@@ -69,8 +79,19 @@ Read-only broker/account/symbol/quote/completed-candle boundary.
 ### `intelligence/`
 Shared causal structure/quant/technical/liquidity/session/news facts. No broker authority.
 
+`intelligence/confluence.py` owns:
+- confirmed-swing trendline projection and touch/break/reclaim facts;
+- causal Fibonacci retracement/extension geometry;
+- broker-local volume-profile POC with explicit real-volume versus tick-volume source.
+
+These are soft confluence facts only. Missing or opposing confluence must not become a universal trade blocker.
+
 ### `strategies/` + `decisions/`
 Parallel strategy families, BUY/SELL fusion, Opportunity/Entry Timing and structural Trade Plan. Soft evidence remains separate from hard safety.
+
+`strategies/confluence.py` is deliberately **positive-only**: it can add a small capped uplift when Trendline/Fib/POC context supports an existing family, but it cannot lower the base family score or require any confluence feature to exist.
+
+Trendline behaviour naturally supports existing pullback, breakout, retest and compression families. A separate seventh family is not created unless governed research later proves a materially distinct edge.
 
 ### `risk/`
 Monetary sizing/profile/min-lot/capacity plus daily/cooldown/episode state and hard session/news permission. SMALL includes any positive day-start equity below `$300`.
@@ -140,7 +161,10 @@ The registry's `broker_authority` remains false even at DEMO Canary/Promoted sta
 ```text
 one verified broker snapshot
 → one shared intelligence derivation
+   → structure/quant/technical/liquidity
+   → optional Trendline/Fib/POC confluence
 → parallel strategies
+→ bounded positive-only confluence uplift
 → one decision/timing derivation
 → one TradePlan
 → one RiskEvaluation + hard permission set
@@ -170,6 +194,7 @@ research     → production broker write          NO
 invention    → arbitrary Python/eval/exec        NO
 candidate    → hard-risk/safety mutation         NO
 candidate    → self-promotion                    NO
+confluence   → hard execution permission         NO
 ```
 
 ## Current deterministic tests
@@ -177,6 +202,7 @@ candidate    → self-promotion                    NO
 Later-phase coverage includes:
 
 ```text
+tests/test_technical_confluence.py
 tests/test_execution_safety.py
 tests/test_trade_manager.py
 tests/test_management_execution.py
@@ -186,7 +212,7 @@ tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, risk/session/execution safety, restart integrity, one-shot broker writes, structural management, dashboard isolation and working discovery/invention liveness.
+Alongside earlier suites these protect no-lookahead, non-restrictive strategy fusion, positive-only technical confluence, risk/session/execution safety, restart integrity, one-shot broker writes, structural management, dashboard isolation and working discovery/invention liveness.
 
 CI gates remain Ruff, Pytest and financial-secret scan. Deterministic CI is software evidence, not live DEMO certification or proof of strategy edge.
 
@@ -195,8 +221,8 @@ CI gates remain Ruff, Pytest and financial-secret scan. Deterministic CI is soft
 - broader replay and live/replay parity tests;
 - stress/fault/ablation evidence utilities;
 - richer entry/exit attribution and research reports;
-- operator visibility for Discovery Health/candidate stage;
-- calibration of research thresholds on real historical/DEMO evidence.
+- operator visibility for Discovery Health/candidate stage and compact Trendline/Fib/POC context;
+- calibration of research/confluence thresholds on real historical/DEMO evidence.
 
 ## Phase completion rule
 
