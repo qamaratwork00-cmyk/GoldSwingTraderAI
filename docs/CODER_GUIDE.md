@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
-**Version:** 1.6-implementation-map  
+**Version:** 1.7-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -12,7 +12,7 @@ Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `6
 
 ## Current checkpoint — 2026-09-18
 
-Deterministic core implementation exists through the current **Phase-10 research foundation plus chronological decision/Trade Plan/Trade Manager evidence tooling**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+Deterministic core implementation exists through the current **Phase-10 research foundation plus chronological decision/Trade Plan/Trade Manager evidence and execution-stress tooling**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
 
 ### Phase 1 — Foundation — implemented / deterministic CI
 
@@ -144,6 +144,7 @@ research/replay.py
 research/ablation.py
 research/outcomes.py
 research/management_replay.py
+research/stress.py
 research/metrics.py
 research/learning.py
 research/episode_journal.py
@@ -161,7 +162,8 @@ chronological completed-candle replay
 → production Trade Plan reconstruction for historical ENTER events
 → ambiguity-safe initial stop/target path labeling
 → chronological production Trade Manager replay
-→ managed-trade capture/giveback/action metrics
+→ declared execution-friction stress scenarios
+→ managed-trade capture/giveback/action/modify metrics
 → research metrics / durable episodes
 → approved-primitive mapping
 → recurring cluster detection
@@ -193,7 +195,7 @@ HORIZON_UNRESOLVED
 
 Same-bar stop+target is never resolved favorably without intrabar evidence. Ambiguous/unresolved cases do not enter resolved bracket Net R. The summary exposes coverage, resolved initial-bracket Net/Avg R, Profit Factor, drawdown, MFE/MAE and 2R/3R/4R reach rates.
 
-`research/management_replay.py` then reuses the real production `evaluate_trade_manager()` and `apply_management_decision()` path. For each later M5 bar it first tests the **currently active** trailing stop and broker TP. If the trade survives that bar, the completed bar builds fresh intelligence and the production manager emits HOLD/PROTECT/TRAIL/RUNNER/EXIT for the following bar.
+`research/management_replay.py` reuses the real production `evaluate_trade_manager()` and `apply_management_decision()` path. For each later M5 bar it first tests the **currently active** stop and broker TP. If the trade survives that bar, the completed bar builds fresh intelligence and the production manager emits HOLD/PROTECT/TRAIL/RUNNER/EXIT for the following bar.
 
 Current manager-replay outcomes:
 
@@ -206,9 +208,29 @@ BOTH_TOUCHED_AMBIGUOUS
 HORIZON_OPEN
 ```
 
-Its metrics include resolved Net/Avg R, Profit Factor, drawdown, MFE/MAE, Capture Efficiency, profit giveback and action counts. `run_confluence_management_ablation()` compares those results across the same five confluence variants.
+The default manager replay remains `BAR_CLOSE_IDEALIZED`. Optional `ManagementReplayAssumptions` now support research-only:
 
-This management replay is explicitly **BAR_CLOSE_IDEALIZED**. It assumes requested manager stop/TP modifications become effective at the completed-bar boundary. It does not claim broker modification latency/failure, tick ordering or historical PRE_CLOSE integration parity yet.
+```text
+adverse entry slippage in immutable original-R units
+executable-side Bid/Ask barrier spread approximation
+completed-M5 modify delay
+ deterministic every-Nth manager-modify rejection
+```
+
+An unresolved synthetic modify blocks later modify submissions until it resolves, matching the production reconciliation principle. Structural stop/targets are never moved merely to hide adverse fill slippage. Same-bar active stop+TP ambiguity remains unresolved.
+
+`research/stress.py` owns scenario orchestration. The analytical `ReplayRun` is held fixed while Trade Plan / fill / exit-side spread / manager-write assumptions change. Default transparent V1 research probes are:
+
+```text
+BASE
+WIDER_SPREAD        1.50x dataset spread
+ADVERSE_ENTRY       0.10R adverse fill
+MODIFY_DELAY        1 completed M5
+MODIFY_REJECTION    every 2nd submitted modify rejected
+COMBINED            all four assumptions together
+```
+
+Those values are **calibration baselines only**. They are not frozen broker assumptions, production risk thresholds or profitability claims. The stress report exposes signed deltas versus BASE for managed-plan count, plan rejection, resolved coverage, Net/Avg R, drawdown, Capture Efficiency and giveback, plus modify request/applied/rejected/pending counts from manager replay.
 
 Other Phase-10 guarantees:
 
@@ -259,12 +281,13 @@ tests/test_management_replay.py
 tests/test_dashboard.py
 tests/test_research_ablation.py
 tests/test_research_outcomes.py
+tests/test_research_stress.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-Latest verified research-manager checkpoint contained **153 passing tests** plus Ruff and financial-secret scan PASS. Deterministic CI is software evidence, not profitability proof or controlled DEMO certification.
+Latest verified stress-research checkpoint contained **159 passing tests** plus Ruff and financial-secret scan PASS. Deterministic CI is software evidence, not profitability proof or controlled DEMO certification.
 
 ## Feature ownership index
 
@@ -285,7 +308,7 @@ Latest verified research-manager checkpoint contained **153 passing tests** plus
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/dashboard.py` |
-| Replay/validation | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `metrics.py` |
+| Replay/validation/stress | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `management_replay.py`, `stress.py`, `metrics.py` |
 | StrategyMemory | `40-research-learning/LEARNING_AND_AI_BOUNDARIES.md` | `research/learning.py` |
 | Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `episode_journal.py`, `discovery.py`, `invention.py` |
 | Promotion | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `research/promotion.py` |
@@ -301,7 +324,9 @@ Latest verified research-manager checkpoint contained **153 passing tests** plus
 - raw broker writes live only in `execution/mt5_writer.py`;
 - critical local state never pretends ambiguous broker action succeeded;
 - research outcome/replay layers must not favorably resolve unknown intrabar order;
-- idealized research manager modifications must not be described as broker-verified execution;
+- stress assumptions must be explicit, reproducible and separate from frozen production safety thresholds;
+- adverse research fill does not rewrite structural stop/target or immutable original R;
+- pending manager modify stress cannot silently permit overlapping broker writes;
 - dashboard/research/discovery have zero raw broker authority;
 - discovery must not be silently inert when eligible evidence exists;
 - no unnecessary frameworks/factories/service-manager layers;
@@ -311,7 +336,7 @@ Latest verified research-manager checkpoint contained **153 passing tests** plus
 
 Do **not** redesign the already-implemented core unnecessarily. Main remaining work is integration/evidence:
 
-1. add execution-friction / spread / entry-delay / modify-failure stress around the chronological research path;
+1. calibrate execution-stress assumptions on broader historical/controlled DEMO evidence and add more realism only where evidence justifies it;
 2. add historical PRE_CLOSE/session-policy integration to management replay where verified schedules/data permit it;
 3. run broader real historical XAU datasets, walk-forward and independent validation rather than synthetic regression fixtures;
 4. integrate authoritative research/discovery/confluence state into dashboard DTO/runtime status;
@@ -334,7 +359,7 @@ MarketSnapshot
 → Execution / Reconciliation
 → ManagedTrade / Trade Manager
 → Dashboard
-→ Replay / Ablation / Initial Outcomes / Management Replay / Metrics
+→ Replay / Ablation / Initial Outcomes / Management Replay / Stress / Metrics
 → Episode Journal
 → Discovery / Invention / Promotion
 ```
