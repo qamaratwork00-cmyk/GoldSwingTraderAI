@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Dashboard and UX
 
 **Status:** PROVISIONAL  
-**Version:** 0.4-design  
+**Version:** 0.5-design  
 **Authority:** Main terminal dashboard information architecture, operator visibility, reason presentation and restrained emoji usage.  
 **Depends on:** `../20-trading-decisions/SCORING_AND_DECISION_FUSION.md`, `../30-risk-execution/RISK_CONTRACT.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`
 
@@ -23,18 +23,18 @@ The dashboard observes authoritative state; it does not define trading behaviour
 ## UX principles
 
 - compact and decision-focused;
-- technical terms remain stable/English for consistency with logs/docs;
-- short English/Roman-Urdu explanations may improve operator readability;
-- meaningful emojis are used as visual markers, not decoration;
+- technical terms remain stable/English for logs/docs;
+- short English/Roman-Urdu explanations may improve readability;
+- meaningful emojis are visual markers, not decoration;
 - avoid raw-data overload;
-- one clear top-level status must always be visible;
-- normal `WAIT` must remain visually distinct from a system fault;
-- centralized Execution Permission must be visible when it is the final allow/block boundary;
-- useful operational visibility carried forward from the prior GoldScalperAI dashboard must not be removed merely to make the screen look cleaner.
+- one clear top-level status always visible;
+- normal `WAIT` visually distinct from a system fault;
+- centralized Execution Permission visible as the final allow/block boundary;
+- useful operational visibility from the prior GoldScalperAI dashboard must not be removed merely to make the screen look cleaner.
 
 ## GoldScalperAI visibility preservation rule
 
-GoldSwingTraderAI is a new system, but the prior GoldScalperAI dashboard contained useful operator information that remains valuable. These fields should be preserved or improved in the new compact layout whenever the underlying data is available:
+Preserve or improve these fields whenever data is available:
 
 - current bot/account mode and runtime role;
 - XAU symbol;
@@ -42,25 +42,23 @@ GoldSwingTraderAI is a new system, but the prior GoldScalperAI dashboard contain
 - live spread and spread quality;
 - current M5 candle time remaining;
 - concise trend/structure direction;
-- EMA20 / EMA50 values or compact relation where useful;
+- EMA20 / EMA50 values or relation;
 - RSI;
 - ATR;
 - current signal/action;
 - exact reason for `WAIT`, `ENTER`, `BLOCKED`, `MISSED`, `INVALID` or management action;
 - account/risk profile and proposed risk/lot;
-- daily P/L;
-- daily loss limit / remaining daily risk budget;
+- daily Account Safety P/L;
+- daily loss limit / remaining budget;
 - active-position count/capacity;
-- consecutive-loss/loss-streak information where it remains useful for risk/diagnostics;
-- open-trade entry/SL/TP or structural objectives when a trade exists.
+- loss streak/cooldown;
+- open-trade entry/SL/TP/objectives.
 
-These items may be reorganized, condensed or grouped into newer panels, but they must not silently disappear if they remain meaningful to the operator.
-
-The new dashboard adds richer structure, decision, execution, learning, backup and health information around this useful core rather than replacing it with a less informative screen.
+The new dashboard adds richer Decision, Execution, Learning, Backup and Health information around this core.
 
 ## Emoji policy
 
-Recommended section/status markers:
+Recommended markers:
 
 ```text
 🌍 MARKET
@@ -81,41 +79,42 @@ Recommended section/status markers:
 👁️ OBSERVER
 ```
 
-Do not place multiple decorative emojis on every line. If a terminal cannot render a glyph, plain-text fallback such as `[OK]`, `[WAIT]`, `[BLOCK]` must work without affecting logic.
+Plain-text fallback such as `[OK]`, `[WAIT]`, `[BLOCK]` must work without changing logic.
 
 ## Header
 
-The header should expose compact identity facts such as:
+Expose compact identity facts such as:
 
 - bot/project name;
 - XAU symbol;
-- verified account environment/mode;
-- runtime role (`PRIMARY EXECUTOR`, `OBSERVER`, `RESEARCH`);
+- connected account mode;
+- DEMO guard state;
+- runtime role (`PRIMARY`, `STANDBY`, `OBSERVER`, `RESEARCH`, `RECOVERING`);
 - account profile (`SMALL`, `MEDIUM`, `NORMAL`);
 - production policy version;
 - UTC time;
-- M5 candle time remaining where available;
-- current market state.
+- M5 candle time remaining;
+- current market/session state.
 
-A real account connected while the current policy remains DEMO-first must be prominent as an environment-authorization block, not a mysterious generic error.
+V1 does not need a separate REAL authorization display. Environment visibility should answer whether positive DEMO verification passed.
 
 ## Market panel
 
-Compact market context should retain practical live visibility while adding the swing-system context. It may include:
+May include:
 
 - Bid / Ask;
-- live spread and spread quality;
+- live spread + Spread Ratio/state;
 - H4/H1/M15/M5 structure summary;
-- concise bullish/bearish/range/transition state;
+- bullish/bearish/range/transition state;
 - volatility/momentum phase;
 - session context;
 - location/target path;
 - news-safety status;
-- concise EMA20/EMA50 relation/values;
+- EMA20/EMA50;
 - RSI;
 - ATR.
 
-Indicators remain secondary context and must not become trade authority merely because they are visible.
+Indicators remain secondary context and do not become trade authority merely because they are visible.
 
 ## Trading Floor Decision panel
 
@@ -146,39 +145,42 @@ Reason ENTRY_EXTENDED
 
 ## Why / blocker attribution
 
-Every `WAIT`, `MISSED`, `INVALID`, `BLOCKED` or `EXIT` should show a stable reason code plus concise human explanation.
+Every `WAIT`, `MISSED`, `INVALID`, `BLOCKED` or `EXIT` shows a stable reason code plus concise explanation.
+
+Examples:
+
+```text
+ENTRY_EXTENDED
+Entry abhi ideal zone se door hai. Setup valid hai; fresh pullback/reclaim ka wait.
+```
+
+```text
+RISK_GEOMETRY_TOO_LARGE
+Setup valid hai lekin current entry par broker minimum lot ka all-in risk profile ceiling se bahar hai.
+```
+
+```text
+SESSION_PRE_CLOSE
+Gold session close qareeb hai; nayi entry allowed nahi.
+```
+
+The dashboard must never reduce all non-trades to generic `NO TRADE`.
+
+## Decision trace
 
 Example:
 
 ```text
-Code: ENTRY_EXTENDED
-Entry abhi ideal zone se door hai. Setup valid hai; fresh pullback/reclaim ka wait.
+Data        ✅ PASS
+Strategy    ✅ BUY 87
+Entry       🟡 WAIT 78
+Trade Plan  ⏸ NOT READY
+News        ✅ PASS
+Risk        — NOT EVALUATED
+Execution   — NOT REACHED
 ```
 
-Risk-geometry example:
-
-```text
-Code: RISK_GEOMETRY_TOO_LARGE
-Setup valid hai lekin current entry par 0.01 lot ka all-in risk profile ceiling se bahar hai. Better structural entry ka wait.
-```
-
-The dashboard must never reduce all non-trades to `NO TRADE`.
-
-## Decision trace
-
-A compact authority chain should show where the action stopped, for example:
-
-```text
-Data       ✅ PASS
-Strategy   ✅ BUY 87
-Entry      🟡 WAIT 78
-Trade Plan ⏸ NOT READY
-News       ✅ PASS
-Risk       — NOT EVALUATED
-Execution  — NOT REACHED
-```
-
-If a hard blocker prevents an otherwise-qualified trade, show `Would otherwise trade? YES` where the authoritative decision layer can establish that counterfactual safely.
+If a hard blocker stops an otherwise-qualified trade, show `Would otherwise trade? YES` where the authoritative decision layer can safely establish it.
 
 ## Setup panel
 
@@ -206,112 +208,125 @@ When relevant display:
 
 ## Risk panel
 
-Display compact authoritative risk state such as:
+Display authoritative risk state such as:
 
-- Account Profile: `SMALL`, `MEDIUM` or `NORMAL`;
-- sizing mode: base/min-lot hybrid, stepped dynamic or fully dynamic;
-- `NORMAL` / `LOSS_LOCKED` / `COOLDOWN` / `BLOCKED` state;
-- equity/balance facts where appropriate;
-- Target Risk and Acceptable Gold Risk Band status;
+- Account Profile;
+- sizing mode;
+- `NORMAL` / `LOSS_LOCKED` / `COOLDOWN` / `BLOCKED`;
+- equity/balance facts where useful;
+- risk-band status;
 - structural SL monetary risk;
-- spread/execution-friction impact as calculated by the Risk Contract;
+- spread/execution-friction impact;
 - actual proposed all-in risk;
-- proposed normalized lot;
+- normalized lot;
 - open risk;
-- daily P/L and daily loss limit/remaining risk budget;
-- position count/capacity;
-- loss streak where meaningful;
+- cumulative Day Safety P/L;
+- active cycle P/L / daily limit / remaining budget;
+- manual-reset state/count;
+- position `0/1`;
+- loss streak/cooldown;
 - Risk PASS/BLOCK reason.
 
-Example SMALL account display:
+Example:
 
 ```text
 🛡️ RISK
 Profile          SMALL
 Sizing           BASE 0.01
-Target Risk      ...
-Structural Risk  ...
-Spread Impact    ...
 All-in Risk      ...
-Daily P/L        ...
+Risk Band        NORMAL / ELEVATED
+Day Safety P/L   ...
 Daily Remaining  ...
+Manual Reset     OFF / AVAILABLE / USED
 Position         0/1
 Loss Streak      0
-Risk Band        ACCEPTABLE
+Cooldown         CLEAR
 Decision         ✅ PASS
 ```
 
-The dashboard must not assume a quoted Gold spread such as `$0.26` equals `$0.26` account cost; it displays the broker-aware conversion published by Risk/Execution.
-
-Exact risk percentages are owned by Risk Contract/config, not this dashboard document.
+The UI displays broker-aware risk/spread calculations supplied by Risk/Execution; it does not recompute them.
 
 ## Execution Permission panel
 
-The centralized broker-write safeguard should be directly visible and easy to demonstrate.
+The centralized broker-write safeguard must be directly visible.
 
-Compact example:
+Ready example:
 
 ```text
 ⚙️ EXECUTION
-Environment       DEMO ✅ AUTHORIZED
+Account Mode      DEMO
+DEMO Guard        ✅ PASS
 Controller        ⚡ PRIMARY
+Lease Epoch       ...
+Broker Reconcile  ✅ COMPLETE
 Account Identity  ✅ PASS
-Order Lifecycle   ✅ CLEAR
 Fresh Checks      ✅ PASS
 Permission        ✅ ALLOW
 ```
 
-Blocked example:
+Environment-not-ready example:
 
 ```text
-⚙️ EXECUTION
-Environment       REAL
+Account Mode      UNKNOWN / NOT VERIFIED
+DEMO Guard        🔴 NOT VERIFIED
 Permission        🔴 BLOCK
-Reason            ENVIRONMENT_NOT_AUTHORIZED
-Policy            DEMO-FIRST
+Reason            DEMO_GUARD_NOT_VERIFIED
 ```
 
-Or a normal trade-specific safety block:
+Normal trade-specific block:
 
 ```text
+DEMO Guard        ✅ PASS
 Permission        🔴 BLOCK
 Reason            SPREAD_TOO_HIGH
 Would trade otherwise? YES
 ```
 
-This panel displays the result owned by `EXECUTION_AND_BROKER_SAFETY.md`; UI code must not recompute permission.
+This panel only displays the result owned by `EXECUTION_AND_BROKER_SAFETY.md`; UI code must not recompute permission.
 
-When a future frozen REAL policy is approved, the panel should show that authorization explicitly while keeping the same permission gate/path.
+## Session/news visibility
+
+Show as applicable:
+
+- market state `OPEN/PRE_CLOSE/CLOSED/REOPEN_WARMUP`;
+- PRE_CLOSE countdown and required flatten state;
+- reopen clean-M5 progress;
+- News Safety state;
+- next event/tier/blackout countdown;
+- post-news warmup state.
+
+When mandatory PRE_CLOSE flatten is active, that requirement must be prominent even if Trade Manager continuation remains bullish.
 
 ## Open Trade panel
 
-When a bot-managed position is open, prioritize:
+Prioritize:
 
 - direction/symbol;
 - strategy/policy/Episode IDs;
 - entry/current price;
 - original/current SL;
-- current broker TP if one exists;
+- current broker TP;
 - Primary/Expansion/Runner objectives;
-- current realized/unrealized R context;
+- original/current R context;
 - MFE/MAE;
 - Continuation/Reversal/Structure state;
 - Trade Manager action;
-- reason for last SL/TP/exit decision.
+- reason for last SL/TP/exit decision;
+- PRE_CLOSE flatten state where relevant.
 
 ## Learning panel
 
 Keep compact:
 
 - StrategyMemory health;
-- Entry Learning state;
-- Exit Learning state;
+- Entry Learning;
+- Exit Learning;
 - Champion;
 - Challenger/stage;
-- bounded/adaptive influence state;
-- selected recent research metric such as Capture Efficiency.
+- bounded adaptive influence;
+- selected metric such as Capture Efficiency.
 
-Shadow/candidate views must clearly show that they do not have production authority unless in governed DEMO Canary.
+Shadow/candidate views clearly show that they do not have production broker authority.
 
 ## Backup/state panel
 
@@ -321,43 +336,55 @@ Expose:
 - Strategy Registry restore state;
 - learning restore state;
 - broker reconciliation;
-- latest backup status/age.
+- latest backup/checkpoint status/age.
 
 ## System Health panel
 
-Use the states/reason codes owned by `SYSTEM_HEALTH_AND_DIAGNOSTICS.md`. A normal market `WAIT` or an expected policy block is not automatically a system error.
+Use states/reasons owned by `SYSTEM_HEALTH_AND_DIAGNOSTICS.md`. A normal market `WAIT`, `NEWS_BLACKOUT`, `SESSION_PRE_CLOSE` or functioning `LOSS_LOCKED` is not automatically a system error.
 
 ## Startup view
 
-Before execution readiness, show a startup checklist including account, environment authorization, symbol/specs, history, state integrity, broker reconciliation, risk profile, Strategy Registry, learning, news safety and execution-controller authority.
+Before execution readiness, show a checklist including:
 
-New trades remain disabled until required startup authorities are ready.
+- account identity;
+- DEMO guard;
+- symbol/specs;
+- history/data integrity;
+- state integrity;
+- broker reconciliation;
+- risk profile/state;
+- Strategy Registry/learning;
+- news/session safety;
+- controller lease/epoch;
+- centralized execution permission.
+
+New broker writes remain disabled until required authorities are ready.
 
 ## Runtime roles
 
 Visually distinguish:
 
 ```text
-⚡ PRIMARY EXECUTOR
+⚡ PRIMARY
+🕒 STANDBY
 👁️ OBSERVER
 🧪 RESEARCH
+🔄 RECOVERING / RECONCILING
 ```
 
-An Observer may analyze/display but must not show broker-write authority.
+An Observer/Standby/Research runtime must not display active broker-write authority.
 
 ## Operator controls
 
-The main dashboard is mostly read-only. Only deliberately governed actions should be exposed, such as:
+The dashboard is mostly read-only. Only deliberately governed actions should be exposed, such as:
 
-- double-confirm manual daily-loss reset where permitted;
+- double-confirm manual daily-loss reset where enabled/permitted;
 - safe shutdown;
-- portable state export/restore workflows where later implemented.
+- portable state export/restore workflows when implemented.
 
-Do not expose casual hotkeys for changing weights, bypassing news/risk/execution permission or impulsively promoting strategies.
+Do not expose casual hotkeys for changing weights, bypassing safety or impulsively promoting strategies.
 
 ## Compact target layout
-
-A future implementation may use a compact layout similar to:
 
 ```text
 ════════ GoldSwingTraderAI ════════
@@ -369,8 +396,8 @@ EMA20/50 ... | RSI ... | ATR ...
 ⚖️ DECISION    🟡 WAIT • BUY BIAS
 🎯 SETUP       ARMED • Score 86
 🛡️ RISK        ✅ NORMAL • 0.01
-Today ... | Limit ... | Pos 0/1 | LS 0
-⚙️ EXECUTION   ✅ READY
+Day ... | Limit ... | Pos 0/1 | LS 0
+⚙️ EXECUTION   ✅ READY • DEMO PASS
 🧠 LEARNING    ✅ ACTIVE
 🩺 SYSTEM      ✅ HEALTHY
 💾 BACKUP      ✅ VERIFIED
@@ -380,27 +407,28 @@ Today ... | Limit ... | Pos 0/1 | LS 0
 ════════════════════════════════════
 ```
 
-Exact dimensions/ordering may change for readability, but the useful facts above remain available.
+Exact dimensions/order may change for readability, but useful facts remain available.
 
 ## Refresh behaviour
 
-Dashboard refresh frequency is presentation only and must not cause repeated strategy triggers or duplicate order attempts. Prefer in-place refresh rather than endless terminal scrolling.
+Dashboard refresh is presentation only and must not create repeated strategy triggers or duplicate order attempts. Prefer in-place refresh rather than endless scrolling.
 
 ## Tests required
 
-- WAIT versus BLOCKED versus system-fault rendering;
-- stable reason code + human explanation;
+- WAIT vs BLOCKED vs technical-fault rendering;
+- stable reason + human explanation;
 - decision trace correctness;
-- preserved Bid/Ask/spread/candle-timer/trend/EMA/RSI/ATR visibility where available;
-- preserved daily P/L/loss-limit/position/loss-streak visibility;
-- SMALL/MEDIUM/NORMAL profile and sizing-mode display;
-- all-in risk/spread-impact display comes from authority rather than UI recomputation;
-- centralized Execution Permission display correctness;
-- DEMO-first versus future authorized-REAL display semantics;
-- role/controller visibility;
+- Bid/Ask/spread/M5 timer/trend/EMA/RSI/ATR visibility;
+- daily safety P/L/limit/position/loss-streak visibility;
+- profile/sizing display;
+- risk/spread values come from authority rather than UI recomputation;
+- positive DEMO guard display semantics;
+- centralized Execution Permission correctness;
+- controller role/lease/epoch visibility;
+- PRE_CLOSE/reopen/news-state visibility;
 - backup/learning/system-health panels;
 - emoji fallback;
-- dashboard refresh cannot create trading authority.
+- refresh cannot create trading authority.
 
 ## Explicit non-goals
 
@@ -408,8 +436,8 @@ The dashboard must not:
 
 - become a second strategy/risk/execution specification;
 - place trades because a UI element changed;
-- hide system faults behind generic `NO TRADE`;
-- remove useful operator facts solely for visual minimalism;
+- hide faults behind generic `NO TRADE`;
+- remove useful operator facts solely for minimalism;
 - overwhelm the main screen with every swing/FVG/OB/log line;
 - require manual tuning for normal operation.
 
@@ -418,5 +446,5 @@ The dashboard must not:
 - final terminal dimensions/section order;
 - exact refresh cadence;
 - final wording polish;
-- final safe-shutdown/export operator controls;
+- final safe-shutdown/export controls;
 - optional future notification channels.
