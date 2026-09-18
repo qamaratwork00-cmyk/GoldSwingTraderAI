@@ -8,6 +8,11 @@ from goldswingtraderai.decisions.opportunity import (
     transition_opportunity,
     update_opportunity,
 )
+from goldswingtraderai.decisions.snapshot import (
+    DecisionConfig,
+    DecisionSnapshot,
+    build_decision_snapshot,
+)
 from goldswingtraderai.decisions.timing import (
     EntryTimingConfig,
     EntryTimingResult,
@@ -17,6 +22,8 @@ from goldswingtraderai.decisions.timing import (
 
 __all__ = [
     "DecisionBoard",
+    "DecisionConfig",
+    "DecisionSnapshot",
     "EntryTimingConfig",
     "EntryTimingResult",
     "FusionConfig",
@@ -24,6 +31,7 @@ __all__ = [
     "OpportunityConfig",
     "ThesisReport",
     "TimingAction",
+    "build_decision_snapshot",
     "evaluate_entry_timing",
     "fuse_decision",
     "rearm_missed_opportunity",
