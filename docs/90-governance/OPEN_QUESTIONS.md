@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
 **Status:** LIVING LEDGER  
-**Version:** 2.2-design
+**Version:** 2.3-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -31,8 +31,9 @@ Deterministic core implementation currently exists through Phase 10, including r
 8  Trade Manager + execution bridge
 9  Dashboard renderer
 10 Chronological replay + ablation + Trade Plan outcomes + Trade Manager replay
-   + declared execution-friction stress + metrics/learning
-   + discovery/invention/promotion
+   + declared execution-friction stress
+   + fixed-policy walk-forward validation
+   + metrics/learning + discovery/invention/promotion
 ```
 
 This does **not** mean live DEMO release is complete. The normal launcher remains read-only readiness; final persistent runtime orchestration, production shared cross-laptop coordination, backup/fresh-machine drill and controlled Windows/MT5 DEMO certification remain pending.
@@ -115,23 +116,31 @@ Primary Structural Target is normally a management checkpoint. Valid Expansion T
 
 ### IMPLEMENTED RESEARCH EVIDENCE BASELINE
 
-The production Trade Manager is reused chronologically in `research/management_replay.py` at completed-M5 boundaries. It records HOLD/PROTECT/TRAIL/RUNNER/EXIT, current active stop/TP outcomes, Capture Efficiency and giveback.
+The production Trade Manager is reused chronologically in `research/management_replay.py`. `research/stress.py` adds declared adverse fill/spread/modify stress without changing production behaviour. `research/validation.py` now provides fixed-policy chronological walk-forward validation.
 
-The default replay is `BAR_CLOSE_IDEALIZED`. Research-only assumptions now additionally support adverse entry slippage, executable-side spread approximation, completed-M5 modify delay and deterministic modify rejection without changing production management logic.
+Walk-forward implementation rules are frozen at architecture level:
 
-`research/stress.py` holds analytical decisions fixed and compares those execution assumptions versus a clean BASE. This closes the software gap of having no deterministic execution-friction stress foundation; it does **not** close broker-realism questions below.
+- development history may reconstruct causal state but is not scored as validation;
+- validation slices cannot overlap;
+- policy/config is fixed inside the validation run; no hidden auto-tuning;
+- outcome data is clipped at validation end so later-window candles cannot resolve earlier trades;
+- the utility cannot consume the one-shot final holdout.
+
+Exact window sizes/sample requirements remain calibration, not frozen behaviour.
 
 ### CALIBRATE IN RESEARCH
 
 - family-specific stop buffer;
 - Stop Quality thresholds;
 - protection/trailing eligibility;
-- exact M5/M15/H1 structural trail precedence thresholds;
+- exact M5/M15/H1 trail precedence thresholds;
 - continuation/reversal thresholds for HOLD/PROTECT/TRAIL/RUNNER/EXIT;
 - objective-quality thresholds for runner progression;
 - family/regime RR refinements;
 - management replay versus DEMO outcome differences;
-- empirical stress severity by broker/session/volatility.
+- empirical stress severity by broker/session/volatility;
+- walk-forward development/validation event counts and window stepping;
+- minimum independent validation sample/regime coverage.
 
 ### DEFER LATER
 
@@ -148,7 +157,7 @@ MEDIUM   $300–$999.99            2.0–3.0%      >3.0–4.5%        5%        
 NORMAL   $1,000+                 1.0–2.0%      >2.0–3.5%        4%               7%
 ```
 
-There is **no V1 minimum-balance floor for positive SMALL accounts**. Actual minimum-lot all-in risk, ceiling, margin, daily lock and execution safety decide a specific plan.
+There is **no V1 minimum-balance floor for positive SMALL accounts**. Actual min-lot all-in risk, ceiling, margin, daily lock and execution safety decide a specific plan.
 
 Capacity is `0/1`. Account Safety P/L uses cash-flow-adjusted equity. Manual reset is OFF by default/max one per UTC risk day if enabled. Three consecutive closed bot losses trigger minimum 30-minute cooldown + fresh M15 context; same Market Episode permits at most one genuinely fresh re-entry.
 
@@ -254,8 +263,6 @@ V1 defines no separate REAL authorization workflow.
 
 ### IMPLEMENTED RESEARCH-STRESS BASELINE
 
-Transparent deterministic research probes now exist for:
-
 ```text
 BASE                no added friction
 WIDER_SPREAD        1.50x dataset spread
@@ -265,11 +272,11 @@ MODIFY_REJECTION    every 2nd submitted modify rejected
 COMBINED            all four together
 ```
 
-These are configurable **research baselines only**. They do not alter the frozen production spread/drift rules and are not claims about actual Exness/broker distributions.
+These are configurable **research baselines only**. They do not alter frozen production spread/drift rules and are not claims about actual broker distributions.
 
 ### IMPLEMENTATION CHOICE / INTEGRATION PENDING
 
-- **production shared cross-laptop coordination backend** satisfying atomic lease/fencing contract;
+- production shared cross-laptop coordination backend satisfying atomic lease/fencing contract;
 - final magic/comment shape if later adjustment needed;
 - bounded read-only/pre-submit retry/backoff;
 - broker-specific reconciliation refinements from controlled evidence;
@@ -279,7 +286,7 @@ These are configurable **research baselines only**. They do not alter the frozen
 
 - spread baseline sample window/minimum count/expiry;
 - empirical slippage distribution by broker/session/volatility;
-- empirical manager stop/TP modification delay/failure distribution;
+- empirical manager modification delay/failure distribution;
 - variable-spread/tick-order stress where trustworthy data exists;
 - evidence-backed spread/drift/lease timing refinements.
 
@@ -315,12 +322,12 @@ Live mutable SQLite DB is runtime state, not a mergeable source artifact. Public
 ### IMPLEMENTED DETERMINISTIC FOUNDATION
 
 - chronological bar-close Decision replay;
-- same-chronology confluence ablation with production sources default ON;
+- same-chronology confluence ablation;
 - historical production Trade Plan reconstruction;
-- ambiguity-safe initial bracket outcome model;
+- ambiguity-safe initial bracket outcomes;
 - chronological production Trade Manager replay;
 - declared execution-friction stress engine;
-- decision/bracket/management confluence ablation;
+- fixed-policy walk-forward validation scaffold;
 - actual/counterfactual metric separation;
 - research episode journal;
 - bounded StrategyMemory;
@@ -328,38 +335,36 @@ Live mutable SQLite DB is runtime state, not a mergeable source artifact. Public
 - durable candidate/rejected memory;
 - recurring-cluster invention cycle;
 - discovery `IDLE / HEALTHY / DEGRADED` liveness;
-- governed promotion stages/locked fingerprint/one-shot holdout/self-promotion denial;
-- Trendline/Fibonacci/POC explicit audited discovery primitives.
+- governed promotion stages/locked fingerprint/one-shot holdout/self-promotion denial.
 
-Research realism is explicitly scoped:
+Research realism remains explicit:
 
 ```text
 Decision replay          BAR_CLOSE
 Initial bracket outcomes BAR_HIGH_LOW
 Trade Manager replay     BAR_CLOSE_IDEALIZED
 Execution stress         BAR_CLOSE_EXECUTION_STRESS + declared assumptions
+Walk-forward             FIXED_POLICY_WALK_FORWARD
 ```
 
-Ambiguous/unresolved/open modeled outcomes are not forced into resolved P/L.
+Walk-forward is independent chronological evidence, not the final untouched holdout. Ambiguous/unresolved/open modeled outcomes are not forced into resolved P/L.
 
 ### FROZEN PRINCIPLES
 
-Research cannot self-promote production, bypass hard safety, generate/execute arbitrary Python or leak future data into replay.
-
-Eligible recurring discovery evidence must produce a candidate or explicit governed suppression reason; silent eligible-evidence loss is a defect/degraded state.
+Research cannot self-promote production, bypass hard safety, execute arbitrary Python or leak future data. Eligible discovery evidence must create a candidate or explicit governed suppression reason.
 
 ### IMPLEMENTATION CHOICE / NEXT RESEARCH ENGINEERING
 
-- historical PRE_CLOSE integration once trustworthy schedule history is available;
-- dataset ingestion/identity/versioning for broader XAU history;
-- walk-forward/independent-validation orchestration over declared dataset splits;
-- reproducible evidence-report packaging.
+- dataset identity/versioning for broader XAU history;
+- reproducible evidence-manifest packaging;
+- historical PRE_CLOSE integration once trustworthy schedule history exists;
+- real-data walk-forward orchestration using declared dataset identities.
 
 ### CALIBRATE IN RESEARCH
 
 - minimum sample/confidence by family/regime;
 - development/validation/holdout periods;
-- walk-forward/stress details;
+- walk-forward window sizes/stepping and minimum validation sample;
 - empirical execution-stress severity and acceptance thresholds;
 - Shadow/DEMO Canary/Main DEMO promotion thresholds;
 - bounded StrategyMemory influence;
@@ -367,7 +372,7 @@ Eligible recurring discovery evidence must produce a candidate or explicit gover
 - autonomous recipe ranges;
 - duplicate-variant classifier thresholds;
 - Monte Carlo/block/regime-aware methods;
-- Trendline/Fibonacci/POC value through decision, bracket and management ablation including Opportunity Recall/trade-frequency cost.
+- optional confluence value through decision/bracket/management evidence.
 
 ### DEFER LATER
 
@@ -389,10 +394,6 @@ Eligible recurring discovery evidence must produce a candidate or explicit gover
 - safe-shutdown/export controls;
 - concise Roman-Urdu wording polish;
 - live Windows terminal visual verification.
-
-### DEFER LATER
-
-- optional external notification channels.
 
 ## Engineering / release
 
@@ -417,6 +418,7 @@ Eligible recurring discovery evidence must produce a candidate or explicit gover
 - controlled MT5 DEMO certification;
 - no-lookahead replay proof;
 - confluence chronology + bonus-only proof;
+- real-data independent/walk-forward evidence;
 - discovery-liveness proof;
 - duplicate-write/fault-injection proof;
 - production shared controller/fencing proof;
@@ -431,8 +433,8 @@ Eligible recurring discovery evidence must produce a candidate or explicit gover
 
 Behavioural design is complete enough to continue implementation/integration. No major subsystem or `FIX BEFORE BUILD` item is currently known.
 
-Closed software gaps now include the former `$100` floor, local persistence-engine choice, chronological production Trade Manager research path and deterministic declared execution-stress foundation.
+Closed software gaps now include the former `$100` floor, local persistence-engine choice, chronological production Trade Manager research path, deterministic execution-stress foundation and fixed-policy walk-forward validation scaffold.
 
-Current main work is **integration and evidence**, not redesign: calibrate stress on real XAU/DEMO evidence, add walk-forward/independent validation and historical session realism, then finish runtime/provider/shared-coordination/backup integration and controlled DEMO certification.
+Current main work is **integration and evidence**, not redesign: identify/version real XAU datasets and package reproducible evidence, run meaningful walk-forward validation, calibrate stress, add historical session realism, then finish runtime/provider/shared-coordination/backup integration and controlled DEMO certification.
 
-Documents remain `DRAFT/PROVISIONAL` where live broker evidence does not yet exist. Do not relabel them VERIFIED until required evidence passes.
+Documents remain `DRAFT/PROVISIONAL` where real historical/live broker evidence does not yet exist. Do not relabel them VERIFIED until required evidence passes.
