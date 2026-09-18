@@ -33,7 +33,10 @@ from goldswingtraderai.intelligence.confluence import (
 )
 from goldswingtraderai.intelligence.indicators import QuantReport
 from goldswingtraderai.intelligence.snapshot import IntelligenceSnapshot, TimeframeIntelligence
-from goldswingtraderai.strategies.confluence import apply_optional_confluence
+from goldswingtraderai.strategies.confluence import (
+    ConfluenceBonusConfig,
+    apply_optional_confluence,
+)
 from goldswingtraderai.strategies.floor import (
     DirectionalFamilyCase,
     FamilyReport,
@@ -221,6 +224,18 @@ def _frame(timeframe: Timeframe, confluence: ConfluenceReport | None) -> Timefra
     )
 
 
+def _intelligence(confluence: bool) -> IntelligenceSnapshot:
+    return IntelligenceSnapshot(
+        market_snapshot_id=new_snapshot_id(),
+        frames=(
+            _frame(Timeframe.M15, _supportive_confluence(Timeframe.M15) if confluence else None),
+            _frame(Timeframe.M5, _supportive_confluence(Timeframe.M5) if confluence else None),
+        ),
+        session=None,
+        news=None,
+    )
+
+
 def _base_floor() -> StrategyFloorReport:
     case = DirectionalFamilyCase(
         score=60.0,
@@ -251,30 +266,15 @@ def _base_floor() -> StrategyFloorReport:
 
 
 def test_missing_confluence_never_penalizes_base_strategy_score() -> None:
-    intelligence = IntelligenceSnapshot(
-        market_snapshot_id=new_snapshot_id(),
-        frames=(_frame(Timeframe.M15, None), _frame(Timeframe.M5, None)),
-        session=None,
-        news=None,
-    )
     base = _base_floor()
-    adjusted = apply_optional_confluence(base, intelligence)
+    adjusted = apply_optional_confluence(base, _intelligence(False))
     assert adjusted.families[0].buy.score == pytest.approx(base.families[0].buy.score)
     assert adjusted.families[0].sell.score == pytest.approx(base.families[0].sell.score)
 
 
 def test_supportive_confluence_is_bounded_positive_only_bonus() -> None:
-    intelligence = IntelligenceSnapshot(
-        market_snapshot_id=new_snapshot_id(),
-        frames=(
-            _frame(Timeframe.M15, _supportive_confluence(Timeframe.M15)),
-            _frame(Timeframe.M5, _supportive_confluence(Timeframe.M5)),
-        ),
-        session=None,
-        news=None,
-    )
     base = _base_floor()
-    adjusted = apply_optional_confluence(base, intelligence)
+    adjusted = apply_optional_confluence(base, _intelligence(True))
     buy = adjusted.families[0].buy
     sell = adjusted.families[0].sell
 
@@ -283,3 +283,29 @@ def test_supportive_confluence_is_bounded_positive_only_bonus() -> None:
     assert "TRENDLINE_PULLBACK_SUPPORT" in buy.evidence
     assert "FIB_CORE_RETRACEMENT" in buy.evidence
     assert "POC_LOCATION_CONFLUENCE" in buy.evidence
+
+
+def test_ablation_can_disable_every_source_without_changing_base_score() -> None:
+    base = _base_floor()
+    adjusted = apply_optional_confluence(
+        base,
+        _intelligence(True),
+        ConfluenceBonusConfig(trendline=False, fibonacci=False, poc=False),
+    )
+
+    assert adjusted == base
+
+
+def test_ablation_can_isolate_trendline_without_fib_or_poc() -> None:
+    base = _base_floor()
+    adjusted = apply_optional_confluence(
+        base,
+        _intelligence(True),
+        ConfluenceBonusConfig(trendline=True, fibonacci=False, poc=False),
+    )
+    buy = adjusted.families[0].buy
+
+    assert buy.score > base.families[0].buy.score
+    assert "TRENDLINE_PULLBACK_SUPPORT" in buy.evidence
+    assert "FIB_CORE_RETRACEMENT" not in buy.evidence
+    assert "POC_LOCATION_CONFLUENCE" not in buy.evidence
