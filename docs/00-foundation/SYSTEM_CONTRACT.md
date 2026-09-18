@@ -1,29 +1,27 @@
 # GoldSwingTraderAI — System Contract
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-design  
+**Version:** 0.4-design  
 **Authority:** Highest-level behavioural contract
 
 ## Core contract
 
-GoldSwingTraderAI is an XAUUSD/XAUUSDm trading system built around multi-timeframe structure, parallel specialist analysis, independent BUY/SELL theses, explicit opportunity/timing separation, hard risk authority, centralized broker-write permission and governed research/learning.
+GoldSwingTraderAI is an XAUUSD/XAUUSDm trading system built around multi-timeframe structure, parallel specialist analysis, independent BUY/SELL theses, explicit opportunity/timing separation, structural Trade Plans, hard risk/safety authority, centralized broker-write permission and governed research/learning.
 
-If another document conflicts with this contract, this document wins until the contradiction is formally resolved in the design-decision ledger.
+If another document conflicts with this contract, the contradiction must be formally resolved; implementation must not silently choose a different rule.
 
 ## Market-analysis contract
 
-- H4, H1, M15 and M5 are the primary design timeframes.
-- Completed candles are authoritative for structural decisions; unfinished candles may supply telemetry only where explicitly allowed.
+- H4, H1, M15 and M5 are primary timeframes.
+- Completed candles are authoritative for structural confirmation; unfinished candles may supply telemetry only where explicitly allowed.
 - Market analysis runs in parallel rather than as a long sequential filter chain.
-- Candle/structure, technical/location, liquidity/SMC, indicator/quant, fundamental/session and strategy specialists publish bounded evidence.
-- Expansion/volatility views may combine Candle + Quant evidence; they must not create competing definitions of the same facts.
-- Each analytical desk should, where meaningful, return BUY evidence, SELL evidence, confidence/coverage and reasons.
-- Missing optional non-safety evidence is not automatically scored as bearish or zero; it remains unavailable/unknown.
-- Strong opposing evidence matters more than merely missing confluence.
+- Candle/structure, technical/location, liquidity/SMC, indicator/quant, fundamental/session and strategy specialists publish bounded evidence from the same verified snapshot.
+- Missing optional non-safety evidence is not automatically bearish/zero.
+- Strong opposing evidence matters more than missing confluence.
 
 ## Decision contract
 
-The decision system maintains at least:
+Maintain at least:
 
 - BUY Thesis;
 - SELL Thesis;
@@ -35,13 +33,13 @@ The decision system maintains at least:
 - operator-facing Final Trade Score;
 - stable decision/reason trace.
 
-A strong opportunity may remain `ARMED` while entry timing is poor. Temporary timing weakness should normally produce `WAIT`, not destroy the setup.
+A strong opportunity may remain `ARMED` while entry timing is poor. Timing weakness should normally produce `WAIT`, not destroy the setup.
 
-Every meaningful `WAIT`, `MISSED`, `INVALID` or `BLOCKED` state must be attributable to a machine-readable reason plus a concise operator explanation.
+Every meaningful `WAIT`, `MISSED`, `INVALID` or `BLOCKED` state must expose a machine-readable reason plus concise operator explanation.
 
 ## Strategy-floor contract
 
-Initial production-family candidates are currently provisional:
+Initial V1 families:
 
 1. `TREND_PULLBACK_CONTINUATION`
 2. `BREAKOUT_EXPANSION`
@@ -50,39 +48,59 @@ Initial production-family candidates are currently provisional:
 5. `FAILED_BREAKOUT_REVERSAL`
 6. `COMPRESSION_EXPANSION`
 
-FVG, qualified Order Block, premium/discount, liquidity pools, session highs/lows, EMA, RSI, ATR and individual candle patterns are primarily evidence primitives, not automatically separate production strategies.
+FVG, qualified Order Block, premium/discount, liquidity pools, session highs/lows, EMA20/EMA50, RSI, ATR and individual candle patterns are primarily evidence primitives, not mandatory independent production strategies.
 
-All strategy families evaluate the same verified market snapshot in parallel. Compatible agreement may add bounded support; correlated evidence must not be double-counted as independent certainty.
+All strategy families evaluate the same verified market snapshot in parallel. Compatible agreement may add bounded support; correlated evidence must not be counted as independent certainty repeatedly.
 
 ## Timing and Trade Plan contract
 
 - M15 primarily identifies opportunity/location/target context.
-- M5 primarily identifies the executable moment.
-- Setup state and entry decision are separate.
-- Entry decisions include at least ENTER BUY, ENTER SELL, WAIT, MISSED, INVALID and BLOCKED.
-- Valid second-chance entries are allowed only when the original thesis survives and a genuinely fresh structural trigger appears.
-- Chase detection should normally defer entry rather than erase a valid opportunity.
+- M5 primarily identifies executable timing.
+- Opportunity/setup state and entry decision are separate.
+- Entry outcomes include ENTER BUY, ENTER SELL, WAIT, MISSED, INVALID and BLOCKED.
+- Valid second-chance entry requires the thesis to survive and a genuinely fresh structural/timing event.
+- Chase detection normally defers entry rather than erasing a valid opportunity.
 - Structural invalidation/SL and market objectives are defined before monetary sizing.
-- Risk must reject an unaffordable structural plan rather than tighten its stop merely to fit the account.
-- Original approved R remains immutable for lifecycle/performance attribution.
+- Risk rejects an unaffordable plan rather than distorting structural SL.
+- Original approved R remains immutable.
+
+Initial target economics use structural objectives rather than fixed 100/200/300-pip take profits. Primary Target is normally a management checkpoint, Expansion Target is the normal broker objective when valid, and Runner extension must be earned by fresh continuation evidence plus a new objective.
 
 ## Risk and safety contract
 
-Risk/safety are not weighted scoring components. They return hard authority such as PASS/BLOCK/UNKNOWN.
+Risk/safety are not weighted-scoring components. They return hard authority such as PASS/BLOCK/UNKNOWN.
 
 A high strategy score cannot override:
 
-- invalid or stale market data;
+- invalid/stale required market data;
 - unacceptable broker/account state;
-- hard daily-loss lock;
-- hard news/event block or required news-safety uncertainty;
-- unacceptable monetary risk or margin;
+- daily loss lock/cooldown;
+- news/session safety;
+- monetary risk/margin;
+- position ownership/capacity;
 - unresolved broker/order lifecycle;
 - critical persistence corruption;
-- duplicate-controller uncertainty;
+- controller ownership uncertainty;
 - unsafe execution conditions.
 
-Daily-loss lock and deliberate governed manual reset are retained. The current provisional daily-risk boundary is the UTC calendar day (`00:00 UTC`). Exact percentages/accounting/reset count remain under the Risk Contract/open questions.
+Initial account profiles and risk boundaries are owned by `../30-risk-execution/RISK_CONTRACT.md`; current V1 uses SMALL `$100–$299`, MEDIUM `$300–$999`, NORMAL `$1,000+`, one independently risk-bearing Gold position (`0/1`), UTC risk-day accounting, governed manual-reset semantics and broker-aware all-in sizing.
+
+## V1 environment contract
+
+V1 defines one positive environment guard only:
+
+```text
+Connected MT5 account positively verified DEMO
+→ DEMO_GUARD = PASS
+```
+
+Broker writes may proceed only when the DEMO guard and every other required authority pass.
+
+If DEMO status is not verified, broker-write permission is not granted.
+
+V1 does not define a separate REAL authorization workflow, REAL hard-block contract, LIVE override or alternate REAL execution path.
+
+A verified DEMO account is real-time broker execution on that DEMO account, not dry-run simulation.
 
 ## Execution contract
 
@@ -100,19 +118,46 @@ validated decision
 → verify/reconcile
 ```
 
-All bot-managed create/modify/close writes must use the governed execution path. Strategy, research, dashboard and learning code may not call raw irreversible MT5 writes directly.
+All bot-managed create/modify/close writes use this path. Strategy, research, dashboard and learning code may not call raw irreversible MT5 writes directly.
 
-Ambiguous acknowledgement must never trigger blind duplicate submission.
-
-The initial release safeguard is DEMO-first. A real account must not silently gain write authority. Future explicitly approved REAL execution uses the same trading/risk/execution architecture; DEMO-only is a release policy, not a permanent inability to trade LIVE.
+Ambiguous acknowledgement never triggers blind duplicate submission.
 
 ## Single-controller contract
 
-For one managed account/symbol, only one bot instance may hold active broker-write authority. Other machines may observe, research or shadow. Failover must reconcile broker/local state before acquiring execution authority.
+For one managed account/symbol, only one runtime may hold broker-write authority.
+
+V1 uses a shared controller lease with monotonic fencing epoch. Initial renewal target is 10 seconds and lease TTL is 30 seconds. Every irreversible write must freshly verify current holder, unexpired lease and matching current epoch.
+
+A second laptop remains Observer while another valid holder exists. Standby takeover requires authoritative expiry, a new epoch and full broker/local-state reconciliation before becoming PRIMARY READY. A stale old epoch cannot write.
+
+## Session / scheduled-close contract
+
+V1 does not intentionally carry bot-managed Gold through known scheduled XAU closure/reopen gap risk.
+
+```text
+Daily:   T-20m no new entry, T-10m mandatory governed flatten
+Weekend: T-60m no new entry, T-30m mandatory governed flatten
+```
+
+Daily reopen requires normalized conditions plus at least one clean completed M5. Weekend reopen requires gap assessment, normalized conditions and at least two clean completed M5 candles.
+
+If flatten acknowledgement is ambiguous or broker becomes unavailable, unresolved exposure remains durable and must reconcile; it is never marked closed by assumption.
+
+## News-safety contract
+
+Initial V1 new-entry policy:
+
+```text
+TIER 1 CRITICAL  -15/+15 min
+TIER 2 HIGH      -5/+5 min
+TIER 3 CONTEXT   no automatic hard blackout
+```
+
+Scheduled news alone does not automatically force-close an existing managed trade. Required event truth failure becomes safety unknown rather than silent clear. Severe post-event dislocation requires normalized execution conditions plus a clean completed M5 before new entry permission resumes.
 
 ## Trade-management contract
 
-Open-trade management is a second decision floor. It evaluates continuation and reversal evidence in parallel and may return:
+Open-trade management is a second decision floor. It evaluates continuation and reversal evidence in parallel and returns one of:
 
 - HOLD;
 - PROTECT;
@@ -120,47 +165,54 @@ Open-trade management is a second decision floor. It evaluates continuation and 
 - RUNNER;
 - EXIT.
 
-Trailing should primarily follow proven market structure with volatility-aware buffering. It should not mechanically tighten on every small profit fluctuation. Stops may tighten but should not intentionally widen beyond approved risk. Original R remains immutable.
+Trailing should primarily follow proven market structure with volatility-aware buffering. It should not mechanically tighten on every small profit fluctuation. Stops may tighten but must not intentionally widen beyond original approved risk. Original R remains immutable.
+
+Mandatory PRE_CLOSE flatten overrides HOLD/RUNNER continuation logic.
 
 ## Persistence / recovery contract
 
-Critical responsibilities must survive restart and machine replacement. Durable/portable state includes, as applicable:
+Critical responsibilities survive restart and machine replacement. Durable/portable state includes, as applicable:
 
 - risk/order/trade lifecycle;
 - Trade Plan/original R context;
 - Opportunity/Market Episode identity;
+- controller/reconciliation context as required;
 - Strategy Registry and genealogy;
 - Champion/Challenger/promotion history;
 - entry/exit learning and StrategyMemory;
 - research/autonomous candidate history;
-- fault/backup metadata.
+- fault/backup/schema metadata.
 
-Broker positions/orders/deals remain actual exposure truth. Restored/local state supplies context and must be reconciled before new broker writes.
+Broker positions/orders/deals are current exposure truth. Restored/local state supplies intent/context and must reconcile before new broker writes.
 
-The public repository may be used as disaster-recovery/versioned backup for project intelligence under the current policy. Credentials, tokens, private keys or other authentication material capable of unauthorized financial action or direct paid-service cost must never be committed.
+The public repository may back up project intelligence. Credentials, tokens, private keys or other authentication material capable of unauthorized financial action, authenticated account control or direct paid-service cost must never be committed.
 
 ## Research and learning contract
 
-Research evaluates completed trades, missed opportunities, blocked/rejected opportunities and invalidated setups. Entry and exit learning measure MFE/MAE, entry efficiency, capture efficiency and premature-exit cost.
+Research evaluates completed trades, missed opportunities, blocked/rejected opportunities and invalidated setups. Entry/exit learning measures MFE/MAE, entry efficiency, capture efficiency and premature-exit cost.
 
-Governed strategy discovery/autonomous invention may propose bounded declarative candidates but may not directly rewrite production code, risk controls, broker permissions or safety gates.
+Governed discovery/autonomous invention may propose bounded declarative candidates but may not directly rewrite production code, hard risk controls, broker permissions or safety gates.
 
-No `eval`, `exec`, arbitrary generated Python or silent self-modification is part of the intended autonomous strategy design.
+No `eval`, `exec`, arbitrary generated executable Python or silent self-modification is part of intended autonomous strategy design.
 
-Promotion is evidence-driven and may include independent validation, locked candidate, one-shot final holdout, stress, Shadow and DEMO Canary stages before production approval.
+Promotion is evidence-driven and cannot occur silently.
 
 ## System-health contract
 
-Normal trading decisions and bot faults are separate.
+Normal trading decisions and technical faults are separate.
 
-- `WAIT`, `ENTRY_EXTENDED`, `NEWS_BLACKOUT` or a functioning `LOSS_LOCKED` state are not automatically system errors.
-- Data/order/account/state/controller failures must expose subsystem, severity, trading impact and recovery/action state.
-- No critical unknown may silently fall back to a safe-looking default.
+- `WAIT`, `ENTRY_EXTENDED`, `NEWS_BLACKOUT`, `SESSION_PRE_CLOSE` or a functioning `LOSS_LOCKED` state are not automatically system errors.
+- Data/order/account/state/controller failures expose subsystem, severity, trading impact and recovery/action state.
+- No critical unknown silently falls back to a safe-looking default.
 
 ## Operator contract
 
-The main dashboard is compact and mostly read-only. It separates Market, Decision, Risk, Execution, Learning/Backup and System Health state. Restrained emojis may be used as visual status markers with text fallback; presentation never becomes trading authority.
+The dashboard remains compact and mostly read-only. It preserves useful prior GoldScalperAI observability and adds separate Decision, Execution, Learning, Backup and System Health state. Presentation never becomes trading authority.
 
 ## Development contract
 
-No production trading implementation is complete until the relevant design docs are frozen/deferred appropriately, executable tests exist, replay/live parity claims are justified, crash/restart/duplicate-submit risks are tested, disaster recovery is verified, and the exact build passes its required DEMO release gates.
+Implementation proceeds in large phases defined by `../CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`.
+
+A phase is complete only when code exists, required tests pass, documentation matches the implementation and no known critical contradiction remains.
+
+No release becomes VERIFIED merely because documentation/code appears complete; controlled DEMO, no-lookahead, duplicate-write, restart/reconciliation, controller/failover and recovery evidence must actually pass.
