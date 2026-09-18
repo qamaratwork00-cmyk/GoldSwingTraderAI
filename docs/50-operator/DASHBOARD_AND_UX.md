@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Dashboard and UX
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-design  
+**Version:** 0.3-design  
 **Authority:** Main terminal dashboard information architecture, operator visibility, reason presentation and restrained emoji usage.  
 **Depends on:** `../20-trading-decisions/SCORING_AND_DECISION_FUSION.md`, `../30-risk-execution/RISK_CONTRACT.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`
 
@@ -121,11 +121,11 @@ Code: ENTRY_EXTENDED
 Entry abhi ideal zone se door hai. Setup valid hai; fresh pullback/reclaim ka wait.
 ```
 
-Hard-block example:
+Risk-geometry example:
 
 ```text
-Code: MIN_LOT_UNAFFORDABLE
-0.01 minimum lot approved risk se zyada exposure de rahi hai.
+Code: RISK_GEOMETRY_TOO_LARGE
+Setup valid hai lekin current entry par 0.01 lot ka all-in risk profile ceiling se bahar hai. Better structural entry ka wait.
 ```
 
 The dashboard must never reduce all non-trades to `NO TRADE`.
@@ -174,16 +174,37 @@ When relevant display:
 
 Display compact authoritative risk state such as:
 
-- `NORMAL` / `LOSS_LOCKED` / `COOLDOWN` / `BLOCKED`;
+- Account Profile: `SMALL`, `MEDIUM` or `NORMAL`;
+- sizing mode: base/min-lot hybrid, stepped dynamic or fully dynamic;
+- `NORMAL` / `LOSS_LOCKED` / `COOLDOWN` / `BLOCKED` state;
 - equity/balance facts where appropriate;
-- target versus actual proposed risk;
-- proposed lot;
+- Target Risk and Acceptable Gold Risk Band status;
+- structural SL monetary risk;
+- spread/execution-friction impact as calculated by the Risk Contract;
+- actual proposed all-in risk;
+- proposed normalized lot;
 - open risk;
 - daily P/L and remaining risk budget;
 - position capacity;
 - Risk PASS/BLOCK reason.
 
-Exact risk numbers are owned by Risk Contract/config, not this dashboard document.
+Example SMALL account display:
+
+```text
+🛡️ RISK
+Profile          SMALL
+Sizing           BASE 0.01
+Target Risk      ...
+Structural Risk  ...
+Spread Impact    ...
+All-in Risk      ...
+Risk Band        ACCEPTABLE
+Decision         ✅ PASS
+```
+
+The dashboard must not assume a quoted Gold spread such as `$0.26` equals `$0.26` account cost; it displays the broker-aware conversion published by Risk/Execution.
+
+Exact risk percentages are owned by Risk Contract/config, not this dashboard document.
 
 ## Execution Permission panel
 
@@ -268,7 +289,7 @@ Use the states/reason codes owned by `SYSTEM_HEALTH_AND_DIAGNOSTICS.md`. A norma
 
 ## Startup view
 
-Before execution readiness, show a startup checklist including account, environment authorization, symbol/specs, history, state integrity, broker reconciliation, risk, Strategy Registry, learning, news safety and execution-controller authority.
+Before execution readiness, show a startup checklist including account, environment authorization, symbol/specs, history, state integrity, broker reconciliation, risk profile, Strategy Registry, learning, news safety and execution-controller authority.
 
 New trades remain disabled until required startup authorities are ready.
 
@@ -303,6 +324,8 @@ Dashboard refresh frequency is presentation only and must not cause repeated str
 - WAIT versus BLOCKED versus system-fault rendering;
 - stable reason code + human explanation;
 - decision trace correctness;
+- SMALL/MEDIUM/NORMAL profile and sizing-mode display;
+- all-in risk/spread-impact display comes from authority rather than UI recomputation;
 - centralized Execution Permission display correctness;
 - DEMO-first versus future authorized-REAL display semantics;
 - role/controller visibility;
