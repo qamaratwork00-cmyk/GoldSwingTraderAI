@@ -178,7 +178,9 @@ def evaluate_risk(
     if market.account.equity <= 0:
         return _result(HardDecision.UNKNOWN, "ACCOUNT_EQUITY_INVALID")
 
-    profile = resolve_account_profile(market.account.equity)
+    # Profile is fixed for the UTC risk day instead of changing with intraday
+    # floating P/L. This keeps daily-lock semantics stable near profile boundaries.
+    profile = resolve_account_profile(context.risk_day.day_start_equity)
     if profile is None:
         return _result(HardDecision.UNKNOWN, "ACCOUNT_PROFILE_BELOW_100_DEFERRED")
     policy = profile_policy(profile)
