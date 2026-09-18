@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Setup and Run Guide
 
 **Status:** DRAFT  
-**Version:** 0.1-design  
+**Version:** 0.2-design  
 **Authority:** Operator workflow for installation, startup, safe shutdown, migration, restore and common blocked-state handling.  
 **Depends on:** `DASHBOARD_AND_UX.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
@@ -19,10 +19,12 @@ install supported Python/runtime
 → install project dependencies
 → create local configuration from safe example
 → configure financial credentials locally
-→ log into intended MT5 DEMO account
+→ log into intended MT5 environment
 → run startup verification
 → start bot
 ```
+
+Initial broker-write release is DEMO-first. A real account connected before a future explicit REAL release approval must be reported as an environment authorization block rather than silently receiving broker-write authority.
 
 Do not document guessed shell commands as authoritative until the real package layout exists.
 
@@ -48,7 +50,7 @@ Conceptual startup:
 ```text
 load/verify durable state
 → connect MT5
-→ verify account/server/mode
+→ verify account/server/environment
 → resolve Gold symbol/specs
 → load/validate history
 → reconcile positions/orders/deals
@@ -56,10 +58,29 @@ load/verify durable state
 → load Strategy Registry/learning
 → verify news/safety inputs
 → acquire runtime execution role
+→ evaluate centralized Execution Permission
 → READY
 ```
 
 Do not treat the bot as execution-ready until required startup checks pass.
+
+Typical DEMO-ready state should make the final permission visible, conceptually:
+
+```text
+Environment       DEMO AUTHORIZED
+Controller        PRIMARY EXECUTOR
+Execution Gate    ALLOW
+```
+
+If a REAL account is connected while the release remains DEMO-first:
+
+```text
+Environment       REAL
+Execution Gate    BLOCK
+Reason            ENVIRONMENT_NOT_AUTHORIZED
+```
+
+This is a release safeguard, not a permanent architectural inability to support LIVE trading. A future explicitly approved REAL policy is intended to use the same centralized permission gate and broker-write path.
 
 ## Runtime roles
 
@@ -96,9 +117,10 @@ Examples:
 
 - `NEWS_BLACKOUT` — usually wait for safety to clear;
 - `LOSS_LOCKED` — wait for risk-day reset or use the governed manual reset if deliberately allowed;
-- `POSITION_CAPACITY_FULL` — existing managed position owns capacity.
+- `POSITION_CAPACITY_FULL` — existing managed position owns capacity;
+- `ENVIRONMENT_NOT_AUTHORIZED` — connected account mode is not authorized by the current release policy.
 
-Follow the reason/action shown by the dashboard.
+Follow the reason/action shown by the dashboard. Do not bypass the centralized Execution Permission Gate.
 
 ## What to do on system BLOCKED
 
@@ -146,6 +168,7 @@ clone/install project
 → broker reconciliation
 → rebuild market intelligence
 → acquire execution authority
+→ centralized permission verification
 → READY
 ```
 
@@ -159,7 +182,7 @@ If the old laptop is lost, recovery should require only:
 - required local financial credentials or secure credential source;
 - access to the intended MT5 account/provider services.
 
-After restore, broker truth must still be reconciled before new trading.
+After restore, broker truth must still be reconciled and execution permission re-established before new trading.
 
 ## Upgrade workflow
 
@@ -172,6 +195,7 @@ safe shutdown
 → validate state schema/migration
 → startup reconciliation
 → required tests/self-checks
+→ execution-permission verification
 → resume
 ```
 
@@ -187,7 +211,7 @@ Operator normally uses the dashboard. Structured logs/reports should support tro
 
 - runtime/decision;
 - trade/risk;
-- execution/reconciliation;
+- execution permission/reconciliation;
 - faults/recovery;
 - research/learning.
 
