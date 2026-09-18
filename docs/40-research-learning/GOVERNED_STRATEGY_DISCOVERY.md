@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Governed Strategy Discovery
 
 **Status:** PROVISIONAL  
-**Version:** 0.1-design  
+**Version:** 0.2-implementation  
 **Authority:** Parameter discovery, strategy-recipe discovery, candidate comparison and evidence-driven market-behaviour discovery.  
 **Depends on:** `RESEARCH_AND_VALIDATION.md`, `../20-trading-decisions/STRATEGY_FLOOR.md`, `LEARNING_AND_AI_BOUNDARIES.md`
 
@@ -11,146 +11,194 @@ The discovery system searches for improvements while preserving production seman
 
 > **Discovery proposes candidates. It does not directly change production.**
 
+## Discovery liveness contract
+
+Discovery must not exist only as a documented feature or silently remain inert.
+
+When a coherent evidence cluster reaches the configured eligibility requirements, each discovery cycle must produce one of two auditable outcomes:
+
+```text
+eligible recurring evidence
+→ candidate created and durably registered
+OR
+→ explicit machine-readable suppression/rejection reason
+```
+
+Examples of legitimate non-creation reasons include insufficient independent episodes, insufficient evidence strength, no stable primitive pattern, duplicate existing candidate, or substantially similar rejected candidate.
+
+If eligible evidence cannot be processed and no governed reason is produced, discovery health is `DEGRADED`; it must not pretend to be healthy.
+
+## Automatic evidence feed — implemented baseline
+
+V1 research persists outcome-labelled episodes and automatically converts eligible recurring episodes into discovery observations.
+
+```text
+Replay / forward outcome
+→ ResearchEpisodeRecord
+→ durable ResearchEpisodeRepository
+→ approved-primitive observation mapping
+→ recurring cluster
+→ invention/discovery cycle
+→ CandidateRegistry
+```
+
+This wiring is important: normal operation must not depend on an operator manually constructing candidate observations one by one.
+
 ## Discovery levels
 
 ### Level A — Parameter discovery
 
-May research bounded values such as:
-
-- score weights;
-- displacement/extension thresholds;
-- freshness decay;
-- timing bands;
-- conflict/synergy caps;
-- trail/target parameters that are explicitly designated as researchable.
-
-Hard safety invariants are not parameter-search space.
+May research bounded score/entry/management values explicitly designated as researchable. Hard safety invariants are not parameter-search space.
 
 ### Level B — Strategy recipe discovery
 
-May combine approved audited primitives into a declarative market hypothesis, including:
-
-- primary required behaviours;
-- optional supporting evidence;
-- conflicts/counter-evidence;
-- timing profile;
-- invalidation model;
-- target model;
-- preferred regimes.
+May combine approved audited primitives into a declarative hypothesis containing required behaviour, optional support, timing profile, invalidation model, target model and preferred regime.
 
 ### Level C — Market-behaviour discovery
 
 May search repeated missed/losing/winning episode clusters for recurring behaviour not represented well by current families.
 
-The objective is evidence-driven hypothesis generation, not random combinatorial strategy generation.
+The objective is evidence-driven hypothesis generation, not random combinatorial search.
 
-## Candidate sources
+## Implemented candidate sources
 
-Useful discovery triggers include:
+The initial implementation can derive discovery triggers from repeated:
 
-- repeated high-quality missed moves;
-- repeated false-entry clusters;
-- repeated premature exits;
-- regime-specific family deterioration;
-- recurring profitable sequences not represented by current families.
+- meaningful missed moves;
+- false-entry episodes;
+- premature-exit / weak-capture episodes;
+- high-capture sequences;
+- later regime-deterioration research.
+
+Blocked/safety/system-fault attribution must remain distinct so discovery does not incorrectly rewrite a strategy for a broker or system failure.
+
+## Approved primitive registry
+
+Autonomous discovery accepts only the audited primitive vocabulary implemented in `research/discovery.py`, including structure/break/MSS, candle rejection/displacement/compression, technical location, liquidity sweep/FVG/Order Block, EMA/RSI/ATR context, session context, target path and entry timing.
+
+Arbitrary strings/executable code are not candidate primitives.
 
 ## Candidate discipline
 
-A discovered candidate should retain:
+A candidate retains at least:
 
-- Candidate ID;
-- parent/related family if any;
-- discovery reason/hypothesis;
-- declarative recipe/parameter changes;
-- dataset/evidence references;
-- complexity estimate;
-- status and chronology.
+- typed Candidate ID;
+- candidate type (`VARIANT`, `NEW_FAMILY`, `ENTRY_POLICY`, `EXIT_POLICY`);
+- parent family when applicable;
+- discovery trigger/hypothesis;
+- declarative required/optional primitives;
+- timing/invalidation/target model;
+- evidence source IDs;
+- fingerprint and chronology;
+- current status / rejection reason.
 
-## Duplicate/variant detection
+The initial implementation requires independent episode IDs; repeated copies of one source episode cannot inflate sample count.
 
-A candidate that is merely an existing strategy plus a minor supporting primitive should normally be classified as a **variant** rather than a new family.
+## Duplicate / variant / rejected-memory handling
 
-A genuinely new family should represent a materially different market narrative, invalidation/timing/target logic or episode structure.
+A candidate close to an existing family is normally a variant rather than a fake new family. A materially unrepresented primitive pattern may become a `NEW_FAMILY` research candidate.
+
+Candidate fingerprints and similarity checks suppress duplicate candidates. Rejected candidates remain durable; a substantially similar rejected idea is not silently reinvented after restart without materially new evidence/versioning.
 
 ## Complexity control
 
-Candidates with many conditions/parameters receive an explicit complexity penalty/stronger evidence requirement. The system should prefer few primary behaviours plus bounded optional support over filter soup.
+Candidates are intentionally declarative and bounded. Initial implementation caps required/optional primitives per recipe and prefers a small stable primary pattern over filter soup. Exact thresholds remain research-calibratable rather than frozen profitability truth.
 
 ## Hard exclusions
 
 Discovery may not optimize or remove:
 
-- account identity checks;
+- account/DEMO identity checks;
 - no-lookahead rules;
+- monetary hard-risk ceilings/daily lock;
 - one-shot broker submission;
 - ambiguous-ack reconciliation;
-- daily hard safety semantics;
-- unknown broker/exposure fail-closed rules;
+- controller/fencing safety;
+- unknown broker/exposure fail-safe behaviour;
 - original-R immutability;
 - financial-secret handling.
 
-## Candidate evaluation
+## Candidate evaluation and promotion boundary
 
-All candidates must pass the research chronology owned by `RESEARCH_AND_VALIDATION.md` and promotion chronology owned by `GOVERNED_EXPERIMENTS_AND_PROMOTION.md`.
+Positive discovery evidence is not production permission.
 
-Positive development data alone is never production permission.
+```text
+Candidate Registry
+→ governed validation
+→ locked candidate
+→ one-shot final holdout
+→ stress
+→ shadow
+→ DEMO canary
+→ PROMOTION_READY
+→ explicit governed approval
+```
 
-## Failed-candidate memory
+Discovery/invention contains no direct production-edit or broker-write authority.
 
-Rejected candidates remain in durable research memory with reason/evidence so the discovery system does not repeatedly reinvent the same failed idea without materially new evidence.
+## Current implementation checkpoint — 2026-09-18
 
-## Strategy version isolation
+Implemented files:
 
-Results are attached to strategy/policy versions. Evidence from a materially changed version must not be silently treated as identical to the prior version.
+```text
+research/episode_journal.py
+research/discovery.py
+research/invention.py
+research/promotion.py
+```
 
-## Entry/exit discovery
+Key deterministic regressions include:
 
-Discovery may propose entry/exit policy challengers based on recurring evidence such as:
+- recurring independent missed-move evidence actually creates a candidate;
+- durable journal still feeds discovery after process/repository restart;
+- duplicate source IDs cannot fake evidence count;
+- variant versus new-family classification;
+- entry/exit policy challenger creation;
+- unapproved primitive rejection;
+- candidate/rejected memory persistence;
+- duplicate/rejected candidate suppression;
+- candidate cannot skip promotion stages;
+- locked fingerprint must match final holdout candidate;
+- final holdout is one-shot;
+- candidate cannot self-promote.
 
-- excessive chase rejection;
-- too-late breakout entries;
-- premature structural trailing;
-- poor runner capture.
+Deterministic CI proves software behaviour only. Replay quality and later DEMO/forward evidence are still required before any candidate can be considered production-ready.
 
-Production entry/exit behaviour remains unchanged until governed promotion.
+## Outputs / dashboard visibility
 
-## Outputs
+Expose, as available:
 
-At minimum:
-
-- discovery observation;
-- hypothesis;
-- Candidate ID/type;
-- parent/genealogy;
-- proposed declarative/parameter change;
-- complexity;
-- supporting/counter evidence;
-- required validation path;
-- current status.
+```text
+Discovery Health   IDLE / HEALTHY / DEGRADED
+Eligible Clusters  ...
+Candidate Count    ...
+Latest Candidate   ...
+Type / Stage       ...
+Suppression Reason ...
+Broker Authority   NONE
+```
 
 ## Tests required
 
+- liveness: eligible evidence creates a candidate or explicit governed suppression reason;
 - hard-safety fields excluded from search space;
-- duplicate/variant classification;
-- failed-candidate persistence;
-- version isolation;
+- approved primitive enforcement;
+- duplicate/variant/new-family classification;
+- failed-candidate persistence across restart;
+- independent-episode enforcement;
 - complexity guard;
-- entry/exit candidate creation without production mutation.
+- entry/exit candidate creation without production mutation;
+- no broker authority;
+- no self-promotion.
 
 ## Explicit non-goals
 
-Discovery must not:
+Discovery must not generate/execute arbitrary Python, directly edit production policy, learn around hard safety, self-promote candidates, or randomly search unlimited condition combinations.
 
-- generate/execute arbitrary Python;
-- directly edit production policy;
-- change risk because recent trades won/lost;
-- self-promote candidates;
-- randomly search unlimited condition combinations.
+## Open questions / research calibration
 
-## Open questions
-
-- final parameter-search bounds;
-- exact complexity penalty;
-- minimum independent episodes per discovery type;
-- exact duplicate/new-family similarity criteria;
-- exact discovery scheduling/resource limits.
+- final per-trigger sample/confidence requirements;
+- final primitive similarity/complexity thresholds;
+- parameter-search bounds and scheduling/resource budget;
+- richer regime-deterioration clustering;
+- evidence thresholds required before candidate validation begins.
