@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Persistence, Restart and Recovery
 
-**Status:** PROVISIONAL — IMPLEMENTED FOUNDATION + PORTABLE CHECKPOINT  
-**Version:** 0.4-implementation  
-**Authority:** Durable lifecycle state, crash recovery, restart reconciliation, portable runtime checkpoints, machine migration and backup/restore integrity.  
+**Status:** PROVISIONAL — IMPLEMENTED FOUNDATION + LOCAL BACKUP CATALOG  
+**Version:** 0.5-implementation  
+**Authority:** Durable lifecycle state, crash recovery, restart reconciliation, portable runtime checkpoints, automatic local checkpoint cadence/retention, machine migration and backup/restore integrity.  
 **Depends on:** `EXECUTION_AND_BROKER_SAFETY.md`, `RISK_CONTRACT.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../40-research-learning/LEARNING_AND_AI_BOUNDARIES.md`
 
 ## Purpose
@@ -19,6 +19,7 @@ V1 local persistence uses Python standard-library `sqlite3`. Core owners now inc
 src/goldswingtraderai/persistence/store.py
 src/goldswingtraderai/persistence/runtime_state.py
 src/goldswingtraderai/persistence/checkpoint.py
+src/goldswingtraderai/persistence/backup.py
 src/goldswingtraderai/security/financial_secrets.py
 ```
 
@@ -26,39 +27,19 @@ Subsystem repositories/adapters persist typed execution intents, managed trades,
 
 ## `store.py` — durable local authority
 
-`StateStore` provides:
-
-- SQLite durable current records;
-- append-only event history;
-- canonical JSON payloads;
-- SHA-256 checksums;
-- explicit database/record schema versions;
-- WAL + `synchronous=FULL`;
-- transactional upsert/delete + optional same-transaction event;
-- `PRAGMA quick_check`;
-- integrity verification for **both current records and event history**;
-- deterministic `StoreSnapshot` export;
-- restore of a verified snapshot only into an otherwise empty initialized store.
+`StateStore` provides SQLite durable current records, append-only events, canonical JSON, SHA-256 checksums, schema versions, WAL + `synchronous=FULL`, transactional writes, `PRAGMA quick_check`, record/event integrity verification, deterministic `StoreSnapshot` export and restore only into an empty store.
 
 Corrupt JSON/checksum/schema/timestamp state raises an explicit persistence error. It never becomes a blank safe-looking runtime state.
 
 ## `runtime_state.py` — typed critical recovery
 
-Typed round-trip adapters cover:
-
-- `RiskDayState`;
-- `CooldownState`;
-- `EpisodeRiskState`;
-- active `Opportunity`;
-- active `TradePlan`, including immutable original-R/objective context.
+Typed round-trip adapters cover `RiskDayState`, `CooldownState`, `EpisodeRiskState`, active `Opportunity` and active `TradePlan` including immutable original-R/objective context.
 
 `RuntimeStateRepository.load_recovery_bundle()` validates storage and Opportunity/Episode/Trade Plan lineage before returning recovery context.
 
 ## `checkpoint.py` — portable runtime checkpoint implemented
 
-Phase 11 now has a public-safe canonical checkpoint format. It does **not** copy the live mutable SQLite database into Git.
-
-V1 checkpoint directory:
+The public-safe portable format is:
 
 ```text
 checkpoint_manifest.json
@@ -66,198 +47,186 @@ records.jsonl
 events.jsonl
 ```
 
-The checkpoint manifest records:
+The manifest records checkpoint/database schema versions, source label/version, UTC creation time, canonical filenames, records/events SHA-256 hashes/counts and `checkpoint_sha256`.
 
-- checkpoint schema version;
-- StateStore database schema version;
-- source label/version;
-- UTC creation time;
-- canonical records/events filenames;
-- records/events SHA-256 hashes and counts;
-- `checkpoint_sha256` over manifest facts excluding its own hash.
-
-### Export rules
+### Export
 
 ```text
 StateStore integrity_check
-→ export deterministic StoreSnapshot
+→ deterministic StoreSnapshot
 → structured financial-secret scan
 → canonical records/events JSONL
-→ text-level financial-secret scan
-→ file hashes + manifest hash
-→ write temporary sibling directory
-→ atomic rename to new destination
+→ text-level secret scan
+→ hashes
+→ temporary sibling directory
+→ atomic rename to NEW destination
 ```
 
-Hard rules:
+Current records and append-only events are both included with original timestamps/checksums/event IDs. Financial-authority credential-shaped payloads block export with `FINANCIAL_SECRET_DETECTED`. Live SQLite/WAL files are not the portable public backup format.
 
-- destination is write-new; existing checkpoint is never overwritten;
-- current records and append-only event history are both included;
-- record/event original timestamps/checksums/event IDs are preserved;
-- financial-authority credential-shaped payloads block export with `FINANCIAL_SECRET_DETECTED`;
-- account identifiers that do not grant financial authority are not hidden merely because they identify a scope;
-- live SQLite/WAL files are not the portable public backup format.
+### Import / restore
 
-### Import rules
+Import rejects symlinks, missing/unexpected files, non-canonical filenames, unsupported schemas, hash/count/checksum mismatch, duplicate records/events and secret-shaped payloads.
 
-Import rejects:
+`restore_runtime_checkpoint()` verifies the entire checkpoint, requires a non-existing destination DB, restores through a temporary `StateStore`, verifies integrity, checkpoints WAL, atomically installs the DB, reopens it and returns `broker_reconciliation_required=True`.
 
-- checkpoint root/file symlinks;
-- missing or unexpected files;
-- non-canonical filenames;
-- unsupported checkpoint/database schema;
-- manifest hash mismatch;
-- records/events file hash mismatch;
-- count mismatch;
-- duplicate record identities;
-- non-chronological/duplicate event IDs;
-- per-record/per-event checksum mismatch;
-- financial-authority secret-shaped payloads.
+Restore never merges into or overwrites an existing live DB.
 
-### Fresh-database restore
+## `backup.py` — automatic local cadence / retention / catalog implemented
 
-`restore_runtime_checkpoint()`:
+Phase 11 now has a verified local backup manager on top of immutable checkpoints.
+
+Layout:
 
 ```text
-verify entire checkpoint
-→ require destination DB does not exist
-→ restore into temporary new StateStore
-→ verify record/event integrity
-→ checkpoint SQLite WAL
-→ atomically move completed DB into destination
-→ reopen + integrity_check
-→ return broker_reconciliation_required = True
+<backup-root>/
+├── backup_catalog.json
+└── checkpoints/
+    ├── runtime-YYYYMMDDTHHMMSSZ-<sha12>/
+    └── ...
 ```
 
-Restore never merges into or overwrites an existing live database. This avoids silently combining stale and current authority-bearing lifecycle state.
+`BackupPolicy` initial configurable engineering baseline:
+
+```text
+interval_minutes = 15
+keep_latest      = 96
+```
+
+At the default cadence this represents roughly one day of rolling local checkpoints. These are **implementation defaults, not trading/risk policy** and may be changed without altering strategy behaviour.
+
+### Backup creation
+
+`create_backup_if_due()`:
+
+```text
+verify current catalog + every referenced checkpoint
+→ if latest backup is not due: SKIPPED_NOT_DUE
+→ export new checkpoint to hidden staging directory
+→ immediately import/verify the new checkpoint
+→ assign deterministic timestamp + SHA-derived name
+→ atomically move staging to final checkpoint directory
+→ write new hashed catalog atomically
+→ only then prune checkpoints outside retention
+```
+
+This ordering protects the last known-good catalog: pruning never happens before the replacement catalog/checkpoint is successfully verified and published locally.
+
+### Catalog integrity
+
+`backup_catalog.json` is canonical JSON containing:
+
+- catalog schema version;
+- UTC update time;
+- chronological checkpoint entries;
+- checkpoint name, creation time, SHA, record count and event count;
+- `catalog_sha256` over catalog facts excluding its own hash.
+
+`load_backup_catalog(..., verify_checkpoints=True)` verifies both catalog integrity and every referenced checkpoint. `latest_verified_checkpoint()` returns the newest checkpoint only after full verification.
+
+Catalog names are basenames only; path traversal is rejected. A tampered/missing catalogued checkpoint makes the catalog verification fail closed.
+
+### Retention safety
+
+Retention keeps the newest configured count. The new catalog is atomically written **before** old checkpoint directories are pruned. A crash may therefore leave an unreferenced old directory, which is safe; it must not leave a valid catalog deliberately pointing at a checkpoint deleted first.
+
+### Failed backup safety
+
+If checkpoint export fails — including `FINANCIAL_SECRET_DETECTED` — the prior catalog and prior known-good checkpoint remain unchanged. Temporary staging is removed.
 
 ## Shared financial-secret detection
 
-`security/financial_secrets.py` is the shared security owner. Repository text scanning preserves source-code-safe semantics, while structured checkpoint scanning inspects serialized payload keys directly so a real `password`/token/key field cannot enter a public recovery checkpoint.
+`security/financial_secrets.py` is the shared security owner. Repository text scanning preserves source-code-safe semantics, while structured checkpoint scanning inspects serialized payload keys directly.
 
-This implements the chosen **minimum-hide / financial-authority-only secrecy** policy: strategy/research/learning/performance state may be backed up; credentials/tokens/private keys capable of authenticated financial action or paid-resource abuse may not.
+The chosen policy remains **minimum-hide / financial-authority-only secrecy**: strategy/research/learning/performance state may be backed up; credentials/tokens/private keys capable of authenticated financial action or paid-resource abuse may not.
 
-## Later-phase typed persistence already implemented
+## Remote publication boundary
 
-Durable state includes:
+`backup.py` deliberately stops at local public-safe artifact management. It does **not** authenticate to GitHub, embed a PAT/token, or perform a remote push.
 
-- `ExecutionIntent` lifecycle/history;
-- managed open-trade state;
-- research episodes;
-- candidate/rejected memory;
-- promotion lifecycle/final-holdout/rollback state.
+Remote GitHub publication must be performed by external authenticated tooling whose credential remains outside repository/checkpoint state. The publication layer may consume only already-verified public-safe catalog/checkpoint artifacts.
 
-These states survive deterministic restart tests and are captured generically by the portable StoreSnapshot/checkpoint layer because the checkpoint serializes the authoritative StateStore namespaces rather than maintaining a second per-feature backup schema.
+This separation prevents the backup system from solving durability by putting its own financial/security authority into the backup.
 
-## State categories
+## Durable state captured generically
 
-Durable state is logically separated rather than stored as one opaque mutable blob:
+Current StateStore-based namespaces include risk/session state, execution intent lifecycle, managed trades, Opportunity/TradePlan/original-R context, research episodes, StrategyMemory/learning evidence, candidate/rejected memory, promotion/final-holdout/rollback state and diagnostics/event history.
 
-- risk state;
-- runtime/system state;
-- execution intent/order lifecycle;
-- managed trade lifecycle;
-- Trade Plan/original R context;
-- Opportunity / Market Episode identity;
-- trade/opportunity/research journal;
-- performance/learning evidence;
-- Candidate/Strategy Registry;
-- research/discovery/invention state;
-- promotion/rollback history;
-- diagnostics/fault history;
-- backup manifests/schema metadata.
-
-## Daily risk / intent / open-trade recovery
-
-Restart must not erase daily loss locks, cooldown or Market Episode churn protection.
-
-```text
-restored SUBMITTING / ACCEPTED_UNKNOWN ExecutionIntent
-→ DO NOT RESEND
-→ query broker truth
-→ reconcile positions/orders/deals/action state
-→ classify VERIFIED / FAILED / still UNKNOWN
-```
-
-Broker position facts alone are insufficient to manage a restored trade. Local state preserves strategy/policy lineage, Opportunity/Episode/Trade IDs, entry/fill references, original SL/R, objective chain and management context; broker truth still owns current position/SL/TP/deals.
-
-## Rebuildable versus durable market state
-
-Rolling candles and derived market intelligence may be rebuilt chronologically from validated history. Durable financial/order/trade/learning evidence must not depend on a replaceable candle cache.
+The checkpoint captures authoritative StateStore namespaces generically rather than maintaining a second per-feature backup schema.
 
 ## Broker versus local truth
 
 ```text
+restored SUBMITTING / ACCEPTED_UNKNOWN intent
+→ DO NOT RESEND
+→ query broker positions/orders/deals
+→ reconcile
+→ VERIFIED / FAILED / still UNKNOWN
+```
+
+```text
 local checkpoint says OPEN
 broker says no open position
-→ inspect current positions/orders/deals/account identity
+→ inspect broker truth + lifecycle history
 → reconcile closure/manual action/data failure
-→ never blindly replay the old OPEN record into a new order
+→ never submit a replacement merely because backup said OPEN
 ```
 
 A restored checkpoint cannot grant order-send authority by itself.
 
-## Target startup / fresh-machine sequence
+## Target fresh-machine sequence
 
 ```text
 clone/install code
-→ restore verified portable checkpoint to NEW local DB
+→ obtain/verify selected checkpoint/catalog
+→ restore checkpoint to NEW local DB
 → configure financial credentials separately
 → integrity-check restored state
 → connect intended MT5 DEMO account
 → verify account/symbol
 → fetch current positions/orders/deals
-→ reconcile unresolved ExecutionIntents
-→ reconcile managed trades
-→ restore/validate risk state
+→ reconcile unresolved ExecutionIntents + managed trades
+→ validate restored risk state
 → rebuild market intelligence chronologically
 → revalidate stored opportunities
-→ load research/candidate/promotion/learning state
+→ load learning/research/candidate/promotion state
 → acquire fresh controller lease/epoch
-→ evaluate hard permissions
+→ evaluate all hard permissions
 → READY
 ```
 
-The portable checkpoint/restore software is implemented. The complete broker-connected fresh-machine drill and integrated runtime startup orchestration remain pending.
+Portable checkpoint and local rolling-backup software are implemented. Broker-connected fresh-machine certification and integrated startup orchestration remain pending.
 
 ## Public GitHub backup policy
 
-Allowed recovery material includes source/docs, strategies, learned parameters, Candidate/Strategy Registry, autonomous candidates/genealogy/rejected memory, learning summaries, research/promotion/rollback history, performance/evidence metadata and verified runtime checkpoints.
+Allowed: source/docs, strategies, learned parameters, Strategy Registry/candidates/rejected memory, research/promotion/rollback history, performance/evidence metadata and verified public-safe runtime checkpoints/catalogs.
 
 Never publish MT5 passwords, broker/session tokens, paid API keys, GitHub PATs, private/signing keys, recovery/encryption keys or other authority-bearing credentials.
 
 If a credential was ever committed publicly, deletion is insufficient; revoke/rotate it.
 
-## Backup verification
+## Backup validity
 
-A backup is valid only when:
-
-- source `StateStore.integrity_check()` passes;
-- structured + text financial-secret checks pass;
-- manifest/file/record/event hashes pass;
-- import parsing succeeds;
-- schema versions are supported;
-- restore into a fresh DB succeeds in drill/certification;
-- old known-good backup is not destroyed by a failed new export.
-
-Exact automatic cadence/retention/publication policy remains Phase-11 work.
+A backup is valid only when source StateStore integrity, structured/text secret checks, checkpoint hashes/counts/checksums, catalog hash, checkpoint import and supported schemas all verify. Release certification additionally requires a real fresh-machine restore + broker reconciliation drill.
 
 ## Multi-machine safety
 
-Portable state does not grant two machines broker-write authority. Controller ownership/fencing remains governed by `EXECUTION_AND_BROKER_SAFETY.md`.
+Portable/local backup state does not grant two machines broker-write authority. Controller ownership/fencing remains governed by `EXECUTION_AND_BROKER_SAFETY.md`.
 
-The deterministic in-memory coordination backend is test-only; real shared atomic coordination is still required before cross-laptop failover certification.
+The deterministic in-memory coordination backend is test-only; a real shared atomic coordinator remains required before cross-laptop failover certification.
 
 ## Dashboard visibility
 
-Compact recovery facts should include, as available:
+Compact recovery facts should include:
 
 ```text
 State Integrity       VERIFIED / FAILED
-Checkpoint            VERIFIED / STALE / FAILED / PENDING
+Backup Catalog        VERIFIED / FAILED / PENDING
+Latest Checkpoint     VERIFIED / STALE / FAILED / NONE
 Checkpoint SHA        <short hash>
 Checkpoint Records    count
 Checkpoint Events     count
+Next Backup Due       timestamp / not due
 Restore               NONE / VERIFIED / RECONCILING
 Broker Reconcile      PENDING / COMPLETE
 Controller            PRIMARY / OBSERVER / UNKNOWN
@@ -265,63 +234,32 @@ Controller            PRIMARY / OBSERVER / UNKNOWN
 
 ## Tests / current evidence
 
-Deterministic coverage now includes:
+Deterministic coverage includes restart lineage, current-record/event corruption fail-closed, portable checkpoint typed/generic state round-trip, event preservation, manifest/file tamper detection, secret blocking, no-overwrite export/restore, broker-reconciliation-required restore, backup due/skip cadence, retention pruning, latest verified selection, catalog tamper detection, referenced-checkpoint tamper detection and failed-secret-backup preservation of the previous known-good backup.
 
-- risk-day/cooldown/Episode restart;
-- Opportunity/TradePlan lineage restart;
-- current-record checksum corruption fail-closed;
-- **event-history corruption fail-closed**;
-- ExecutionIntent/managed-trade/research/candidate/promotion restart semantics;
-- portable checkpoint typed-state round-trip;
-- generic StrategyMemory-style namespace preservation;
-- event count/history preservation;
-- checkpoint manifest and records tamper detection;
-- financial-secret payload export block with no artifact left behind;
-- no-overwrite checkpoint export;
-- no-overwrite fresh-database restore;
-- restored result explicitly requiring broker reconciliation.
-
-Current deterministic checkpoint: **195 tests PASS**, Ruff PASS and financial-secret scan PASS.
-
-Still required before release verification:
-
-- automatic backup cadence/retention/publication workflow;
-- controlled fresh-machine restore against a real broker account with reconciliation;
-- old-backup + live-broker reconciliation drill;
-- final integrated startup/shutdown/recovery orchestration;
-- production shared-controller failover recovery;
-- schema migration/rollback fixtures once schema v2+ exists.
+Current deterministic checkpoint: **202 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Explicit non-goals
 
-Persistence/backup must not:
-
-- treat stale backup as current broker truth;
-- silently reset critical state after corruption;
-- embed financial credentials in checkpoints;
-- publish raw live mutable SQLite as a mergeable Git source artifact;
-- overwrite an existing restore DB;
-- allow machine-specific IDs to redefine strategy identity;
-- permit two restored laptops to trade the same account independently;
-- add an ORM/service layer where SQLite + typed adapters satisfy V1.
+Persistence/backup must not treat stale backup as broker truth, silently reset corruption, embed credentials, publish raw SQLite as a Git merge artifact, overwrite an existing restore DB, silently merge stale/current lifecycle state, permit two restored laptops to trade independently, or hard-code remote publication credentials.
 
 ## Open / later implementation items
 
-Resolved for V1 software foundation:
+Resolved at V1 software-foundation level:
 
-- local durable runtime engine: **standard-library SQLite**;
-- record shape: **canonical JSON + SHA-256 checksum**;
-- typed repositories/adapters for critical state;
-- event integrity verification;
+- standard-library SQLite local durability;
+- canonical record/event integrity;
 - portable runtime checkpoint format;
 - checkpoint financial-secret blocking;
-- atomic restore to a fresh local DB.
+- atomic restore to a fresh DB;
+- configurable automatic local checkpoint cadence;
+- verified local backup catalog;
+- count-based local retention;
+- latest-known-good verified selection.
 
 Still pending:
 
-- automatic backup cadence/retention;
-- public GitHub publication/catalog workflow for allowed checkpoints;
-- migration/rollback compatibility when schema v2+ exists;
-- production shared execution-controller coordinator;
+- authenticated/public GitHub publication workflow for allowed artifacts;
+- real fresh-machine + broker reconciliation certification;
+- production shared execution-controller coordinator/failover;
 - final integrated startup/shutdown/recovery orchestration;
-- real fresh-machine + broker reconciliation certification.
+- migration/rollback transforms once schema v2+ exists.
