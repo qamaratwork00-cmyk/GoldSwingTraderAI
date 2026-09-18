@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Trading Floor Architecture
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-design  
+**Version:** 0.3-design  
 **Authority:** Specialist-desk ownership model
 
 ## Purpose
@@ -29,6 +29,20 @@ Detailed semantics are owned by `../10-market-intelligence/CANDLE_STRUCTURE.md`.
 **Owns:** generic support/resistance zones, ranges, role flips, location quality, target room and structural conflict zones.
 
 It consumes Candle Structure geometry rather than redefining BOS/MSS.
+
+### Technical Confluence Desk
+
+**Owns:** causal trendline geometry/events, Fibonacci retracement/extension context and broker-local volume-profile/POC context derived from completed-candle/confirmed-swing evidence.
+
+Initial V1 semantics are intentionally non-restrictive:
+
+```text
+supportive confluence present → bounded positive score support
+confluence missing            → no base-score penalty
+opposed/unclear confluence    → context/conflict only, not automatic hard BLOCK
+```
+
+Trendline/Fibonacci/POC are not mandatory entry conditions and do not create broker permission. POC is broker-local context; real volume is preferred when available, otherwise tick-volume approximation must be labelled honestly.
 
 ### Liquidity / SMC Desk
 
@@ -65,7 +79,7 @@ It does not own hard OPEN/CLOSED/REOPEN risk-state semantics.
 
 ### Strategy Desks
 
-Initial provisional families:
+Initial V1 families:
 
 - Trend Pullback Continuation;
 - Breakout Expansion;
@@ -75,6 +89,8 @@ Initial provisional families:
 - Compression Expansion.
 
 All desks evaluate in parallel and may produce BUY, SELL or neutral evidence. One strong coherent family may be sufficient to create an opportunity; every primitive need not align.
+
+Technical Confluence may strengthen a family within a bounded bonus cap, but it is not a seventh mandatory production family. Governed research may later propose a distinct family only if evidence supports it.
 
 ### BUY Thesis Team
 
@@ -147,7 +163,7 @@ primary reason
 secondary reasons
 ```
 
-Initial release policy is DEMO-first. Future explicitly approved REAL execution uses this same gate/path rather than a separate live engine.
+V1 defines only a **positive DEMO guard**. Verified connected DEMO is required for broker-write permission. V1 intentionally does not define a separate REAL authorization workflow or REAL hard-block contract.
 
 ### Execution Desk
 
@@ -165,13 +181,17 @@ Its proposed modify/close actions still pass through the central broker-write pe
 
 Owns durable order/trade/risk lifecycle, Strategy Registry storage, learning/research/promotion state persistence, schema integrity, restart recovery, backup/restore and laptop migration mechanics.
 
-It stores state; it does not redefine strategy/risk semantics.
+Initial V1 local persistence uses lightweight standard-library SQLite with typed adapters/checksums/schema versions. It stores state; it does not redefine strategy/risk semantics.
 
 ### Quant Research / Strategy Discovery Lab
 
 Analyses completed trades plus missed, rejected/blocked and invalidated opportunities. It owns StrategyMemory, entry/exit learning, validation, strategy discovery, declarative invention and candidate evidence.
 
-It may propose bounded candidates but may not directly deploy live authority, mutate hard risk or access raw broker writes.
+It may propose bounded candidates but may not directly deploy broker authority, mutate hard risk or access raw broker writes.
+
+Discovery has a liveness obligation: eligible recurring evidence must create a candidate or an explicit governed suppression reason. Silent inert discovery is a defect.
+
+Trendline/Fibonacci/POC may be audited discovery primitives/context so research can test whether they improve quality or form a distinct setup, but discovery cannot silently make them mandatory production filters.
 
 ### System Health / Diagnostics
 
@@ -180,6 +200,8 @@ Aggregates subsystem health, primary/secondary faults, trading impact and recove
 ### Operator / Dashboard
 
 Displays market/decision/setup/trade/risk/execution/learning/backup/health state using stable reason codes and concise explanations. It is presentation only.
+
+Optional confluence such as Trendline/Fibonacci/POC and Discovery Health may be shown compactly when available, without becoming authority.
 
 ## Standard analytical output
 
