@@ -12,7 +12,17 @@ This folder is the design source of truth for GoldSwingTraderAI. Core rule:
 - **IMPLEMENTED** — corresponding behaviour exists in code.
 - **VERIFIED** — the exact implementation passed required executable validation.
 
-Cross-project handoff/meta documents may live directly in `docs/` when they coordinate the whole build rather than owning one subsystem. `FINAL_BUILD_PROMPT.md` lives here for that reason.
+## Quick-access whole-project guides
+
+These important project-wide/operator/developer guides live directly in `docs/` so they are visible immediately without opening numbered subfolders:
+
+- [`FINAL_BUILD_PROMPT.md`](FINAL_BUILD_PROMPT.md) — implementation handoff; DRAFT until design freeze.
+- [`USER_MANUAL.md`](USER_MANUAL.md) — authoritative operator/user manual.
+- [`SETUP_AND_RUN_GUIDE.md`](SETUP_AND_RUN_GUIDE.md) — authoritative install/startup/shutdown/restore/migration guide.
+- [`CODER_GUIDE.md`](CODER_GUIDE.md) — authoritative feature-oriented developer map.
+- `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` — reserved final build/recovery meta-guide to be created at the end of design.
+
+Old subfolder locations for User Manual, Setup/Run Guide and Coder Guide remain only as compatibility redirects so existing links do not break.
 
 ## Folder ownership
 
@@ -23,8 +33,8 @@ Cross-project handoff/meta documents may live directly in `docs/` when they coor
 | `20-trading-decisions/` | Strategy families, theses, scoring/fusion, entry timing, Trade Plan, exits |
 | `30-risk-execution/` | Monetary risk, permission states, broker-write safety, persistence/restart/reconciliation |
 | `40-research-learning/` | Replay/validation, discovery, invention, experiments/promotion, learning/AI boundaries |
-| `50-operator/` | Dashboard, user manual, setup/run and operator workflows |
-| `60-engineering/` | Module map, coder guide, diagnostics, testing, release gates and final audit |
+| `50-operator/` | Dashboard/UX and operator-domain supporting docs; primary User Manual and Setup/Run Guide are exposed at docs root |
+| `60-engineering/` | Module map, diagnostics, testing, release gates and audit; primary Coder Guide is exposed at docs root |
 | `90-governance/` | Design decisions, open questions and documentation/change governance |
 
 ## 00 — Foundation
@@ -79,21 +89,21 @@ Foundation documents remain high-level; detailed subsystem rules live below.
 | [Governed Experiments and Promotion](40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md) | PROVISIONAL | Champion/Challenger, holdout, Shadow, DEMO Canary, promotion and rollback |
 | [Learning and AI Boundaries](40-research-learning/LEARNING_AND_AI_BOUNDARIES.md) | PROVISIONAL | StrategyMemory, entry/exit learning, ML/AI authority limits and evidence isolation |
 
-A separate `OFFLINE_RESEARCH.md` is intentionally not used: offline methodology belongs in `RESEARCH_AND_VALIDATION.md`, while candidate discovery/invention/promotion have their own authorities. This avoids duplicate research specifications.
+A separate `OFFLINE_RESEARCH.md` is intentionally not used: offline methodology belongs in `RESEARCH_AND_VALIDATION.md`, while candidate discovery/invention/promotion have their own authorities.
 
 ## 50 — Operator
 
 | Document | Status | Purpose |
 |---|---|---|
 | [Dashboard and UX](50-operator/DASHBOARD_AND_UX.md) | PROVISIONAL | Compact terminal dashboard, restrained emojis, decision trace, execution permission, health/backup visibility |
-| [User Manual](50-operator/USER_MANUAL.md) | DRAFT | Normal operation, WAIT/BLOCKED handling, governed controls and safety guidance |
-| [Setup and Run Guide](50-operator/SETUP_AND_RUN_GUIDE.md) | DRAFT | First setup, startup/shutdown, migration, restore and troubleshooting workflow |
+| [User Manual — docs root](USER_MANUAL.md) | DRAFT | Normal operation, WAIT/BLOCKED handling, governed controls and safety guidance |
+| [Setup and Run Guide — docs root](SETUP_AND_RUN_GUIDE.md) | DRAFT | First setup, startup/shutdown, migration, restore and troubleshooting workflow |
 
 ## 60 — Engineering
 
 | Document | Status | Purpose |
 |---|---|---|
-| [Coder Guide](60-engineering/CODER_GUIDE.md) | DRAFT | Feature-oriented ownership/change/debugging map; includes centralized broker-write permission feature |
+| [Coder Guide — docs root](CODER_GUIDE.md) | DRAFT | Feature-oriented ownership/change/debugging map; includes centralized broker-write permission feature |
 | [Module Structure](60-engineering/MODULE_STRUCTURE.md) | DRAFT | File/module-oriented planned ownership and dependency direction |
 | [System Health and Diagnostics](60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md) | PROVISIONAL | Fault severity, trading impact, recovery and overall-health aggregation |
 | [Testing and Verification](60-engineering/TESTING_AND_VERIFICATION.md) | PROVISIONAL | No-lookahead, execution gate, crash/restart, migration, learning and DEMO test architecture |
@@ -109,11 +119,6 @@ A separate `OFFLINE_RESEARCH.md` is intentionally not used: offline methodology 
 | [Design Decisions](90-governance/DESIGN_DECISIONS.md) | Living ledger | Accepted/provisional architectural decisions and rationale |
 | [Open Questions](90-governance/OPEN_QUESTIONS.md) | Living ledger | Remaining calibration/implementation choices that must not be silently guessed |
 | [Documentation Standard](90-governance/DOCUMENTATION_STANDARD.md) | PROVISIONAL | Placement, authority, status, duplication and change-control rules |
-
-## Docs-root handoff / meta guides
-
-- [`FINAL_BUILD_PROMPT.md`](FINAL_BUILD_PROMPT.md) — DRAFT implementation handoff until required design contracts are frozen and remaining implementation-critical questions are resolved/deferred.
-- `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` — reserved final meta-guide to be created at the end of the design phase; it will define large build phases, phase-resume logic, recovery from missing/context-lost/inconsistent work, and final project-completion flow.
 
 ## Key cross-document boundaries
 
