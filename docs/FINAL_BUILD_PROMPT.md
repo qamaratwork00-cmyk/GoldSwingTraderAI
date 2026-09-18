@@ -1,12 +1,12 @@
 # GoldSwingTraderAI — Final Build Prompt
 
 **Status:** PROVISIONAL — FINAL HANDOFF CANDIDATE  
-**Version:** 0.8-design  
+**Version:** 0.9-design  
 **Location:** `docs/` root. This is a whole-project implementation handoff, not a competing behavioural authority.
 
 ## Role
 
-Implement **GoldSwingTraderAI**, a fresh XAUUSD/XAUUSDm trading system for meaningful intraday/open-session directional moves. Build the documented system; do not recreate a prior scalper or invent undocumented shortcuts.
+Implement and complete **GoldSwingTraderAI**, a fresh XAUUSD/XAUUSDm trading system for meaningful intraday/open-session directional moves. Build the documented system; do not recreate a prior scalper or invent undocumented shortcuts.
 
 Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for large implementation phases, phase completion and recovery after interrupted work.
 
@@ -16,7 +16,7 @@ Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for large implementation 
 2. authoritative topic document for the feature
 3. `docs/90-governance/DESIGN_DECISIONS.md`
 4. `docs/90-governance/OPEN_QUESTIONS.md`
-5. `docs/60-engineering/CODING_STANDARD.md` for source-code quality/complexity/dependency rules
+5. `docs/60-engineering/CODING_STANDARD.md`
 6. `docs/60-engineering/MODULE_STRUCTURE.md`
 7. `docs/CODER_GUIDE.md`
 8. operator/testing/release supporting docs
@@ -40,7 +40,9 @@ If authoritative documents conflict, resolve the documentation contradiction bef
   4. Liquidity Sweep Reversal
   5. Failed Breakout Reversal
   6. Compression Expansion
-- Candle/structure leads; EMA20/EMA50, RSI, ATR, FVG, OB and similar tools are supporting evidence rather than universal hard gates.
+- Candle/structure leads; EMA20/EMA50, RSI, ATR, FVG, OB, trendlines, Fibonacci and POC/volume-profile context are supporting evidence rather than universal hard gates.
+- Technical confluence is **bonus-only in the initial implementation**: supportive Trendline/Fibonacci/POC may add a bounded score bonus; missing confluence must not reduce the base strategy score; opposed/unclear confluence may be recorded as context/conflict but cannot automatically hard-block a trade.
+- POC is broker-local context. Prefer real volume where available; otherwise label tick-volume approximation honestly.
 - Safety is binary authority outside soft scoring.
 - Structural Trade Plan exists before monetary sizing.
 - Original R is immutable.
@@ -50,39 +52,51 @@ If authoritative documents conflict, resolve the documentation contradiction bef
 - Persistent risk/order/trade/opportunity/research/learning state survives restart and laptop migration.
 - Research/learning/invention cannot silently self-promote or bypass hard safety.
 
+## Accuracy without unnecessary restriction
+
+The system objective is **better accuracy + healthy valid trade opportunity coverage**, not maximum filtering.
+
+Implementation must preserve these principles:
+
+- one strong coherent strategy family may create an opportunity;
+- all six families do not need to agree;
+- missing optional evidence is absent/unknown, not score zero;
+- soft conflict adjusts evidence/confidence rather than becoming arbitrary hard BLOCK;
+- H4/H1/M15/M5 need not form perfect alignment for every valid setup;
+- poor current timing normally means `WAIT`, not destruction of a valid thesis;
+- research evaluates Opportunity Recall, missed meaningful moves and sensible trade frequency alongside Net R/drawdown/accuracy;
+- a rule that improves headline win rate by discarding too many good Gold opportunities is not automatically an improvement.
+
 ## Frozen coding and implementation style
 
 The implementation must obey `docs/60-engineering/CODING_STANDARD.md`, which is **FROZEN FOR INITIAL IMPLEMENTATION**.
 
 Primary engineering objective:
 
-> **Use the minimum clear production-grade code that fully expresses the required behaviour and safety. Keep the runtime light, explicit, optimized enough for the real workload, professionally commented and easy to audit. Do not build unnecessary bulk.**
+> **Use the minimum clear production-grade code that fully expresses required behaviour and safety. Keep runtime light, explicit, optimized enough for the real workload, professionally commented and easy to audit. Do not build unnecessary bulk.**
 
-Mandatory implementation rules:
+Mandatory engineering rules:
 
-- target Python 3.11+;
-- standard library first; keep runtime dependencies minimal;
-- use the official `MetaTrader5` package for terminal integration;
-- do not add pandas/web frameworks/ORM/task queues/ML stacks to the live runtime without a real requirement;
-- keep heavier research dependencies isolated from production runtime;
-- prefer pure typed functions for deterministic market/risk/math calculations;
-- use classes only where real state/resource/lifecycle ownership exists;
-- use dataclasses/enums/typed IDs where they protect domain semantics; do not wrap every primitive unnecessarily;
-- build one verified snapshot and reuse derived facts rather than repeatedly hitting MT5 or recalculating the same EMA/ATR/structure facts in multiple desks;
-- a fresh execution read remains mandatory where the execution contract requires it;
-- avoid both a giant multi-thousand-line `bot.py` and hundreds of trivial micro-files;
-- do not create speculative Factory/Service/Manager abstraction layers;
-- comments/docstrings explain **why**, chronology, safety invariants and broker quirks; do not narrate obvious syntax;
-- no broad silent exception swallowing; convert boundary failures into explicit safe states/reasons;
-- keep logs concise/structured and redact authority-bearing secrets;
-- keep configuration/policy values centralized; no scattered magic trading/risk constants;
-- performance work should remove duplicate reads/calculations and unbounded work before attempting clever micro-optimization;
-- tests protect frozen behaviour, safety and regressions rather than padding test counts;
-- safety code should remain deliberately boring and step-by-step rather than clever/metaprogrammed.
+- Python 3.11+;
+- standard library first; minimal runtime dependencies;
+- official `MetaTrader5` package for terminal integration;
+- no pandas/web framework/ORM/task queue/ML stack in live runtime without a real requirement;
+- heavier research dependencies isolated from normal runtime;
+- pure typed functions for deterministic market/risk/math where practical;
+- classes only for genuine state/resource/lifecycle ownership;
+- typed dataclasses/enums/IDs where they protect semantics;
+- one verified snapshot/shared derived facts instead of repeated MT5 reads or duplicate EMA/ATR/structure work;
+- fresh execution reads remain mandatory where execution contract requires them;
+- avoid both giant all-in-one files and hundreds of trivial micro-files;
+- no speculative Factory/Service/Manager abstraction jungle;
+- comments/docstrings explain why, chronology, safety invariants and broker quirks;
+- no broad silent exception swallowing;
+- concise structured secret-redacting logs;
+- centralized/configurable policy values rather than scattered magic numbers;
+- tests protect behaviour/safety/regressions rather than pad counts;
+- safety code stays direct and boring rather than clever/metaprogrammed.
 
-Before completing each phase, review code for dead code, duplicate calculations, unnecessary abstraction, mixed-responsibility modules, vague names, needless dependencies, silent exception handling, missing safety comments and noisy/sensitive logging.
-
-Do **not** weaken a documented behaviour or safety rule merely to keep the source shorter.
+Before each phase closes, review for dead code, duplicate calculations, unnecessary abstraction, mixed responsibility, needless dependencies, silent errors and weak safety tests.
 
 ## Positive DEMO guard — V1
 
@@ -97,7 +111,7 @@ Broker writes may proceed only when this guard and every other required executio
 
 If DEMO status is not verified, broker-write permission is not granted.
 
-Do **not** implement a separate REAL authorization system, REAL mode workflow, or V1 REAL hard-block contract. Do not scatter environment checks through strategies; the positive DEMO guard is one explicit input to the centralized execution-permission path.
+Do **not** implement a separate REAL authorization system, REAL mode workflow, or V1 REAL hard-block contract. Do not scatter environment checks through strategy/UI code.
 
 ## Initial frozen risk policy
 
@@ -110,31 +124,27 @@ NORMAL   $1,000+                 1.0–2.0%      >2.0–3.5%        4%          
 
 Important rules:
 
-- **There is no V1 `$100` minimum balance/equity floor.** Any positive DayStartEquity below `$300` is SMALL.
-- `$99`, `$50`, `$30`, etc. do not become blocked merely because the account is below `$100`.
-- Account size alone must not be added as an extra hard filter; actual executable risk geometry is authoritative.
-- SMALL evaluates practical broker minimum volume such as `0.01`; a theoretical raw lot below minimum is not an automatic reject.
+- **No V1 `$100` minimum balance/equity floor.** Any positive DayStartEquity below `$300` is SMALL.
+- `$99`, `$50`, `$30`, etc. are not blocked merely because account is below `$100`.
+- Account size alone must not become an extra hard filter; actual executable risk geometry is authoritative.
+- SMALL evaluates practical broker minimum volume such as `0.01`; theoretical raw lot below minimum is not automatic reject.
 - Actual all-in risk of executable volume decides affordability.
-- If minimum volume makes the current plan exceed the SMALL `7%` new-entry ceiling, block that current plan without tightening SL; the opportunity may remain ARMED for a better natural entry.
-- Never tighten/widen structural SL merely to fit a desired lot/risk.
+- If minimum volume exceeds SMALL `7%` new-entry ceiling, block only that current plan without distorting SL; opportunity may remain ARMED for a naturally better entry.
+- Never move structural SL merely to fit desired risk.
 - High strategy score does not increase monetary risk.
-- Profile is fixed from positive DayStartEquity for the UTC risk day rather than switching because of intraday floating P/L.
+- Profile is fixed from positive DayStartEquity for the UTC risk day rather than switching with intraday floating P/L.
 - V1 capacity is `0/1`: one independently risk-bearing Gold position.
-- Manual/foreign/unknown-owner Gold exposure blocks a new bot Gold entry and is never managed as bot-owned.
+- Manual/foreign/unknown-owner Gold exposure blocks fresh bot Gold entry and is never treated as bot-owned.
 - Daily loss accounting uses cash-flow-adjusted verified account equity so floating account drawdown counts.
 - Manual loss reset is OFF by default; if explicitly enabled, maximum one governed `R,R` reset per UTC risk day.
-- One ordinary loss does not create a global cooldown.
+- One ordinary loss does not create global cooldown.
 - At most one genuinely fresh same-Market-Episode re-entry; a second loss in that episode locks it.
-- Three consecutive closed bot losses trigger at least 30 minutes cooldown plus fresh completed M15 context and a fresh opportunity before release.
-- Generic margin estimates are diagnostic only; exact broker-required margin is authoritative when available and must be freshly revalidated before execution.
-
-Items explicitly classified as research calibration or later-version work in `OPEN_QUESTIONS.md` must not block V1 implementation.
+- Three consecutive closed bot losses trigger minimum 30-minute cooldown plus fresh completed M15 context and fresh valid opportunity before release.
+- Generic margin estimates are diagnostic only; exact broker margin is authoritative when available and freshly revalidated before execution.
 
 ## Trade Plan, target and runner policy
 
 No fixed 100/200/300-pip take-profit system.
-
-Initial structural RR guard:
 
 ```text
 <1.20R          → reject current plan
@@ -147,15 +157,15 @@ Initial structural RR guard:
 Target roles:
 
 - Immediate Obstacle;
-- Primary Structural Target — normally management checkpoint;
+- Primary Structural Target — management checkpoint, not automatic full exit;
 - Expansion Target — default initial broker TP when valid;
 - Runner Objective — only after fresh continuation/acceptance evidence and a newly defined objective.
 
-V1 core management must work correctly with one indivisible `0.01` position; partial profit is not required.
+V1 management must work correctly with one indivisible `0.01` position; partial profit is not required.
 
 ## Open-trade management
 
-Open trades are evaluated through parallel continuation/reversal/protection/target evidence and one of:
+Trade Manager actions:
 
 ```text
 HOLD
@@ -165,9 +175,7 @@ RUNNER
 EXIT
 ```
 
-Do not close a healthy Gold expansion merely because a tiny profit threshold was reached. Protection/trailing should primarily follow confirmed structure with appropriate volatility/noise buffering.
-
-A stop may tighten; it must not intentionally widen beyond original approved risk.
+Do not close healthy Gold expansion merely because a small floating profit was reached. Protection/trailing is earned by confirmed structure/continuation and must not intentionally widen beyond original approved risk.
 
 ## Scheduled closure / reopen policy
 
@@ -185,13 +193,9 @@ T-30m  mandatory governed flatten
 Reopen gap assessment + normalized conditions + at least 2 clean completed M5
 ```
 
-Timing is relative to the verified broker Gold session schedule, not a guessed fixed clock. PRE_CLOSE flatten overrides runner logic.
-
-If close result is ambiguous or broker becomes unavailable, persist unresolved exposure and reconcile; never fake a closed position.
+Timing is relative to verified broker Gold session schedule. PRE_CLOSE flatten overrides runner logic. Ambiguous close remains unresolved/durable until broker reconciliation proves truth.
 
 ## News safety
-
-Initial V1 policy:
 
 ```text
 TIER 1 CRITICAL  → -15/+15 min hard new-entry blackout
@@ -199,36 +203,30 @@ TIER 2 HIGH      → -5/+5 min hard new-entry blackout
 TIER 3 CONTEXT   → no automatic hard blackout
 ```
 
-Known linked Tier-1 clusters remain blocked through final critical item +15 minutes.
-
-Scheduled news does not automatically force-close an existing managed trade.
-
-After blackout, resume promptly when required facts/quotes/spread/data normalize. Severe post-event dislocation requires at least one clean completed M5 plus normalized execution conditions. Missing required event truth becomes `NEWS_SAFETY_UNKNOWN` rather than silent clear.
+Linked Tier-1 clusters remain blocked through final critical item +15 minutes. Scheduled news does not automatically force-close an existing managed trade. Severe post-event dislocation requires normalized execution plus at least one clean completed M5. Missing required calendar truth becomes `NEWS_SAFETY_UNKNOWN`.
 
 ## Spread and price drift
 
-Use a healthy broker/symbol spread baseline from valid normal observations.
-
 ```text
-SpreadRatio <=1.50        → NORMAL
->1.50–2.25                → ELEVATED + full revalidation
->2.25                     → current entry prevented
-spread >25% of SL distance→ current entry prevented
+SpreadRatio <=1.50         → NORMAL
+>1.50–2.25                 → ELEVATED + full revalidation
+>2.25                      → current entry prevented
+spread >25% of SL distance → current entry prevented
 ```
 
-Adverse price drift from Approved Entry Reference, normalized by planned structural stop distance:
+Adverse price drift from Approved Entry Reference:
 
 ```text
-<=10%       → normal revalidation
->10–20%     → elevated full revalidation
->20%        → current intent prevented; WAIT/rebuild if thesis survives
+<=10% of planned SL distance → normal revalidation
+>10–20%                      → elevated full revalidation
+>20%                         → current intent prevented / WAIT if thesis survives
 ```
 
-Any fresh quote that breaks hard risk, stop geometry, target room or chase validity prevents the current execution regardless of ratio.
+Fresh risk/stop/target/chase invalidation prevents execution regardless of ratio.
 
 ## Central execution permission and broker-write path
 
-All create/modify/close actions pass through one auditable boundary conceptually equivalent to `ExecutionPermissionGate` / `BrokerWriteGuard`.
+All create/modify/close actions pass one auditable boundary.
 
 Inputs include authoritative results for:
 
@@ -238,13 +236,13 @@ account identity
 market/data/quote integrity
 news/session permission
 risk
-position capacity/ownership
+position ownership/capacity
 order lifecycle/reconciliation
 controller ownership
 fresh broker execution checks
 ```
 
-Output must expose:
+Output exposes:
 
 ```text
 ALLOW / BLOCK / UNKNOWN
@@ -253,79 +251,100 @@ Secondary Reasons
 Would Otherwise Trade where meaningful
 ```
 
-Raw MT5 irreversible calls must not be reachable directly from strategy, scoring, timing, Trade Plan, dashboard, research, learning or autonomous-invention code.
+Raw irreversible MT5 calls must not be reachable directly from strategy, scoring, timing, Trade Plan, dashboard, research, learning or autonomous invention.
 
-Before send, persist a durable Execution Intent. One intent allows at most one irreversible send until reconciliation proves the outcome and a fresh governed intent is authorized.
+Before send, persist durable Execution Intent. One Intent ID allows at most one irreversible send for its lifetime. Pre-check rejection is not a send attempt. Success-like MT5 acknowledgement alone is not final exposure truth; verify positions/orders/deals. Ambiguous result becomes reconciliation-only, never blind retry.
 
 ## Controller / second-laptop policy
-
-V1 uses a shared cross-machine controller lease with fencing:
 
 ```text
 one PRIMARY
 renewal target 10 seconds
 lease TTL 30 seconds
 monotonic fencing epoch
-fresh controller ownership required before every broker write
+fresh controller ownership before every broker write
 ```
 
-A second laptop remains read-only/Observer while another valid controller exists.
+Second laptop remains Observer while another valid controller exists. Standby takeover requires authoritative lease expiry, atomic new epoch and full broker/state reconciliation before PRIMARY READY. Returned stale old primary cannot write.
 
-Standby takeover may occur only after authoritative lease expiry, must obtain a new epoch atomically, then enter recovery/reconciliation. It does not become PRIMARY READY until broker/state/account/risk/session/execution reconciliation passes.
-
-A returned old primary with a stale epoch cannot write.
-
-Coordination uncertainty fails closed for irreversible broker writes.
+A deterministic in-memory backend may test lease semantics, but cross-laptop DEMO certification requires a real shared atomic coordination backend.
 
 ## Persistence and broker truth
 
-Broker is authority for current positions/orders/deals/account facts. Local state owns intent, strategy context and lifecycle history.
+Broker is authority for current positions/orders/deals/account facts. Local state owns intent, context and lifecycle history.
 
-Persist/recover at least:
+Initial V1 local durable foundation uses:
 
-- UTC risk-day state, loss lock/reset/cooldown;
-- Execution Intents and unresolved order lifecycle;
-- bot-managed open-trade plan, original R, SL/TP/objectives;
-- Opportunity and Market Episode lineage;
+```text
+standard-library SQLite
++ canonical JSON records
++ checksums/schema versions
++ transactional updates/event history
++ typed recovery adapters
+```
+
+Persist/recover as applicable:
+
+- risk day/loss lock/reset/cooldown;
+- Execution Intents and unresolved broker lifecycle;
+- managed trade/original R/SL/TP/objectives;
+- Opportunity/Market Episode lineage;
 - journals/performance;
-- Strategy Registry and Champion/Challenger/Shadow/Canary/Rejected history;
-- StrategyMemory and entry/exit learning;
-- research/invention/promotion history;
-- state schema/integrity/backup metadata.
+- Candidate/Promotion registries and rejected memory;
+- StrategyMemory/entry/exit learning;
+- research/invention history;
+- schema/integrity/backup metadata.
 
-Restart/migration never means blank financial/order state. Reconcile broker truth before new entries.
+Restart never means blank financial/order state. Reconcile broker truth before new writes.
 
 ## Public backup / financial-secret policy
 
-The public repository may back up source, docs, strategies, learned parameters, autonomous candidates, performance/research history and portable recovery intelligence.
+Public repository may back up source, docs, strategies, learned parameters, candidates, performance/research history and portable recovery intelligence.
 
-Never commit authority-bearing secrets capable of financial action, authenticated account control or direct paid-service cost, including trading passwords, private broker/session tokens, paid API keys, GitHub PATs, private/signing keys or paid cloud/database credentials.
+Never commit authority-bearing secrets capable of financial action/authenticated account control/direct paid-service cost: MT5 passwords, private broker/session tokens, paid API keys, GitHub PATs, private/signing keys, paid cloud/database credentials or recovery keys with financial authority.
 
-Run a financial-secret scanner before public backup. Detection should block publication with an explicit reason such as `FINANCIAL_SECRET_DETECTED`.
-
-If a financial credential is accidentally committed publicly, removal alone is insufficient; revoke/rotate it.
+Run financial-secret scanning before public backup. If a credential was exposed publicly, revoke/rotate it; deletion alone is insufficient.
 
 ## Research, learning and autonomous improvement
 
-Research should automatically analyze taken, missed, blocked/rejected and invalidated opportunities where practical.
+Research should analyze taken, missed, blocked/rejected and invalidated opportunities where practical.
 
 Required principles:
 
 - chronological/no-lookahead replay;
-- independent validation/holdout/stress as documented;
-- MFE/MAE, realized R and move-capture efficiency;
-- entry quality and premature-exit/profit-giveback analysis;
-- large-move recall;
-- StrategyMemory remains bounded;
-- autonomous candidates are declarative/bounded, never arbitrary executed Python;
-- candidates cannot change hard risk/broker authority;
-- production promotion is governed and cannot occur silently.
+- production decision semantics reused where parity is claimed;
+- actual broker P/L and counterfactual missed/blocked outcomes kept separate;
+- MFE/MAE, realized R, Capture Efficiency, Entry Efficiency, premature-exit cost;
+- Opportunity Recall and large-move recall;
+- StrategyMemory influence bounded/versioned;
+- candidates declarative/bounded, never arbitrary executable Python;
+- hard risk/broker safety outside candidate search space;
+- production promotion governed, never silent.
 
-Research-calibration values listed in `OPEN_QUESTIONS.md` should be explicit/configurable and tuned through evidence rather than guessed as hidden constants.
+### Discovery liveness
+
+Strategy discovery/invention must be **operational, not decorative**:
+
+```text
+real/replay outcome episode
+→ durable research journal
+→ audited primitive mapping
+→ recurring eligible cluster
+→ candidate created
+OR explicit governed suppression reason
+→ durable Candidate Registry
+→ validation/promotion lifecycle
+```
+
+If eligible evidence disappears without candidate or suppression reason, Discovery Health is `DEGRADED`.
+
+Rejected/duplicate ideas remain durable so restart does not repeatedly reinvent them. Candidates cannot skip stages, mutate after lock and reuse the same holdout, self-promote or gain raw broker authority.
+
+Trendline/Fibonacci/POC must be available to research as audited confluence primitives/context so replay can measure whether they improve accuracy/Net R/capture without unnecessarily damaging Opportunity Recall/trade frequency.
 
 ## Dashboard requirements
 
-Preserve useful prior GoldScalperAI visibility rather than removing it:
+Preserve useful GoldScalperAI visibility:
 
 - runtime mode/role;
 - XAU symbol;
@@ -333,47 +352,48 @@ Preserve useful prior GoldScalperAI visibility rather than removing it:
 - spread + quality;
 - M5 candle timer;
 - trend/structure;
-- EMA20/EMA50 relation;
+- EMA20/EMA50;
 - RSI;
 - ATR;
 - signal/action + exact reason;
-- risk profile, risk and lot;
+- risk profile/risk/lot;
 - daily P/L/limit/remaining budget;
 - position count/capacity;
 - loss streak/cooldown;
 - open trade entry/SL/TP/objectives.
 
-Add compact Decision, Execution, Learning, Backup and System Health panels. Dashboard observes authoritative state; it does not own trading decisions.
+Add compact Decision, Execution, Learning/Discovery, Backup and System Health panels. Trendline/Fibonacci/POC may be shown compactly as confluence/context but must never be presented as hard permission.
 
 ## Prohibited shortcuts
 
 Do not:
 
 - turn every soft signal into a hard gate;
-- require every indicator/SMC primitive for every trade;
+- require every indicator/SMC/Trendline/Fibonacci/POC primitive for every trade;
 - treat missing optional evidence as score zero;
 - let score override risk/news/account/data/execution safety;
 - use future candles/future-confirmed pivots;
 - move structural SL to fit desired risk;
 - redefine original R after trailing;
-- invent an arbitrary `$100` or other positive-equity minimum trading floor for SMALL accounts;
-- open automatic second Gold position/hedge in V1;
+- invent arbitrary `$100` or other positive-equity minimum trading floor;
+- open automatic second independent Gold position/hedge in V1;
 - manage manual/foreign exposure as bot-owned;
 - blind-retry ambiguous broker writes;
 - assume unknown broker/order/P&L/exposure truth is safe/zero;
-- bypass the centralized write gate;
+- bypass centralized write gate;
 - let two controllers write simultaneously;
 - silently reset critical state after crash/corruption;
 - allow research/AI to self-promote or modify hard safety;
+- allow eligible discovery evidence to vanish silently;
 - generate/eval/exec arbitrary autonomous Python;
 - leak financial-authority secrets;
-- introduce unnecessary abstractions/dependencies/frameworks that make the runtime harder to audit or operate;
-- duplicate expensive market calculations/MT5 reads when a verified shared result already exists;
-- treat calibration/ordinary implementation choices as reasons to stall the entire build.
+- introduce unnecessary abstractions/dependencies/frameworks;
+- duplicate expensive calculations/MT5 reads when a verified shared result exists;
+- treat calibration/ordinary implementation choices as reasons to stall the build.
 
 ## Large implementation sequence
 
-Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` as the operational phase guide:
+Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`:
 
 1. Foundation/package/contracts
 2. MT5 read layer + market data
@@ -393,18 +413,19 @@ After every coherent phase, code, tests and relevant documentation must agree be
 ## Validation principles
 
 - Documentation completion is not implementation proof.
-- Static checks are not runtime proof.
+- Static/deterministic CI is not live broker proof.
 - Software correctness is not profitability proof.
 - Historical results do not guarantee future profit.
 - Replay claims require chronological no-lookahead proof.
-- Irreversible broker writes require duplicate-prevention/fault-injection/restart evidence.
+- Optional confluence requires ablation/opportunity-recall evidence; popularity is not proof of value.
+- Irreversible broker writes require duplicate-prevention/fault/restart evidence.
 - Backup existence is not recovery proof; fresh-machine restore must be tested.
 - Learning/promotion must prove production cannot silently mutate.
 - Dashboard/reason traces are tested behaviour, not decoration.
-- Passing tests does not excuse unnecessary complexity that violates the frozen Coding Standard.
+- Passing tests does not excuse unnecessary complexity.
 
 ## Implementation readiness
 
-`docs/90-governance/OPEN_QUESTIONS.md` classifies remaining items as frozen direction, research calibration, implementation choice, operator detail or later-version work. Research calibration and ordinary implementation choices are **not** reasons to delay the build.
+`docs/90-governance/OPEN_QUESTIONS.md` classifies remaining items as frozen direction, research calibration, implementation choice, operator detail or later work. Research calibration and ordinary implementation choices are not reasons to delay implementation.
 
-Before treating this prompt as FROZEN, perform one final cross-document contradiction/coverage audit. After that audit, implementation may proceed in the large phases above without reopening already frozen decisions unless the user explicitly changes them or evidence requires a governed revision.
+Before final release, perform a cross-document contradiction/coverage audit and controlled DEMO certification. Do not relabel pending live evidence as VERIFIED.
