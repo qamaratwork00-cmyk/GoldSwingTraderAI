@@ -1,18 +1,20 @@
 # GoldSwingTraderAI — Coder Guide
 
-**Status:** DRAFT  
-**Version:** 1.3-implementation-map  
+**Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
+**Version:** 1.4-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
 
-> **Behaviour comes from the authoritative topic document. Code implements it. This guide tells you where implementation lives and what has actually been verified.**
+> **Behaviour comes from authoritative topic docs. Code implements it. This guide tells you where implementation lives and what has actually been verified.**
 
 Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `60-engineering/CODING_STANDARD.md` for frozen engineering rules.
 
-## Current implementation checkpoint — 2026-09-18
+## Current checkpoint — 2026-09-18
 
-### Phase 1 — Foundation — IMPLEMENTED + deterministic CI green
+Deterministic core implementation exists through the current **Phase-10 foundation**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+
+### Phase 1 — Foundation — implemented / deterministic CI
 
 ```text
 config/settings.py
@@ -26,7 +28,7 @@ scripts/scan_financial_secrets.py
 .github/workflows/ci.yml
 ```
 
-### Phase 2 — MT5 read layer — IMPLEMENTED + deterministic CI green; live Windows DEMO proof pending
+### Phase 2 — MT5 read layer — implemented / deterministic CI; live Windows evidence pending
 
 ```text
 domain/market.py
@@ -34,9 +36,9 @@ market_data/mt5_reader.py
 market_data/snapshot.py
 ```
 
-Completed H4/H1/M15/M5 candles only; forming bars are excluded. Positive DEMO verification exists.
+Completed H4/H1/M15/M5 candles only; forming bars excluded. Positive DEMO verification exists in read path.
 
-### Phase 3 — Market intelligence — IMPLEMENTED + deterministic CI green
+### Phase 3 — Market intelligence — implemented / deterministic CI
 
 ```text
 intelligence/indicators.py
@@ -49,11 +51,11 @@ intelligence/confluence.py
 intelligence/snapshot.py
 ```
 
-One verified market snapshot feeds one shared intelligence derivation; duplicate indicator/ATR reads are avoided.
+One verified market snapshot feeds shared derived facts; duplicate indicator/ATR work is avoided.
 
-`intelligence/confluence.py` adds causal confirmed-swing trendlines, Fibonacci retracement/extension geometry and broker-local volume-profile POC. These are **soft accuracy/confluence facts only**. Missing/opposing confluence does not become a hard filter.
+`intelligence/confluence.py` owns causal confirmed-swing Trendlines, Fibonacci geometry and broker-local Volume Profile/POC. Real volume is preferred when available; tick-volume fallback is explicit.
 
-### Phase 4 — Strategies + fusion + Opportunity + Entry Timing — IMPLEMENTED + deterministic CI green
+### Phase 4 — Strategies / Fusion / Opportunity / Timing — implemented / deterministic CI
 
 ```text
 strategies/floor.py
@@ -64,11 +66,11 @@ decisions/timing.py
 decisions/snapshot.py
 ```
 
-Six families evaluate in parallel. Missing optional evidence is omitted/reweighted rather than zeroed. One strong family can lead. Poor timing normally yields WAIT rather than destroying a valid opportunity.
+Six families evaluate in parallel. One strong family can lead. Missing optional evidence is omitted/reweighted instead of zeroed. Poor timing normally yields WAIT rather than destroying a valid opportunity.
 
-`strategies/confluence.py` applies only a small bounded **positive-only** uplift when Trendline/Fib/POC context supports an existing family. No confluence source is mandatory and this layer cannot reduce the base family score.
+`strategies/confluence.py` is **positive-only**: Trendline/Fib/POC can add a small capped uplift to a compatible existing family; they cannot lower base family score or become mandatory gates.
 
-### Phase 5 — Trade Plan + Risk — IMPLEMENTED + deterministic CI green
+### Phase 5 — Trade Plan + Risk — implemented / deterministic CI
 
 ```text
 decisions/trade_plan.py
@@ -76,9 +78,9 @@ risk/engine.py
 risk/state.py
 ```
 
-Structural geometry precedes monetary sizing. SMALL is any positive UTC day-start equity below `$300`; there is no `$100` floor. Minimum lot is evaluated by actual all-in risk. Score never increases risk. Exact broker margin is authoritative when available.
+Structural geometry precedes monetary sizing. SMALL is any positive UTC day-start equity below `$300`; no `$100` floor. Minimum lot is evaluated by actual all-in risk. Score never increases monetary risk. Exact broker margin is authoritative when available.
 
-### Phase 6 — Session/News Permission + Persistence — IMPLEMENTED + deterministic CI green
+### Phase 6 — Session/News Permission + Persistence — implemented / deterministic CI
 
 ```text
 risk/permissions.py
@@ -86,9 +88,9 @@ persistence/store.py
 persistence/runtime_state.py
 ```
 
-PRE_CLOSE/reopen/news safety are explicit hard authorities. Persistence uses standard-library SQLite + canonical JSON/checksum/schema/event records and restores critical state without silently defaulting corruption.
+PRE_CLOSE/reopen/news safety are hard authorities. Local persistence is standard-library SQLite + canonical JSON/checksum/schema/event records + typed adapters.
 
-### Phase 7 — Execution + Reconciliation — IMPLEMENTED deterministic baseline + CI green
+### Phase 7 — Execution + Reconciliation — implemented deterministic baseline / CI
 
 ```text
 execution/models.py
@@ -109,15 +111,13 @@ hard authorities
 → fresh lease/fencing verification
 → persist SUBMITTING
 → exactly one order_send
-→ acknowledgement
+→ broker acknowledgement
 → broker reconciliation
 ```
 
-A success-like MT5 ACK is not final truth until broker state verifies it. An Intent ID cannot be sent twice. Ambiguous acknowledgement is never blindly retried. Elevated spread/drift may pass after full revalidation; only frozen hard limits block.
+Success-like ACK is not final exposure truth. An Intent ID cannot send twice for its lifetime. Ambiguous acknowledgement is never blind-retried. In-memory coordination is deterministic-test-only; production shared cross-laptop coordination remains pending.
 
-Pending before failover/DEMO certification: production shared cross-laptop coordination backend and real Windows/MT5 execution evidence. In-memory coordination is test-only.
-
-### Phase 8 — Trade Manager — IMPLEMENTED deterministic baseline + CI green
+### Phase 8 — Trade Manager — implemented deterministic baseline / CI
 
 ```text
 management/models.py
@@ -126,20 +126,18 @@ management/store.py
 management/execution.py
 ```
 
-HOLD / PROTECT / TRAIL / RUNNER / EXIT operates on verified bot-owned positions. Ordinary pullbacks do not force exit; small profit alone does not force breakeven; Primary is a checkpoint; runner needs fresh continuation + actual next objective; PRE_CLOSE overrides continuation. Durable trade state changes only after broker verification.
+HOLD / PROTECT / TRAIL / RUNNER / EXIT. Ordinary pullbacks do not force exit; small profit alone does not force breakeven; Primary is a checkpoint; runner needs fresh continuation + next objective; PRE_CLOSE overrides. Durable local trade state changes only after broker verification.
 
-### Phase 9 — Dashboard / Operator presentation — IMPLEMENTED deterministic baseline + CI green
+### Phase 9 — Dashboard — implemented deterministic renderer / CI
 
 ```text
 operator/dashboard.py
 operator/__init__.py
 ```
 
-Pure-standard-library read-only renderer. It preserves requested GoldScalperAI visibility and consumes, rather than recreates, decision/risk/execution authority.
+Pure-stdlib read-only presentation. Final runtime DTO builder, Discovery Health fields, compact Trendline/Fib/POC display and in-place live refresh remain integration/polish work.
 
-Trendline/Fib/POC compact display is an operator-integration follow-up; their market/strategy logic already lives outside the dashboard.
-
-### Phase 10 — Replay / Learning / Discovery / Invention — IMPLEMENTED deterministic foundation + CI green
+### Phase 10 — Replay / Learning / Discovery / Invention — implemented deterministic foundation / CI
 
 ```text
 research/replay.py
@@ -158,31 +156,37 @@ chronological completed-candle replay
 → production Intelligence + Decision semantics
 → actual/counterfactual outcome metrics
 → durable research episodes
-→ approved-primitive observations
+→ approved-primitive mapping
 → recurring cluster detection
-→ candidate creation OR explicit suppression reason
+→ candidate OR explicit suppression reason
 → durable CandidateRegistry
 → governed validation/promotion lifecycle
 ```
 
-Important implementation guarantees:
-- replay is prefix-only and labeled `BAR_CLOSE`, never falsely claimed tick-perfect;
-- actual broker P/L and counterfactual missed/blocked MFE stay separate;
-- research measures Net R, drawdown, Capture Efficiency, 2R/3R/4R reach and Opportunity Recall rather than win rate alone;
-- StrategyMemory is version/environment/context isolated and its initial adaptive influence is bounded;
-- discovery requires independent episode IDs; duplicate records cannot fake sample size;
-- candidate recipes use only audited declarative primitives, never arbitrary Python/eval/exec;
-- recurring evidence can create a real durable `VARIANT`, `NEW_FAMILY`, `ENTRY_POLICY` or `EXIT_POLICY` candidate;
-- substantially duplicate/rejected candidates are remembered and suppressed after restart;
-- discovery liveness is explicit: eligible evidence must create a candidate or return a governed suppression reason;
-- candidates cannot skip validation stages;
-- locked candidate fingerprint must survive unchanged through one-shot final holdout;
-- autonomous candidates cannot self-promote;
-- research/promotion registries never grant direct broker authority.
+Key guarantees:
 
-Trendline/Fibonacci/POC outcomes are intended to be measured as optional confluence features in replay. They must be retained only if they improve out-of-sample accuracy/capture without damaging opportunity recall.
+- replay is prefix-only and labelled `BAR_CLOSE`, not falsely tick-perfect;
+- actual broker P/L and counterfactual missed/blocked outcomes remain separate;
+- research tracks Net R/drawdown/Capture/Opportunity Recall, not win rate alone;
+- StrategyMemory influence is bounded/context-version isolated;
+- independent episode IDs prevent fake sample inflation;
+- candidate recipes use audited declarative primitives only;
+- durable candidates may be VARIANT / NEW_FAMILY / ENTRY_POLICY / EXIT_POLICY;
+- rejected/duplicate memory survives restart;
+- eligible discovery evidence must create a candidate or explicit governed suppression reason;
+- candidate stages cannot be skipped;
+- locked fingerprint + one-shot holdout enforced;
+- candidates cannot self-promote or gain raw broker authority.
 
-Initial discovery sample/similarity/complexity values and learning influence remain research-calibratable baselines, not frozen profitability truth.
+Approved discovery primitives now explicitly include:
+
+```text
+TRENDLINE
+FIBONACCI
+VOLUME_PROFILE_POC
+```
+
+`episode_journal.py` maps corresponding durable evidence labels into these primitives so confluence can genuinely participate in discovery/ablation rather than being only a production-score decoration.
 
 ## Deterministic test ownership
 
@@ -209,7 +213,7 @@ tests/test_discovery_journal.py
 tests/test_promotion_governance.py
 ```
 
-CI gates remain:
+CI gates:
 
 ```text
 ruff check .
@@ -217,57 +221,66 @@ pytest
 financial-secret scan
 ```
 
-Deterministic CI green is software evidence, not profitability proof or live DEMO certification.
+Deterministic CI is software evidence, not profitability proof or controlled DEMO certification.
 
 ## Feature ownership index
 
 | Feature | Authority | Current owner |
 |---|---|---|
 | Market data/history | `10-market-intelligence/MARKET_DATA_AND_HISTORY.md` | `market_data/` |
-| Full market intelligence | `10-market-intelligence/*` | `intelligence/` |
+| Candle/structure | `10-market-intelligence/CANDLE_STRUCTURE.md` | `intelligence/candle_structure.py` |
 | Technical zones/location | `10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md` | `intelligence/technical.py` |
-| Trendline/Fibonacci/POC confluence | `10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md` | `intelligence/confluence.py`, `strategies/confluence.py` |
-| Strategy floor | `20-trading-decisions/STRATEGY_FLOOR.md` | `strategies/floor.py` |
+| Trendline/Fibonacci/POC | `10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md` | `intelligence/confluence.py`, `strategies/confluence.py` |
+| Liquidity/SMC | `10-market-intelligence/LIQUIDITY_AND_SMC.md` | `intelligence/liquidity.py` |
+| Indicators/volatility | `10-market-intelligence/INDICATORS_AND_VOLATILITY.md` | `intelligence/indicators.py` |
+| Strategy floor | `20-trading-decisions/STRATEGY_FLOOR.md` | `strategies/` |
 | Fusion/Opportunity/Timing | `20-trading-decisions/*` | `decisions/` |
 | Trade Plan | `20-trading-decisions/TRADE_PLAN.md` | `decisions/trade_plan.py` |
 | Risk | `30-risk-execution/RISK_CONTRACT.md` | `risk/engine.py`, `risk/state.py` |
-| Session/news hard permission | `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` | `risk/permissions.py` |
-| Persistence | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/` |
+| Session/news permission | `30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md` | `risk/permissions.py` |
+| Persistence | `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md` | `persistence/` + typed subsystem repositories |
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/dashboard.py` |
 | Replay/validation | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `metrics.py` |
 | StrategyMemory | `40-research-learning/LEARNING_AND_AI_BOUNDARIES.md` | `research/learning.py` |
-| Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `research/episode_journal.py`, `discovery.py`, `invention.py` |
-| Promotion lifecycle | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `research/promotion.py` |
+| Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `episode_journal.py`, `discovery.py`, `invention.py` |
+| Promotion | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `research/promotion.py` |
 
 ## Coding invariants
 
 - Python 3.11+; standard library first for production runtime;
 - no lookahead;
-- shared verified facts instead of duplicate MT5/calculation work;
-- soft evidence must not become a pile of arbitrary hard filters;
-- Trendline/Fibonacci/POC are bonus-only confluence unless future governed evidence explicitly changes that design;
-- positive balance alone is not an eligibility restriction;
+- shared verified facts instead of duplicate reads/calculations;
+- soft evidence must not become arbitrary hard-filter soup;
+- Trendline/Fibonacci/POC are optional bonus-only confluence unless governed evidence explicitly changes that design;
+- any positive balance below `$300` is SMALL; no arbitrary `$100` gate;
 - raw broker writes live only in `execution/mt5_writer.py`;
 - critical local state never pretends ambiguous broker action succeeded;
-- dashboard/research/discovery have zero raw production broker authority;
+- dashboard/research/discovery have zero raw broker authority;
 - discovery must not be silently inert when eligible evidence exists;
 - no unnecessary frameworks/factories/service-manager layers;
 - financial-authority credentials never enter tracked project state.
 
-## Next engineering work
+## Current integration gaps / next engineering work
 
-Phase 10 still needs broader replay/fault/stress evidence and integration of research state into live operator status. After that, Phase 11 is controlled Windows/MT5 DEMO integration/certification.
+Do **not** redesign the already-implemented core unnecessarily. Main remaining work is integration/evidence:
 
-Research tuning must optimize **accuracy + Net R + drawdown + opportunity recall + large-move capture + sensible trade frequency**, not win rate alone. A change that removes many good opportunities to improve a headline percentage is not automatically an improvement.
+1. finish broader Phase-10 replay/stress/ablation reports, including Trendline/Fib/POC Opportunity-Recall/trade-frequency impact;
+2. integrate authoritative research/discovery/confluence state into dashboard DTO/runtime status;
+3. Phase 11: portable backup/checkpoint + fresh-machine recovery drill + production shared cross-laptop coordination proof;
+4. Phase 12: build final persistent runtime orchestrator that composes Market → Intelligence → Strategy/Decision → TradePlan → Risk/Permissions → Execution → Management → Journal/Research;
+5. controlled Windows/MT5 DEMO integration/fault/restart/failover certification;
+6. final docs/release audit sync based on actual evidence.
+
+The current `app/main.py` remains a read-only readiness launcher until the final runtime orchestrator replaces/extends it.
 
 ## Debugging order
 
 ```text
 MarketSnapshot
-→ IntelligenceSnapshot + Trendline/Fib/POC confluence
-→ StrategyFloor + optional positive-only confluence
+→ IntelligenceSnapshot + optional Trendline/Fib/POC
+→ StrategyFloor + bounded confluence
 → Decision / Opportunity / Timing
 → TradePlan
 → Risk + Session/News
