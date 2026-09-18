@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.2-design
+**Version:** 1.3-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -32,12 +32,28 @@ These items are intentionally unresolved. Most are calibration/implementation ch
 
 ## Trade Plan / targets / exits
 
+**Resolved initial target/RR direction:**
+
+```text
+Credible structural target room <1.20R  → reject current plan
+1.20R–<1.50R                            → conditional/marginal
+1.50R–<2.00R                            → good
+2.00R+                                  → strong
+3R/4R+                                  → runner potential, not guaranteed
+```
+
+A `1.20R–<1.50R` plan requires a credible larger expansion path; initial V1 expects roughly `2R+` Expansion Target room with acceptable path quality. Higher RR does not increase monetary risk.
+
+**Resolved initial objective/TP direction:** Primary Structural Target is a management checkpoint rather than forced full exit. A valid Expansion Target is the default initial broker TP; if no valid Expansion Target exists, a valid Primary Target may be used. Fixed 100/200/300-pip TP logic is not used. Runner extension requires fresh continuation/acceptance evidence plus a newly defined structural/liquidity objective; profit alone cannot move TP endlessly.
+
+**Resolved V1 partial-profit direction:** core V1 does not depend on partial closes. The full position is managed through HOLD/PROTECT/TRAIL/RUNNER/EXIT so `0.01` minimum-lot accounts remain fully supported. Partial-profit research is a future/version option.
+
+Remaining Trade Plan/exit questions:
+
 - Exact family-specific stop-buffer calculation and Stop Quality thresholds.
-- Whether initial broker TP is always placed at a market objective, omitted for some runner designs, or family-specific.
-- Exact minimum acceptable target-room/RR policy by family; no universal value frozen.
-- Exact protection/trailing eligibility and M5/M15/H1 precedence.
-- Exact runner-extension criteria and objective progression limits.
-- Whether/when partial profit is supported when broker volume permits it; V1 must remain valid without partials.
+- Family/regime-specific refinements to the frozen initial RR guard after research.
+- Exact protection/trailing eligibility and M5/M15/H1 precedence thresholds.
+- Exact continuation/reversal score thresholds and objective-quality thresholds for runner progression/exit.
 
 ## Risk
 
