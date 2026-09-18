@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 0.5-design  
+**Version:** 0.6-design  
 **Authority:** Test taxonomy, executable proof requirements, replay/live parity, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
@@ -17,6 +17,7 @@ Testing must prove documented invariants. `VERIFIED` is reserved for behaviour t
 Unit / Contract Tests
 → Component Tests
 → Deterministic Replay Tests
+→ Research Ablation / Outcome Tests
 → Integration Tests
 → Fault / Crash Injection
 → Persistence / Migration Tests
@@ -36,7 +37,8 @@ Must prove:
 - trendlines use only already-confirmed swing anchors;
 - Fibonacci anchors use only already-confirmed structural swings;
 - POC/volume profile uses only volume/candle history available at that replay point;
-- replay chronology matches documented information availability.
+- replay chronology matches documented information availability;
+- post-hoc future outcome labels cannot feed backward into the original historical decision/plan.
 
 Future-data leakage is release-blocking.
 
@@ -44,7 +46,7 @@ Future-data leakage is release-blocking.
 
 Where parity is claimed, replay and live paths should reuse the same decision semantics. Feed identical snapshots/events into shared logic and compare outputs.
 
-Do not claim intrabar parity without sufficient historical data.
+Do not claim intrabar parity without sufficient historical data. Current decision replay is explicitly `BAR_CLOSE`; initial stop/target outcome labeling is explicitly bar-high/low modeling rather than tick-perfect execution.
 
 ## Strategy/decision tests
 
@@ -70,12 +72,57 @@ Tests must prove:
 - Volume Profile/POC prefers real volume when available and otherwise labels tick-volume approximation;
 - POC alone cannot manufacture directional strategy authority;
 - missing all confluence leaves the base family score unchanged;
-- supportive confluence can only add a bounded positive bonus;
+- supportive confluence can only add a bounded positive family bonus;
 - opposed/unclear confluence does not become a hidden hard BLOCK;
 - repeated/correlated Trendline/Fib/POC evidence cannot inflate scores without cap;
-- confluence source modules contain no risk/execution authority.
+- confluence source modules contain no risk/execution authority;
+- production confluence configuration defaults all implemented sources ON;
+- research may disable individual confluence sources without introducing a penalty/hard gate.
 
-Research validation must additionally run ablation comparing base strategy versus individual/combined confluence using Net R, drawdown, Opportunity Recall, missed meaningful moves, capture and trade frequency — not win rate alone.
+A positive-only family uplift does not imply monotonically higher fused Opportunity Score because both BUY and SELL may gain support and conflict may rise. Tests/research must measure the final signed effect instead of asserting automatic improvement.
+
+## Research ablation tests
+
+The same historical chronology must be reused for all controlled confluence variants:
+
+```text
+BASE
+TRENDLINE
+FIBONACCI
+DIRECTIONAL_COMBINED
+ALL
+```
+
+Decision-level ablation must prove/report:
+
+- identical event timestamps across variants;
+- Opportunity/ENTER/WAIT/MISSED/INVALID counts;
+- BUY/SELL leading counts;
+- average Opportunity/Conflict scores;
+- signed deltas versus BASE;
+- POC marginal effect through `ALL - DIRECTIONAL_COMBINED`;
+- no fabricated Net R/Profit Factor/win rate from decision events alone.
+
+When the bracket outcome layer is attached, tests must preserve the distinction between analytical decision evidence and explicit initial Trade Plan path evidence.
+
+## Research Trade Plan outcome tests
+
+Initial post-hoc outcome modeling must prove:
+
+- production Trade Plan geometry is built from the historical snapshot/intelligence available at the ENTER timestamp;
+- later candles are used only after that decision/plan is frozen;
+- BUY and SELL stop/target touch logic is symmetric;
+- MFE/MAE are normalized by immutable original R;
+- target-before-stop produces the broker target RR for the initial bracket model;
+- stop-before-target produces `-1R` for the initial bracket model;
+- stop and target touched in the same M5 is `BOTH_TOUCHED_AMBIGUOUS`, never favorable guessed order;
+- neither touched within configured horizon remains `HORIZON_UNRESOLVED`;
+- ambiguous/unresolved cases do not enter resolved bracket Net R/PF/drawdown;
+- resolved coverage is always reported;
+- 2R/3R/4R reach metrics may use observed MFE without pretending those levels were necessarily realized;
+- `resolved_bracket_*` metrics are not labeled full production/broker P&L.
+
+Full Trade Manager/runner replay remains separate validation before management parity can be claimed.
 
 ## Entry lifecycle tests
 
@@ -334,7 +381,7 @@ If authority-bearing credential was exposed publicly, removal alone is not enoug
 
 ## CI versus controlled DEMO tests
 
-Public CI should run tests requiring no live financial credentials: unit/contract/replay/persistence/governance/secret-scan/static checks.
+Public CI should run tests requiring no live financial credentials: unit/contract/replay/research/persistence/governance/secret-scan/static checks.
 
 Actual MT5 DEMO execution tests run in controlled environment with credentials supplied outside repository.
 
@@ -347,19 +394,21 @@ Before DEMO verification, execute controlled lifecycle covering startup, data, i
 Example:
 
 ```text
-Unit                 PASS / count
-Replay parity         PASS / count
-Confluence causality  PASS / count
-Discovery liveness    PASS / count
-Execution gate        PASS / count
-Controller/failover   PASS / count
-Crash recovery        PASS / count
-Migration             PASS / count
-DEMO execution        PENDING/PASS
-Long forward sample   PENDING/PASS
+Unit                    PASS / count
+Replay chronology        PASS / count
+Confluence causality     PASS / count
+Confluence ablation      PASS / count
+Bracket outcome model    PASS / count / coverage
+Discovery liveness       PASS / count
+Execution gate           PASS / count
+Controller/failover      PASS / count
+Crash recovery           PASS / count
+Migration                PASS / count
+DEMO execution           PENDING/PASS
+Long forward sample      PENDING/PASS
 ```
 
-Do not mark pending evidence as PASS.
+Do not mark pending evidence as PASS. Do not convert ambiguous/unresolved bracket outcomes into synthetic resolved P/L.
 
 ## Release-blocking failures
 
@@ -380,7 +429,8 @@ At minimum:
 - public financial credential leakage;
 - autonomous self-promotion/broker bypass;
 - eligible discovery evidence silently disappearing without candidate/suppression reason;
-- optional confluence accidentally acting as an undocumented hard gate.
+- optional confluence accidentally acting as an undocumented hard gate;
+- research outcome model favorably resolving unknown same-bar stop/target ordering.
 
 ## Explicit non-goals
 
@@ -389,11 +439,13 @@ Testing must not:
 - claim profitability from software correctness;
 - mark docs VERIFIED because Markdown is complete;
 - hide failing/pending evidence;
+- present resolved initial-bracket modeling as full Trade Manager/broker P/L;
 - replace live DEMO proof with only mocks where live proof is required.
 
 ## Open questions
 
 - final CI coverage/static/security thresholds;
+- full Trade Manager replay/forward-evidence parity requirements;
 - final controlled DEMO certification sample/steps;
 - long-duration forward-evidence requirement;
 - final historical/DEMO evidence threshold for retaining each optional confluence feature.
