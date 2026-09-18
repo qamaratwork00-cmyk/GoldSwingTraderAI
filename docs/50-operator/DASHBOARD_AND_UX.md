@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Dashboard and UX
 
 **Status:** PROVISIONAL  
-**Version:** 0.3-design  
+**Version:** 0.4-design  
 **Authority:** Main terminal dashboard information architecture, operator visibility, reason presentation and restrained emoji usage.  
 **Depends on:** `../20-trading-decisions/SCORING_AND_DECISION_FUSION.md`, `../30-risk-execution/RISK_CONTRACT.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`
 
@@ -29,7 +29,34 @@ The dashboard observes authoritative state; it does not define trading behaviour
 - avoid raw-data overload;
 - one clear top-level status must always be visible;
 - normal `WAIT` must remain visually distinct from a system fault;
-- centralized Execution Permission must be visible when it is the final allow/block boundary.
+- centralized Execution Permission must be visible when it is the final allow/block boundary;
+- useful operational visibility carried forward from the prior GoldScalperAI dashboard must not be removed merely to make the screen look cleaner.
+
+## GoldScalperAI visibility preservation rule
+
+GoldSwingTraderAI is a new system, but the prior GoldScalperAI dashboard contained useful operator information that remains valuable. These fields should be preserved or improved in the new compact layout whenever the underlying data is available:
+
+- current bot/account mode and runtime role;
+- XAU symbol;
+- Bid and Ask;
+- live spread and spread quality;
+- current M5 candle time remaining;
+- concise trend/structure direction;
+- EMA20 / EMA50 values or compact relation where useful;
+- RSI;
+- ATR;
+- current signal/action;
+- exact reason for `WAIT`, `ENTER`, `BLOCKED`, `MISSED`, `INVALID` or management action;
+- account/risk profile and proposed risk/lot;
+- daily P/L;
+- daily loss limit / remaining daily risk budget;
+- active-position count/capacity;
+- consecutive-loss/loss-streak information where it remains useful for risk/diagnostics;
+- open-trade entry/SL/TP or structural objectives when a trade exists.
+
+These items may be reorganized, condensed or grouped into newer panels, but they must not silently disappear if they remain meaningful to the operator.
+
+The new dashboard adds richer structure, decision, execution, learning, backup and health information around this useful core rather than replacing it with a less informative screen.
 
 ## Emoji policy
 
@@ -64,6 +91,7 @@ The header should expose compact identity facts such as:
 - XAU symbol;
 - verified account environment/mode;
 - runtime role (`PRIMARY EXECUTOR`, `OBSERVER`, `RESEARCH`);
+- account profile (`SMALL`, `MEDIUM`, `NORMAL`);
 - production policy version;
 - UTC time;
 - M5 candle time remaining where available;
@@ -73,17 +101,21 @@ A real account connected while the current policy remains DEMO-first must be pro
 
 ## Market panel
 
-Compact market context may include:
+Compact market context should retain practical live visibility while adding the swing-system context. It may include:
 
+- Bid / Ask;
+- live spread and spread quality;
 - H4/H1/M15/M5 structure summary;
+- concise bullish/bearish/range/transition state;
 - volatility/momentum phase;
 - session context;
 - location/target path;
 - news-safety status;
-- spread quality;
-- optional concise EMA/RSI/ATR line.
+- concise EMA20/EMA50 relation/values;
+- RSI;
+- ATR.
 
-Indicators remain secondary context.
+Indicators remain secondary context and must not become trade authority merely because they are visible.
 
 ## Trading Floor Decision panel
 
@@ -98,7 +130,8 @@ Display at least:
 - Evidence Coverage;
 - operator-facing Final Score;
 - leading/supporting strategy family;
-- final action.
+- final action/signal;
+- exact primary reason.
 
 Example:
 
@@ -108,6 +141,7 @@ BUY 87     SELL 31     Edge +56 BUY
 Opportunity 86 | Entry 78 | Coverage 94%
 Strategy TREND_PULLBACK
 Status 🟡 WAIT
+Reason ENTRY_EXTENDED
 ```
 
 ## Why / blocker attribution
@@ -184,8 +218,9 @@ Display compact authoritative risk state such as:
 - actual proposed all-in risk;
 - proposed normalized lot;
 - open risk;
-- daily P/L and remaining risk budget;
-- position capacity;
+- daily P/L and daily loss limit/remaining risk budget;
+- position count/capacity;
+- loss streak where meaningful;
 - Risk PASS/BLOCK reason.
 
 Example SMALL account display:
@@ -198,6 +233,10 @@ Target Risk      ...
 Structural Risk  ...
 Spread Impact    ...
 All-in Risk      ...
+Daily P/L        ...
+Daily Remaining  ...
+Position         0/1
+Loss Streak      0
 Risk Band        ACCEPTABLE
 Decision         ✅ PASS
 ```
@@ -252,9 +291,10 @@ When a bot-managed position is open, prioritize:
 - strategy/policy/Episode IDs;
 - entry/current price;
 - original/current SL;
+- current broker TP if one exists;
+- Primary/Expansion/Runner objectives;
 - current realized/unrealized R context;
 - MFE/MAE;
-- Primary/Expansion objectives;
 - Continuation/Reversal/Structure state;
 - Trade Manager action;
 - reason for last SL/TP/exit decision.
@@ -315,6 +355,33 @@ The main dashboard is mostly read-only. Only deliberately governed actions shoul
 
 Do not expose casual hotkeys for changing weights, bypassing news/risk/execution permission or impulsively promoting strategies.
 
+## Compact target layout
+
+A future implementation may use a compact layout similar to:
+
+```text
+════════ GoldSwingTraderAI ════════
+XAUUSDm | DEMO ✅ | SMALL | ⚡ PRIMARY
+Bid ... | Ask ... | Spread ... | M5 ...
+───────────────────────────────────
+🌍 MARKET      BULLISH
+EMA20/50 ... | RSI ... | ATR ...
+⚖️ DECISION    🟡 WAIT • BUY BIAS
+🎯 SETUP       ARMED • Score 86
+🛡️ RISK        ✅ NORMAL • 0.01
+Today ... | Limit ... | Pos 0/1 | LS 0
+⚙️ EXECUTION   ✅ READY
+🧠 LEARNING    ✅ ACTIVE
+🩺 SYSTEM      ✅ HEALTHY
+💾 BACKUP      ✅ VERIFIED
+───────────────────────────────────
+💬 Entry thori extended hai.
+   Setup valid hai — pullback ka wait.
+════════════════════════════════════
+```
+
+Exact dimensions/ordering may change for readability, but the useful facts above remain available.
+
 ## Refresh behaviour
 
 Dashboard refresh frequency is presentation only and must not cause repeated strategy triggers or duplicate order attempts. Prefer in-place refresh rather than endless terminal scrolling.
@@ -324,6 +391,8 @@ Dashboard refresh frequency is presentation only and must not cause repeated str
 - WAIT versus BLOCKED versus system-fault rendering;
 - stable reason code + human explanation;
 - decision trace correctness;
+- preserved Bid/Ask/spread/candle-timer/trend/EMA/RSI/ATR visibility where available;
+- preserved daily P/L/loss-limit/position/loss-streak visibility;
 - SMALL/MEDIUM/NORMAL profile and sizing-mode display;
 - all-in risk/spread-impact display comes from authority rather than UI recomputation;
 - centralized Execution Permission display correctness;
@@ -340,6 +409,7 @@ The dashboard must not:
 - become a second strategy/risk/execution specification;
 - place trades because a UI element changed;
 - hide system faults behind generic `NO TRADE`;
+- remove useful operator facts solely for visual minimalism;
 - overwhelm the main screen with every swing/FVG/OB/log line;
 - require manual tuning for normal operation.
 
