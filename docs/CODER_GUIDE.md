@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT  
-**Version:** 1.2-implementation-map  
+**Version:** 1.3-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -45,15 +45,19 @@ intelligence/technical.py
 intelligence/liquidity.py
 intelligence/session.py
 intelligence/news.py
+intelligence/confluence.py
 intelligence/snapshot.py
 ```
 
 One verified market snapshot feeds one shared intelligence derivation; duplicate indicator/ATR reads are avoided.
 
+`intelligence/confluence.py` adds causal confirmed-swing trendlines, Fibonacci retracement/extension geometry and broker-local volume-profile POC. These are **soft accuracy/confluence facts only**. Missing/opposing confluence does not become a hard filter.
+
 ### Phase 4 — Strategies + fusion + Opportunity + Entry Timing — IMPLEMENTED + deterministic CI green
 
 ```text
 strategies/floor.py
+strategies/confluence.py
 decisions/fusion.py
 decisions/opportunity.py
 decisions/timing.py
@@ -61,6 +65,8 @@ decisions/snapshot.py
 ```
 
 Six families evaluate in parallel. Missing optional evidence is omitted/reweighted rather than zeroed. One strong family can lead. Poor timing normally yields WAIT rather than destroying a valid opportunity.
+
+`strategies/confluence.py` applies only a small bounded **positive-only** uplift when Trendline/Fib/POC context supports an existing family. No confluence source is mandatory and this layer cannot reduce the base family score.
 
 ### Phase 5 — Trade Plan + Risk — IMPLEMENTED + deterministic CI green
 
@@ -131,6 +137,8 @@ operator/__init__.py
 
 Pure-standard-library read-only renderer. It preserves requested GoldScalperAI visibility and consumes, rather than recreates, decision/risk/execution authority.
 
+Trendline/Fib/POC compact display is an operator-integration follow-up; their market/strategy logic already lives outside the dashboard.
+
 ### Phase 10 — Replay / Learning / Discovery / Invention — IMPLEMENTED deterministic foundation + CI green
 
 ```text
@@ -172,6 +180,8 @@ Important implementation guarantees:
 - autonomous candidates cannot self-promote;
 - research/promotion registries never grant direct broker authority.
 
+Trendline/Fibonacci/POC outcomes are intended to be measured as optional confluence features in replay. They must be retained only if they improve out-of-sample accuracy/capture without damaging opportunity recall.
+
 Initial discovery sample/similarity/complexity values and learning influence remain research-calibratable baselines, not frozen profitability truth.
 
 ## Deterministic test ownership
@@ -183,6 +193,7 @@ tests/test_market_data.py
 tests/test_intelligence_core.py
 tests/test_intelligence_snapshot.py
 tests/test_technical_liquidity.py
+tests/test_technical_confluence.py
 tests/test_strategy_decisions.py
 tests/test_trade_plan_risk.py
 tests/test_risk_state_regressions.py
@@ -214,6 +225,8 @@ Deterministic CI green is software evidence, not profitability proof or live DEM
 |---|---|---|
 | Market data/history | `10-market-intelligence/MARKET_DATA_AND_HISTORY.md` | `market_data/` |
 | Full market intelligence | `10-market-intelligence/*` | `intelligence/` |
+| Technical zones/location | `10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md` | `intelligence/technical.py` |
+| Trendline/Fibonacci/POC confluence | `10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md` | `intelligence/confluence.py`, `strategies/confluence.py` |
 | Strategy floor | `20-trading-decisions/STRATEGY_FLOOR.md` | `strategies/floor.py` |
 | Fusion/Opportunity/Timing | `20-trading-decisions/*` | `decisions/` |
 | Trade Plan | `20-trading-decisions/TRADE_PLAN.md` | `decisions/trade_plan.py` |
@@ -234,6 +247,7 @@ Deterministic CI green is software evidence, not profitability proof or live DEM
 - no lookahead;
 - shared verified facts instead of duplicate MT5/calculation work;
 - soft evidence must not become a pile of arbitrary hard filters;
+- Trendline/Fibonacci/POC are bonus-only confluence unless future governed evidence explicitly changes that design;
 - positive balance alone is not an eligibility restriction;
 - raw broker writes live only in `execution/mt5_writer.py`;
 - critical local state never pretends ambiguous broker action succeeded;
@@ -252,8 +266,8 @@ Research tuning must optimize **accuracy + Net R + drawdown + opportunity recall
 
 ```text
 MarketSnapshot
-→ IntelligenceSnapshot
-→ StrategyFloor
+→ IntelligenceSnapshot + Trendline/Fib/POC confluence
+→ StrategyFloor + optional positive-only confluence
 → Decision / Opportunity / Timing
 → TradePlan
 → Risk + Session/News
