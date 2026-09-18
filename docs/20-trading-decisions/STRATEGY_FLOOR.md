@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Strategy Floor
 
 **Status:** PROVISIONAL  
-**Version:** 0.2-implementation-baseline  
+**Version:** 0.3-implementation-baseline  
 **Authority:** Production strategy-family architecture
 
 ## Core principle
@@ -10,15 +10,18 @@ Strategy families run in parallel against the same verified `IntelligenceSnapsho
 
 > **Parallel hypotheses, bounded evidence, no sequential filter soup.**
 
-## Phase 4 implementation checkpoint
+> **Trendline, Fibonacci and POC are optional accuracy/confluence inputs. They can strengthen an existing hypothesis but are not mandatory conditions and do not become hidden trade blockers.**
+
+## Implementation checkpoint
 
 Implemented in:
 
 ```text
 src/goldswingtraderai/strategies/floor.py
+src/goldswingtraderai/strategies/confluence.py
 ```
 
-The implementation evaluates all six families in one call to `evaluate_strategy_floor()` and returns independent BUY and SELL cases for every family.
+The implementation evaluates all six families in one call to `evaluate_strategy_floor()` and returns independent BUY and SELL cases for every family. `apply_optional_confluence()` then applies a small bounded **positive-only** bonus before BUY/SELL fusion.
 
 Each `DirectionalFamilyCase` currently includes:
 - score;
@@ -51,7 +54,13 @@ Current baseline consumes bounded evidence from:
 - M15 EMA flow;
 - remaining target room.
 
-FVG/OB/liquidity primitives are not mandatory.
+Optional confluence may strengthen the case when present:
+- confirmed support-trendline touch/reclaim for BUY;
+- confirmed resistance-trendline touch/reclaim for SELL;
+- direction-consistent Fibonacci retracement context;
+- POC-near context only when directional confluence already exists.
+
+FVG/OB/liquidity/Fib/trendline/POC primitives are not mandatory.
 
 ### 2. BREAKOUT_EXPANSION
 
@@ -63,6 +72,11 @@ Current baseline consumes:
 - volatility state;
 - accepted liquidity break where present;
 - remaining target room.
+
+Optional confluence may strengthen:
+- BUY when confirmed resistance trendline breaks;
+- SELL when confirmed support trendline breaks;
+- direction-consistent Fib/path context when present.
 
 A wick-only probe is weaker than accepted break evidence. Perfect retest is not mandatory.
 
@@ -76,6 +90,8 @@ Current baseline consumes:
 - liquidity acceptance where present;
 - target room.
 
+Trendline break/retest or Fib alignment may add bounded support, never a required checklist.
+
 ### 4. LIQUIDITY_SWEEP_REVERSAL
 
 Current baseline consumes:
@@ -86,7 +102,7 @@ Current baseline consumes:
 - non-hostile H1 context;
 - target room.
 
-A long wick without an existing liquidity pool/reclaim narrative is not sufficient.
+A long wick without an existing liquidity pool/reclaim narrative is not sufficient. Trendline/Fib/POC can remain contextual support but do not define the family.
 
 ### 5. FAILED_BREAKOUT_REVERSAL
 
@@ -110,11 +126,33 @@ Current baseline consumes:
 - liquidity path;
 - target room.
 
-The family does not guess release direction before evidence appears; BUY and SELL cases are evaluated independently.
+A confirmed trendline break may strengthen the release case. The family does not guess release direction before evidence appears; BUY and SELL cases are evaluated independently.
+
+## Optional technical confluence — accuracy only
+
+The V1 rule is deliberately asymmetric:
+
+```text
+supportive Trendline/Fib/POC evidence
+        → bounded score bonus
+
+missing confluence
+        → no penalty
+
+opposing confluence
+        → no automatic penalty from this layer
+        → may remain visible as market context elsewhere
+```
+
+Current bonus is capped so several correlated technical tools cannot dominate the base strategy hypothesis.
+
+POC is direction-neutral by itself. `POC_NEAR` only strengthens an already-directional confluence and cannot manufacture a BUY/SELL thesis.
+
+This design is intentional: these tools are present to improve entry quality/accuracy without turning the bot into a low-frequency checklist system.
 
 ## Shared evidence primitives, not standalone automatic strategies
 
-These remain shared inputs unless governed research later promotes a new family:
+These remain shared inputs unless governed research later promotes a genuinely distinct family:
 
 - FVG;
 - qualified Order Block;
@@ -125,13 +163,18 @@ These remain shared inputs unless governed research later promotes a new family:
 - RSI;
 - ATR;
 - individual candle patterns;
-- support/resistance.
+- support/resistance;
+- trendline touch/break/reclaim;
+- Fibonacci retracement/extension context;
+- broker-local volume-profile POC.
+
+Trendline setup is important, but V1 does **not** create a seventh mandatory strategy family merely to label it. Its natural behaviours enhance existing pullback/breakout/retest/compression families. If replay/discovery proves a materially different trendline narrative with independent edge, governed strategy discovery may propose a new family.
 
 ## Correlation / consensus
 
-Multiple family labels may describe the same underlying market event. Raw family scores are therefore not summed as independent certainty.
+Multiple family labels and confluence tools may describe the same underlying market event. Raw family/confluence scores are therefore not summed as independent certainty.
 
-`decisions/fusion.py` owns bounded cross-family synergy/conflict. This document only requires that family output preserves enough evidence labels/coverage for correlation handling.
+`decisions/fusion.py` owns bounded cross-family synergy/conflict. `strategies/confluence.py` separately caps technical-confluence uplift.
 
 ## Market Episode identity
 
@@ -139,18 +182,21 @@ Phase 4 implements durable-style `episode_id` and `opportunity_id` in `decisions
 
 A surviving thesis preserves those IDs across WAIT/READY lifecycle updates. A missed opportunity may be re-armed only when a caller proves a genuinely fresh structural/timing event; blind unchanged re-entry is rejected.
 
-Later persistence will make these identities durable across restart.
+Persistence makes these identities durable across restart.
 
 ## Frequency philosophy
 
 The floor should maximize valid opportunity coverage, not raw trade count and not ultra-rare perfection. Soft imperfections remain scores/conflicts; true hard safety remains outside strategy scoring.
+
+Adding a technical tool is **not** permission to add another mandatory filter. A new feature should stay soft unless there is explicit safety authority or strong governed evidence that a harder rule improves out-of-sample performance without materially damaging opportunity recall.
 
 ## Runtime path
 
 ```text
 IntelligenceSnapshot
 → evaluate six strategy families in parallel
-→ StrategyFloorReport
+→ base StrategyFloorReport
+→ bounded positive-only technical confluence
 → independent BUY/SELL thesis fusion
 ```
 
@@ -158,13 +204,23 @@ Strategy code has no MT5, lot sizing, reset, broker-write or execution-permissio
 
 ## Tests / evidence
 
-Phase-4 deterministic tests in `tests/test_strategy_decisions.py` prove:
+Deterministic tests prove:
 - all six families execute from the same shared snapshot;
 - BUY/SELL family outputs remain bounded;
 - strategy/decision modules contain no `order_send`/MetaTrader5 boundary;
-- downstream fusion preserves strong opposition as conflict rather than hiding it.
+- downstream fusion preserves strong opposition as conflict rather than hiding it;
+- missing Trendline/Fib/POC confluence leaves base score unchanged;
+- supportive confluence can only add a bounded bonus;
+- POC alone cannot become directional authority.
 
-Full profitability/threshold calibration remains Phase-10 replay/research work.
+Relevant suites:
+
+```text
+tests/test_strategy_decisions.py
+tests/test_technical_confluence.py
+```
+
+Full profitability/threshold calibration remains replay/research work.
 
 ## Open calibration questions
 
@@ -173,4 +229,7 @@ Full profitability/threshold calibration remains Phase-10 replay/research work.
 - minimum useful family coverage;
 - family-specific target-room influence;
 - correlated-evidence grouping/synergy strength;
-- which early versus confirmed structure maturity each family should prefer.
+- which early versus confirmed structure maturity each family should prefer;
+- exact maximum technical-confluence bonus;
+- which Trendline/Fib/POC contexts improve out-of-sample accuracy without reducing opportunity recall;
+- whether replay evidence justifies any dedicated trendline-derived family in future.
