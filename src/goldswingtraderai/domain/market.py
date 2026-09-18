@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from math import isfinite
 
 from goldswingtraderai.domain.enums import AccountMode, DataQuality, Timeframe
 from goldswingtraderai.domain.ids import EntityId
@@ -15,6 +16,11 @@ def _require_utc(name: str, value: datetime) -> None:
         raise ValueError(f"{name} must be timezone-aware")
     if value.utcoffset() != timezone.utc.utcoffset(value):
         raise ValueError(f"{name} must be UTC")
+
+
+def _require_finite(name: str, *values: float) -> None:
+    if not all(isfinite(value) for value in values):
+        raise ValueError(f"{name} must contain finite numeric values")
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,8 +42,7 @@ class AccountFacts:
             raise ValueError("account server cannot be empty")
         if not self.currency.strip():
             raise ValueError("account currency cannot be empty")
-        if min(self.balance, self.equity, self.margin, self.margin_free) < 0:
-            raise ValueError("account monetary facts cannot be negative")
+        _require_finite("account monetary facts", self.balance, self.equity, self.margin, self.margin_free)
         if self.leverage <= 0:
             raise ValueError("account leverage must be positive")
 
@@ -61,6 +66,16 @@ class SymbolSpec:
             raise ValueError("symbol cannot be empty")
         if self.digits < 0:
             raise ValueError("digits cannot be negative")
+        _require_finite(
+            "symbol specification",
+            self.point,
+            self.tick_size,
+            self.tick_value,
+            self.contract_size,
+            self.volume_min,
+            self.volume_max,
+            self.volume_step,
+        )
         if self.point <= 0 or self.tick_size <= 0:
             raise ValueError("point and tick size must be positive")
         if self.tick_value < 0:
@@ -86,6 +101,7 @@ class Quote:
         _require_utc("quote time", self.time_utc)
         if not self.symbol.strip():
             raise ValueError("quote symbol cannot be empty")
+        _require_finite("quote", self.bid, self.ask)
         if self.bid <= 0 or self.ask <= 0:
             raise ValueError("bid and ask must be positive")
         if self.ask < self.bid:
@@ -113,6 +129,7 @@ class Candle:
 
     def __post_init__(self) -> None:
         _require_utc("candle time", self.time_utc)
+        _require_finite("OHLC", self.open, self.high, self.low, self.close)
         if min(self.open, self.high, self.low, self.close) <= 0:
             raise ValueError("OHLC prices must be positive")
         if self.high < max(self.open, self.close) or self.low > min(self.open, self.close):
