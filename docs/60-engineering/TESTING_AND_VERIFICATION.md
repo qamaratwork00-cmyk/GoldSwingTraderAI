@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL  
-**Version:** 0.9-design  
-**Authority:** Test taxonomy, executable proof requirements, replay/live parity, crash/restart, migration, learning-governance and release verification.  
+**Version:** 1.0-design  
+**Authority:** Test taxonomy, executable proof requirements, replay/live parity, research-evidence integrity, crash/restart, migration, learning-governance and release verification.  
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`
 
 ## Purpose
@@ -17,7 +17,7 @@ Testing must prove documented invariants. `VERIFIED` is reserved for behaviour t
 Unit / Contract Tests
 → Component Tests
 → Deterministic Replay Tests
-→ Research Ablation / Outcome / Management / Stress / Walk-Forward Tests
+→ Research Ablation / Outcome / Management / Stress / Walk-Forward / Evidence Tests
 → Integration Tests
 → Fault / Crash Injection
 → Persistence / Migration Tests
@@ -28,24 +28,11 @@ Unit / Contract Tests
 
 ## No-lookahead tests
 
-Must prove:
-
-- candidate swings may evolve;
-- confirmed swings appear only at `confirmed_at`;
-- wick-only probes do not become confirmed BOS/MSS;
-- future candles/targets/FVG/OB/news revisions do not leak backward;
-- trendlines/Fibonacci/POC use only facts available at that replay point;
-- post-hoc outcome labels cannot feed backward into the original decision/plan;
-- a management action affects only following bars, never the completed bar that generated it;
-- a walk-forward validation window cannot inspect candles beyond its validation-end boundary.
+Must prove future candles/facts cannot leak into structure, confluence, decisions, Trade Plans, manager actions or earlier walk-forward windows. A manager action affects only following bars. Post-hoc labels never feed back into the original decision. Validation outcome history is clipped at validation end.
 
 Future-data leakage is release-blocking.
 
-## Replay/live parity
-
-Where parity is claimed, replay and live paths should reuse the same production semantics.
-
-Current realism labels:
+## Replay/live parity labels
 
 ```text
 Decision replay          BAR_CLOSE
@@ -57,64 +44,25 @@ Walk-forward             FIXED_POLICY_WALK_FORWARD over declared replay layers
 
 Do not claim tick/broker parity without sufficient historical/live evidence.
 
-## Strategy/decision and confluence tests
+## Strategy / confluence / lifecycle tests
 
-Prove valid narratives/noisy negatives, independent BUY/SELL theses, conflict representation, UNKNOWN optional evidence, bounded correlated evidence and that one strong family can create opportunity without mandatory all-family confluence.
+Cover valid and negative family fixtures, independent BUY/SELL theses, conflict, missing optional evidence, bounded correlation, one-strong-family opportunity creation, bonus-only Trendline/Fib/POC, causal anchors/history and production defaults ON.
 
-Trendline/Fibonacci/POC tests additionally prove causal anchors/history, real-volume preference with labelled tick fallback, POC cannot manufacture directional authority, missing/opposed confluence is not a hidden hard gate, bonuses are bounded positive-only, production defaults are ON and research can disable sources for controlled ablation.
+Entry lifecycle covers WAIT preservation, MISSED versus INVALID, fresh second chance, stale duplicate rejection, episode re-entry limits and chase/drift defer semantics.
 
-## Research ablation tests
+Trade Plan tests cover structural invalidation, volatility buffer, Stop Quality, RR guards, target roles, immutable original R and indivisible 0.01 management.
 
-All variants must reuse identical historical event chronology:
+## Research outcome / manager tests
 
-```text
-BASE
-TRENDLINE
-FIBONACCI
-DIRECTIONAL_COMBINED
-ALL
-```
+Initial Trade Plan outcome tests prove historical geometry reconstruction, symmetric BUY/SELL touch logic, immutable-R MFE/MAE, conservative same-bar ambiguity and unresolved-horizon isolation.
 
-Decision-level ablation must report Opportunity/ENTER/WAIT/MISSED/INVALID counts, BUY/SELL leadership, Opportunity/Conflict scores, signed deltas versus BASE and POC marginal effect. Decision events alone must never fabricate Net R, Profit Factor or win rate.
+Trade Manager replay tests prove active stop/TP checks before new management, production HOLD/PROTECT/TRAIL/RUNNER/EXIT reuse, no retroactive modifications, runner transitions through production state, manager EXIT attribution and unresolved/ambiguous isolation from resolved metrics.
 
-## Research Trade Plan outcome tests
+## Execution-stress tests
 
-Prove historical Trade Plan geometry is reconstructed from facts available at ENTER time; later bars are used only after the plan is frozen; BUY/SELL touch logic is symmetric; MFE/MAE use immutable original R; same-M5 stop+target becomes `BOTH_TOUCHED_AMBIGUOUS`; unresolved horizons remain unresolved; and ambiguous/unresolved cases stay outside resolved bracket P/L metrics.
+Prove one clean BASE, explicit scenario assumptions, executable-side spread approximation, immutable-R adverse fill, no structural stop/target rewrite, completed-M5 modify delay, pending-write suppression, deterministic rejection and signed deltas versus BASE.
 
-## Research Trade Manager replay tests
-
-Prove:
-
-- READY historical plans create research `ManagedTrade` through production models;
-- currently active stop/TP is checked before a new manager decision on each M5;
-- tightened stops can realize positive R;
-- same-bar active stop+TP remains ambiguous;
-- surviving bar completes before production `evaluate_trade_manager()` sees it;
-- HOLD/PROTECT/TRAIL/RUNNER/EXIT come from production manager logic;
-- manager modification applies only following bar or later;
-- RUNNER changes active objective only through production transition;
-- manager EXIT records modeled R/reason;
-- HORIZON_OPEN/ambiguous remain outside resolved management metrics;
-- Capture Efficiency/giveback derive only from modeled path facts.
-
-## Research execution-stress tests
-
-Prove:
-
-- analytical `ReplayRun` is held fixed while declared execution assumptions vary;
-- exactly one clean BASE and unique scenario variants exist;
-- stress assumptions are explicit/configurable;
-- positive spread uses executable-side approximation: BUY exits Bid, SELL exits Ask;
-- adverse entry is measured in immutable original-R units;
-- adverse fill cannot move structural stop/target or rewrite original R;
-- completed-M5 modify delay cannot affect the bar that generated it;
-- pending modify suppresses overlapping modify submissions until resolution;
-- deterministic every-Nth rejection leaves current broker geometry unchanged;
-- modify lifecycle counters remain auditable;
-- same-bar ambiguity/open outcomes remain unresolved;
-- stress report computes signed deltas versus BASE.
-
-Default calibration probes:
+Default probe values remain calibration baselines only:
 
 ```text
 WIDER_SPREAD        1.50x dataset spread
@@ -124,129 +72,142 @@ MODIFY_REJECTION    every 2nd submitted modify rejected
 COMBINED            all four together
 ```
 
-These are not production thresholds or historical broker truth.
+## Fixed-policy walk-forward tests
 
-## Fixed-policy walk-forward validation tests
+Prove:
 
-`research/validation.py` must prove:
+- windows use historically eligible events;
+- development precedes validation;
+- validation slices never overlap;
+- development context may reconstruct state but is not scored;
+- validation metrics contain only declared validation events;
+- outcome history is clipped at validation end;
+- later windows cannot resolve earlier trades;
+- near-boundary trade may remain `HORIZON_OPEN`;
+- optional stress attaches to validation without reselecting policy;
+- no parameter search/tuning exists in `FIXED_POLICY_WALK_FORWARD`;
+- final one-shot holdout cannot be consumed by walk-forward code.
 
-- windows are built only from historically eligible replay events;
-- each window has chronological development context followed by a later validation slice;
-- validation slices cannot overlap;
-- overlapping development context is permitted only for state/history reconstruction;
-- production Opportunity state is run through development before validation begins;
-- development events are **not** counted as validation metrics;
-- validation metrics contain exactly the declared validation slice events;
-- dataset/outcome history is truncated at each validation-end boundary;
-- therefore later-window candles cannot resolve a trade from an earlier validation slice;
-- a near-boundary trade may remain `HORIZON_OPEN` rather than leak future data;
-- optional execution stress is attached to validation evidence, not used to reselect the analytical policy;
-- `FIXED_POLICY_WALK_FORWARD` performs no automatic parameter search/tuning;
-- walk-forward code has no authority to consume the one-shot final holdout in `research/promotion.py`;
-- exact development/validation window sizes remain explicit research configuration, not hidden constants.
+Synthetic CI windows prove chronology/software only, not market edge.
 
-Synthetic CI windows prove chronology/software behaviour only. Strategy validation still requires broad real XAU data and sufficient sample/regime coverage.
+## Research dataset/evidence identity tests
 
-## Entry lifecycle / Trade Plan / Risk tests
+`research/evidence.py` must prove:
 
-Entry lifecycle tests cover WAIT preservation, MISSED versus INVALID, fresh second chance, stale duplicate rejection, same-episode re-entry limits and chase/drift defer semantics.
+- identical replay content generates identical `dataset_sha256`;
+- incidental `ReplayDataset.series` timeframe tuple order does not change dataset identity;
+- candle OHLC/volume/spread mutation changes the relevant timeframe hash and dataset hash;
+- source label/version, replay realism/spread, symbol geometry and economic account context are represented in content identity;
+- broker endpoint `login/server` are intentionally excluded from replay-economic identity;
+- each timeframe identity records bars, first/last open UTC and SHA-256 content hash;
+- dataset/symbol/account hash fields are valid lowercase SHA-256 hex;
+- evidence configuration/result mappings normalize deterministically;
+- equivalent mapping insertion order produces the same input fingerprint;
+- `input_fingerprint_sha256` is stable when only generation time/results change;
+- `manifest_sha256` changes when the complete evidence record changes;
+- canonical manifest JSON round-trips as the declared public representation;
+- non-finite/unsupported evidence values fail rather than silently serialize incorrectly;
+- financial-secret-shaped configuration/result keys fail with `FINANCIAL_SECRET_DETECTED`;
+- evidence-manifest code has no trading, risk, execution or promotion authority.
 
-Trade Plan tests cover structural invalidation, volatility buffer, Stop Quality, target hierarchy, RR guards, Primary/Expansion/Runner roles, broker normalization, immutable original R and indivisible 0.01 management.
+The evidence-level secret check is defense in depth; CI financial-secret scan remains required separately.
 
-Risk tests cover SMALL/MEDIUM/NORMAL boundaries, any positive equity below $300 as SMALL, normal/elevated/ceiling rules, min-lot evaluation, 0/1 capacity, external ownership, margin authority, UTC risk day, cash-flow-adjusted AccountSafetyPL, floating drawdown, daily lock/reset/cooldown/episode persistence and unknown-state fail-closed behaviour.
+## Risk / execution / controller / session tests
 
-## Execution / controller / session tests
+Risk covers SMALL/MEDIUM/NORMAL boundaries, any positive equity below $300 as SMALL, min-lot actual-risk evaluation, 0/1 capacity, external ownership, margin authority, UTC risk day, cash-flow-adjusted AccountSafetyPL, floating drawdown, daily lock/reset/cooldown/episode persistence and unknown-state fail-closed behaviour.
 
-Positive DEMO guard, centralized execution gate, spread/drift thresholds, one-shot intent sending, ambiguous ACK reconciliation, manual/foreign ownership protection, modify/close ambiguity and broker truth must be covered.
+Execution covers verified DEMO guard, centralized gate, spread/drift, exactly-one-send Intent semantics, ambiguous ACK reconciliation, manual/foreign exposure and modify/close ambiguity.
 
-Controller tests prove single PRIMARY, observer standby, lease/epoch freshness, stale-epoch denial, uncertainty blocking, takeover reconciliation and old-primary write denial. Cross-machine certification requires a real shared atomic backend.
+Controller tests prove one PRIMARY, observer standby, lease/epoch freshness, stale-epoch denial, uncertainty blocking and safe takeover. Cross-machine certification requires a real shared atomic backend.
 
-Session/news tests cover Tier1/Tier2/Tier3 windows, required truth failure, post-news warmup, daily/weekend PRE_CLOSE timing, verified schedule, reopen clean-M5 rules and ambiguous-close reconciliation.
+Session/news tests cover Tier windows, required truth failure, post-news warmup, daily/weekend PRE_CLOSE timing, verified schedule, reopen clean-M5 rules and ambiguous-close reconciliation.
 
-## Crash, persistence and migration tests
+## Crash / persistence / migration / restore tests
 
-Fault injection covers intent persistence/send/fill, SL/TP modification, close, PRE_CLOSE, daily lock, controller takeover and atomic state writes. Recovery must never duplicate exposure.
+Fault injection covers intent/send/fill/modify/close/PRE_CLOSE/daily-lock/controller/atomic-write boundaries. Recovery must never duplicate exposure.
 
-Persistence tests cover checksum/schema/truncation failure, atomic interruption, Opportunity/TradePlan/original-R/risk state, unresolved ExecutionIntent recovery and research/candidate/promotion persistence.
+Persistence tests cover checksum/schema/truncation failure, atomic interruption, Opportunity/TradePlan/original-R/risk state, unresolved intents and research/candidate/promotion state.
 
-Fresh-machine restore must preserve Strategy IDs/versions, Champion/Challenger state, learning, autonomous genealogy/rejected memory, promotion history and important risk/order/trade/opportunity state. Public artifacts exclude financial-authority secrets; broker truth remains authoritative after restore.
+Fresh-machine restore must preserve important durable strategy/research/trading context while excluding financial-authority secrets and reconciling broker truth.
 
 ## Dashboard / learning / discovery / promotion tests
 
-Dashboard tests distinguish WAIT from faults and surface exact DEMO/controller/PRE_CLOSE/news/execution/backup/optional-confluence/Discovery Health state without adding authority.
+Dashboard remains presentation-only. Learning is bounded/context-isolated. Discovery accepts audited primitives only and enforces candidate-or-suppression liveness. Promotion enforces stage order, locked fingerprint, one-shot holdout, Shadow/Canary authority boundaries, explicit promotion approval and rollback.
 
-Learning tests prove low confidence for small samples, bounded StrategyMemory influence, challenger-not-live-mutation, evidence-version isolation and hard-safety mutation denial.
+## Public repository secret scanning
 
-Discovery tests prove approved primitives only, arbitrary-code rejection, independent episodes, candidate-or-suppression liveness, durable rejected memory and no broker/self-promotion authority.
+Before public backup/release scan for actual financial-authority secrets. If one was exposed publicly, revoke/rotate it; deletion alone is insufficient.
 
-Promotion tests cover stage order, locked fingerprint, one-shot holdout, Shadow zero broker authority, DEMO Canary normal Risk+Execution path, rollback/history persistence and schema safety.
+Evidence manifests also reject secret-shaped keys, but this does not replace repository scanning.
 
 ## CI versus controlled DEMO
 
-Public CI runs credential-free unit/contract/replay/research/persistence/governance/secret-scan/static checks. Actual MT5 DEMO execution tests run in a controlled environment with credentials outside the repository.
+Public CI runs credential-free software/replay/research/governance/security checks. Actual MT5 DEMO execution/cross-machine tests require a controlled environment with credentials outside the repository.
 
 ## Evidence reporting
 
 Example:
 
 ```text
-Unit                      PASS / count
-Replay chronology          PASS / count
-Confluence ablation        PASS / count
-Bracket outcome model      PASS / count / coverage
-Trade Manager replay       PASS / count / coverage / realism
-Execution stress           PASS / scenarios / assumptions
-Walk-forward chronology    PASS / windows / validation events
-Independent real-data run  PENDING/PASS
-Discovery liveness         PASS / count
-Execution gate             PASS / count
-Controller/failover        PASS / count
-Crash recovery             PASS / count
-Fresh-machine restore      PENDING/PASS
-DEMO execution             PENDING/PASS
-Long forward sample        PENDING/PASS
+Unit                       PASS / count
+Replay chronology           PASS / count
+Confluence ablation         PASS / count
+Bracket outcome model       PASS / count / coverage
+Trade Manager replay        PASS / count / realism
+Execution stress            PASS / scenarios / assumptions
+Walk-forward chronology     PASS / windows / validation events
+Dataset identity            PASS / dataset_sha256
+Evidence manifest integrity PASS / input + manifest hashes
+Independent real-data run   PENDING/PASS
+Execution gate              PASS / count
+Controller/failover         PASS / count
+Fresh-machine restore       PENDING/PASS
+DEMO execution              PENDING/PASS
+Long forward sample         PENDING/PASS
 ```
 
-Do not mark pending evidence as PASS. Do not convert ambiguous/unresolved/open replay outcomes into synthetic resolved P/L.
+Do not mark pending evidence as PASS or convert unresolved modeled outcomes into resolved P/L.
 
-Current deterministic CI checkpoint after the fixed-policy walk-forward foundation: **163 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic checkpoint after research-evidence identity: **168 tests PASS**, Ruff PASS and financial-secret scan PASS.
 
 ## Release-blocking failures
 
 At minimum:
 
 - future-data leakage;
-- walk-forward development events counted as validation evidence;
-- later validation-window data leaking backward to resolve earlier outcomes;
-- validation utility mutating policy or consuming final holdout without governance;
-- centralized execution-permission or DEMO-guard bypass;
-- duplicate broker submission / wrong-account write;
+- walk-forward development counted as validation or later-window leakage;
+- validation/final-holdout governance bypass;
+- dataset identity not changing when replay-relevant content changes;
+- evidence manifest silently accepting authority-bearing secret-shaped fields;
+- evidence/result reported without reproducible dataset/config/code identity when release evidence requires it;
+- centralized execution/DEMO guard bypass;
+- duplicate/wrong-account broker write;
 - unknown exposure treated as zero;
 - controller split-brain/stale epoch;
-- daily-loss/original-R safety corruption;
-- critical restart-state loss or scheduled-close false-flat state;
-- required recovery restore failure;
+- daily-loss/original-R corruption;
+- critical restart-state loss or false-flat PRE_CLOSE state;
+- recovery restore failure;
 - financial credential leakage;
 - autonomous self-promotion/broker bypass;
-- eligible discovery evidence silently disappearing;
-- optional confluence acting as undocumented hard gate;
-- favorable guessing of unknown same-bar ordering;
+- silent eligible-discovery loss;
+- optional confluence acting as hidden hard gate;
+- favorable same-bar guessing;
 - retroactive management modification;
 - stress model rewriting structural geometry/original R;
 - hidden stress assumptions presented as broker fact.
 
 ## Explicit non-goals
 
-Testing must not claim profitability from software correctness, mark docs VERIFIED because Markdown is complete, hide pending evidence, present idealized/stressed/walk-forward software fixtures as broker-realized P/L, or replace required real historical/DEMO proof with mocks.
+Testing must not claim profitability from software correctness, mark docs VERIFIED because Markdown is complete, hide pending evidence, present synthetic fixtures as market proof, or replace required real historical/DEMO evidence with mocks.
 
 ## Open questions
 
 - final CI coverage/static/security thresholds;
-- real-data walk-forward development/validation window sizes and sample requirements;
-- dataset identity/versioning and evidence-manifest format;
+- real historical dataset ingestion/export test matrix;
+- evidence package persistence/directory/publication tests;
+- real-data walk-forward window/sample requirements;
 - historical PRE_CLOSE/session integration;
-- empirical spread/slippage/modify-failure stress calibration;
-- variable-spread/tick-order evidence where available;
-- final controlled DEMO certification sample/steps;
+- empirical execution-friction calibration;
+- final controlled DEMO certification steps;
 - long-duration forward-evidence requirement;
-- final historical/DEMO evidence threshold for optional confluence retention.
+- optional-confluence evidence threshold.
