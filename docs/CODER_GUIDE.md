@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** DRAFT — IMPLEMENTATION MAP CURRENT  
-**Version:** 1.4-implementation-map  
+**Version:** 1.5-implementation-map  
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Core rule
@@ -12,7 +12,7 @@ Use `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for sequencing/recovery and `6
 
 ## Current checkpoint — 2026-09-18
 
-Deterministic core implementation exists through the current **Phase-10 foundation**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
+Deterministic core implementation exists through the current **Phase-10 research foundation plus initial evidence tooling**. The normal `goldswing` launcher remains read-only MT5 readiness; final persistent orchestration/live DEMO certification are not complete.
 
 ### Phase 1 — Foundation — implemented / deterministic CI
 
@@ -68,7 +68,7 @@ decisions/snapshot.py
 
 Six families evaluate in parallel. One strong family can lead. Missing optional evidence is omitted/reweighted instead of zeroed. Poor timing normally yields WAIT rather than destroying a valid opportunity.
 
-`strategies/confluence.py` is **positive-only**: Trendline/Fib/POC can add a small capped uplift to a compatible existing family; they cannot lower base family score or become mandatory gates.
+`strategies/confluence.py` is **positive-only**: Trendline/Fib/POC can add a small capped uplift to a compatible existing family; they cannot lower base family score or become mandatory gates. `ConfluenceBonusConfig` defaults all implemented sources ON and exists so research can disable individual sources for controlled ablation without changing production semantics.
 
 ### Phase 5 — Trade Plan + Risk — implemented / deterministic CI
 
@@ -137,10 +137,12 @@ operator/__init__.py
 
 Pure-stdlib read-only presentation. Final runtime DTO builder, Discovery Health fields, compact Trendline/Fib/POC display and in-place live refresh remain integration/polish work.
 
-### Phase 10 — Replay / Learning / Discovery / Invention — implemented deterministic foundation / CI
+### Phase 10 — Replay / Research / Learning / Discovery — implemented deterministic foundation + initial evidence tooling / CI
 
 ```text
 research/replay.py
+research/ablation.py
+research/outcomes.py
 research/metrics.py
 research/learning.py
 research/episode_journal.py
@@ -149,13 +151,15 @@ research/invention.py
 research/promotion.py
 ```
 
-Research flow:
+Research flow now includes:
 
 ```text
 chronological completed-candle replay
 → production Intelligence + Decision semantics
-→ actual/counterfactual outcome metrics
-→ durable research episodes
+→ controlled confluence ablation
+→ production Trade Plan reconstruction for historical ENTER events
+→ ambiguity-safe initial stop/target path labeling
+→ research metrics / durable episodes
 → approved-primitive mapping
 → recurring cluster detection
 → candidate OR explicit suppression reason
@@ -163,11 +167,35 @@ chronological completed-candle replay
 → governed validation/promotion lifecycle
 ```
 
-Key guarantees:
+`research/ablation.py` runs identical event chronology under:
+
+```text
+BASE
+TRENDLINE
+FIBONACCI
+DIRECTIONAL_COMBINED  # Trendline + Fibonacci
+ALL                   # Trendline + Fibonacci + POC
+```
+
+Decision-level ablation reports Opportunity/ENTER/WAIT/MISSED/frequency/score/conflict deltas and does not invent P/L.
+
+`research/outcomes.py` adds a distinct post-hoc evidence layer. For analytical ENTER events it rebuilds the historical production Trade Plan at the original timestamp and then inspects later M5 bars under an explicit `BAR_HIGH_LOW` model. It labels:
+
+```text
+TARGET_FIRST
+STOP_FIRST
+BOTH_TOUCHED_AMBIGUOUS
+HORIZON_UNRESOLVED
+```
+
+Same-bar stop+target is never resolved favorably without intrabar evidence. Ambiguous/unresolved cases do not enter resolved bracket Net R. The summary exposes coverage, resolved initial-bracket Net/Avg R, Profit Factor, drawdown, MFE/MAE and 2R/3R/4R reach rates.
+
+`run_confluence_bracket_ablation()` combines the two layers to compare initial Trade Plan path evidence across the five confluence variants. These `resolved_bracket_*` metrics are **not full production P/L**: dynamic Trade Manager actions, broker fill/slippage and tick ordering are not yet replayed.
+
+Other Phase-10 guarantees:
 
 - replay is prefix-only and labelled `BAR_CLOSE`, not falsely tick-perfect;
 - actual broker P/L and counterfactual missed/blocked outcomes remain separate;
-- research tracks Net R/drawdown/Capture/Opportunity Recall, not win rate alone;
 - StrategyMemory influence is bounded/context-version isolated;
 - independent episode IDs prevent fake sample inflation;
 - candidate recipes use audited declarative primitives only;
@@ -178,7 +206,7 @@ Key guarantees:
 - locked fingerprint + one-shot holdout enforced;
 - candidates cannot self-promote or gain raw broker authority.
 
-Approved discovery primitives now explicitly include:
+Approved discovery primitives explicitly include:
 
 ```text
 TRENDLINE
@@ -186,7 +214,7 @@ FIBONACCI
 VOLUME_PROFILE_POC
 ```
 
-`episode_journal.py` maps corresponding durable evidence labels into these primitives so confluence can genuinely participate in discovery/ablation rather than being only a production-score decoration.
+`episode_journal.py` maps corresponding durable evidence labels into these primitives so confluence genuinely participates in discovery/research rather than being only a production-score decoration.
 
 ## Deterministic test ownership
 
@@ -208,6 +236,8 @@ tests/test_execution_safety.py
 tests/test_trade_manager.py
 tests/test_management_execution.py
 tests/test_dashboard.py
+tests/test_research_ablation.py
+tests/test_research_outcomes.py
 tests/test_discovery_invention.py
 tests/test_discovery_journal.py
 tests/test_promotion_governance.py
@@ -242,7 +272,7 @@ Deterministic CI is software evidence, not profitability proof or controlled DEM
 | Execution | `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md` | `execution/` |
 | Trade Manager | `20-trading-decisions/TRADE_MANAGER_AND_EXIT.md` | `management/` |
 | Dashboard | `50-operator/DASHBOARD_AND_UX.md` | `operator/dashboard.py` |
-| Replay/validation | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `metrics.py` |
+| Replay/validation | `40-research-learning/RESEARCH_AND_VALIDATION.md` | `research/replay.py`, `ablation.py`, `outcomes.py`, `metrics.py` |
 | StrategyMemory | `40-research-learning/LEARNING_AND_AI_BOUNDARIES.md` | `research/learning.py` |
 | Discovery/invention | `40-research-learning/GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md` | `episode_journal.py`, `discovery.py`, `invention.py` |
 | Promotion | `40-research-learning/GOVERNED_EXPERIMENTS_AND_PROMOTION.md` | `research/promotion.py` |
@@ -257,6 +287,7 @@ Deterministic CI is software evidence, not profitability proof or controlled DEM
 - any positive balance below `$300` is SMALL; no arbitrary `$100` gate;
 - raw broker writes live only in `execution/mt5_writer.py`;
 - critical local state never pretends ambiguous broker action succeeded;
+- research outcome labeling must not favorably resolve unknown intrabar order;
 - dashboard/research/discovery have zero raw broker authority;
 - discovery must not be silently inert when eligible evidence exists;
 - no unnecessary frameworks/factories/service-manager layers;
@@ -266,12 +297,13 @@ Deterministic CI is software evidence, not profitability proof or controlled DEM
 
 Do **not** redesign the already-implemented core unnecessarily. Main remaining work is integration/evidence:
 
-1. finish broader Phase-10 replay/stress/ablation reports, including Trendline/Fib/POC Opportunity-Recall/trade-frequency impact;
-2. integrate authoritative research/discovery/confluence state into dashboard DTO/runtime status;
-3. Phase 11: portable backup/checkpoint + fresh-machine recovery drill + production shared cross-laptop coordination proof;
-4. Phase 12: build final persistent runtime orchestrator that composes Market → Intelligence → Strategy/Decision → TradePlan → Risk/Permissions → Execution → Management → Journal/Research;
-5. controlled Windows/MT5 DEMO integration/fault/restart/failover certification;
-6. final docs/release audit sync based on actual evidence.
+1. expand Phase-10 evidence from initial bracket modeling into full chronological Trade Manager/runner replay or appropriately scoped forward evidence;
+2. add stress/walk-forward/execution-friction research around the same production semantics and broader real historical XAU datasets;
+3. integrate authoritative research/discovery/confluence state into dashboard DTO/runtime status;
+4. Phase 11: portable backup/checkpoint + fresh-machine recovery drill + production shared cross-laptop coordination proof;
+5. Phase 12: build final persistent runtime orchestrator that composes Market → Intelligence → Strategy/Decision → TradePlan → Risk/Permissions → Execution → Management → Journal/Research;
+6. controlled Windows/MT5 DEMO integration/fault/restart/failover certification;
+7. final docs/release audit sync based on actual evidence.
 
 The current `app/main.py` remains a read-only readiness launcher until the final runtime orchestrator replaces/extends it.
 
@@ -287,6 +319,7 @@ MarketSnapshot
 → Execution / Reconciliation
 → ManagedTrade / Trade Manager
 → Dashboard
-→ Replay / Metrics / Episode Journal
+→ Replay / Ablation / Outcome Labeling / Metrics
+→ Episode Journal
 → Discovery / Invention / Promotion
 ```
