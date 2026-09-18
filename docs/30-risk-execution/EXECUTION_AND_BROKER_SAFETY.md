@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Execution and Broker Safety
 
 **Status:** PROVISIONAL  
-**Version:** 0.4-design  
-**Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, ownership and reconciliation.  
+**Version:** 0.5-design  
+**Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, controller ownership and reconciliation.  
 **Depends on:** `RISK_CONTRACT.md`, `SESSION_AND_RISK_STATE_MACHINE.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
@@ -80,13 +80,11 @@ Stale/unknown quote blocks submission without automatically invalidating the und
 
 ## Dynamic spread policy — V1 frozen initial rule
 
-Spread protection must be **dynamic**, not one hard-coded dollar/point number, because Gold spread differs by broker, session and market state.
+Spread protection is dynamic rather than one broker-independent hard-coded Gold number.
 
-Maintain a `HealthySpreadBaseline` for the verified broker/symbol using recent fresh quote observations collected only from healthy/open conditions. News blackout spikes, reopen dislocation, stale quotes and known abnormal periods must not contaminate the baseline.
+Maintain a `HealthySpreadBaseline` for the verified broker/symbol using recent fresh quote observations collected only from healthy/open conditions. News spikes, reopen dislocation, stale quotes and known abnormal periods must not contaminate the baseline.
 
 A persisted recent healthy baseline may bootstrap restart/reopen; otherwise the system remains in warmup until enough valid observations exist. Exact sampling window/count is an implementation detail, but baseline quality must be testable and visible.
-
-Define:
 
 ```text
 SpreadRatio = CurrentExecutableSpread / HealthySpreadBaseline
@@ -115,64 +113,35 @@ Current spread > 25% of approved entry-to-structural-SL price distance
 → BLOCK current entry
 ```
 
-This prevents an unusually tight setup from paying excessive friction even when a rolling baseline is itself elevated.
-
-An ELEVATED spread may still execute only if:
-
-- all-in monetary risk remains within the active Risk Contract band/ceiling;
-- structural SL remains valid;
-- target room/RR remains acceptable under the Trade Plan;
-- quote freshness and other execution checks pass.
+An ELEVATED spread may still execute only if all-in monetary risk, structural SL, target room/RR, quote freshness and all other execution checks pass.
 
 If spread blocks the current entry, the opportunity may remain `ARMED/WAIT` rather than being invalidated.
 
-Reason codes:
-
-```text
-SPREAD_ELEVATED
-SPREAD_TOO_HIGH
-SPREAD_CONTEXT_UNKNOWN
-```
-
-A quoted spread such as `$0.26` is treated as price distance and converted through broker symbol facts where monetary effect is required.
+Reason codes include `SPREAD_ELEVATED`, `SPREAD_TOO_HIGH` and `SPREAD_CONTEXT_UNKNOWN`.
 
 ## Price drift and fresh-plan revalidation — V1 frozen initial rule
 
-Price drift is measured from the `ApprovedEntryReference` to the fresh executable quote on the correct side immediately before send.
+Price drift is measured from the `ApprovedEntryReference` to the fresh executable quote on the correct side immediately before send, normalized by the approved original entry-to-structural-SL price distance.
 
-Use the approved original entry-to-structural-SL **price distance** as the normalization base.
-
-For **adverse drift**:
+For adverse drift:
 
 ```text
 <= 10% of planned stop distance
 → NORMAL REVALIDATION
-→ may execute if all checks still pass
 
 >10% to <=20%
 → PRICE_DRIFT_ELEVATED
 → full Trade Plan + Risk + target-room + chase revalidation
-→ may still execute if the plan remains genuinely valid
 
 >20%
 → BLOCK current Execution Intent
 → PRICE_DRIFT
-→ return opportunity to WAIT/rebuild from current market if thesis survives
+→ return opportunity to WAIT/rebuild if thesis survives
 ```
 
-This avoids both tiny-tick overblocking and uncontrolled chasing.
+A favorable price move is not automatically rejected, but structural geometry, risk and target room are recalculated from the fresh executable quote before send.
 
-A favorable price move is not automatically rejected, but the system must recalculate structural geometry, risk and target room from the fresh executable quote before send.
-
-Regardless of percentage band, block the current plan if fresh drift causes any of the following:
-
-- actual all-in risk exceeds the profile hard ceiling;
-- broker stop geometry becomes invalid;
-- target room/RR becomes unacceptable under Trade Plan authority;
-- Entry Timing classifies the fresh quote as chased/severely extended;
-- structural thesis/invalidation changes materially.
-
-Execution does not silently move the structural SL to compensate for drift.
+Regardless of ratio, block if fresh drift breaks risk ceiling, broker stop geometry, target-room/RR, chase/extension validity or the structural thesis. Execution never moves the structural SL merely to compensate for drift.
 
 ## Stop/TP geometry
 
@@ -198,7 +167,8 @@ Before irreversible submit, durable state contains at least:
 - account identity;
 - risk snapshot;
 - timestamp;
-- lifecycle state such as `SUBMITTING`.
+- lifecycle state such as `SUBMITTING`;
+- current controller lease identity/fencing epoch.
 
 ## Order lifecycle
 
@@ -267,7 +237,7 @@ External Gold exposure is displayed, never managed as bot-owned, and new bot Gol
 
 SL/TP modification and close requests are irreversible broker writes and require ownership verification, broker-valid geometry/volume, appropriate fresh facts, no blind retry after ambiguous result and reconciliation before another write when outcome is uncertain.
 
-They pass through the same centralized permission boundary.
+They pass through the same centralized permission boundary and controller-lease verification as entry requests.
 
 ## Filling mode
 
@@ -298,13 +268,115 @@ BLOCKED
 
 `RECONCILING` blocks new entries while uncertain broker writes are resolved.
 
-## Single active execution controller
+## Single active execution controller — V1 frozen policy
 
-Only one bot instance may hold active broker-write authority for one managed account/symbol. Observer/Research/Shadow instances may not submit/modify/close positions.
+V1 uses a **shared controller lease with fencing** so two laptops/processes cannot both believe they are PRIMARY for the same managed account/symbol.
 
-Failover requires broker/state reconciliation before replacement becomes READY.
+Every runtime has a unique `ControllerInstanceID`. A shared coordination store maintains at least:
+
+```text
+Managed Account Identity
+Managed Gold Symbol Scope
+Lease Holder Instance ID
+Monotonic Lease/Fencing Epoch
+Lease Expiry
+Last Successful Renewal
+```
+
+### Coordination-store requirements
+
+The store/backend must support:
+
+- atomic acquire/compare-and-set or equivalent transactional ownership;
+- one winner when multiple instances contend;
+- monotonic fencing epoch/generation;
+- authoritative/server-side time or equivalent clock semantics not dependent on two laptop clocks agreeing;
+- durable enough state to survive one process/laptop failure.
+
+The exact backend product/library is an implementation choice, but a plain local-only file lock is **not sufficient** for cross-laptop protection.
+
+### Initial lease timing
+
+Initial V1 timing:
+
+```text
+Heartbeat / renewal target   every 10 seconds
+Lease TTL                    30 seconds
+```
+
+These timings are operational safety defaults, not market-strategy parameters. Future change requires the same split-brain/failover tests.
+
+### Fresh ownership required for every broker write
+
+Every irreversible create/modify/close request must verify immediately before submission that:
+
+- this instance is the recorded holder;
+- the lease has not expired;
+- its fencing epoch matches the current coordination-store epoch;
+- coordination truth is currently reachable/verified.
+
+If controller ownership is unknown or the coordination store cannot confirm the current lease, broker writes fail closed with `CONTROLLER_OWNERSHIP_UNKNOWN` / `CONTROLLER_COORDINATION_UNAVAILABLE`.
+
+Analysis, dashboard and research may continue read-only.
+
+This means an old process with a stale cached lease cannot keep writing after another instance has taken over.
+
+### Second laptop behaviour
+
+If another valid lease holder exists, a second laptop starts/remains `OBSERVER` for broker writes. It may analyze, research and display state but must not submit/modify/close.
 
 Reason code: `ANOTHER_ACTIVE_CONTROLLER`.
+
+### Planned handoff
+
+Preferred controlled migration:
+
+```text
+OLD PRIMARY
+stop new intents
+→ reconcile in-flight writes
+→ persist/flush state
+→ release controller lease
+
+NEW MACHINE
+load/validate state
+→ acquire new lease/epoch atomically
+→ broker reconciliation
+→ account/symbol/risk/session revalidation
+→ PRIMARY READY
+```
+
+The new machine does not become READY merely because the old machine released the lease.
+
+### Crash / automatic standby failover
+
+An explicitly configured `STANDBY` instance may attempt automatic takeover only after the prior lease has actually expired in coordination-store truth.
+
+Takeover sequence:
+
+```text
+observe expired/no valid lease
+→ atomically acquire lease with a NEW fencing epoch
+→ enter RECOVERING/RECONCILING
+→ load/validate durable state
+→ reconcile broker positions/orders/deals and ambiguous intents
+→ verify account/symbol/risk/session/execution state
+→ only then PRIMARY READY
+```
+
+Lease ownership alone is not enough to trade.
+
+If multiple standby instances contend, atomic acquisition permits only one winner; the others remain OBSERVER.
+
+### Old primary returning after failover
+
+If a crashed/disconnected old primary returns after a new epoch has been granted, its stale epoch is invalid. It must enter OBSERVER/BLOCKED-for-writes and reconcile; it cannot reclaim execution authority by local assumption.
+
+### Coordination failure while PRIMARY
+
+If the active primary cannot freshly verify/renew its controller lease, it must stop issuing new broker writes rather than assume ownership indefinitely. Existing broker-side protective SL/TP remains the safety backstop while controller truth is restored.
+
+No manual button may bypass a still-valid foreign lease or stale-epoch mismatch in V1.
 
 ## Broker truth
 
@@ -329,7 +401,10 @@ Expose at least:
 - primary/secondary blockers;
 - centralized permission trace;
 - reconciliation status;
-- controller/observer role.
+- controller role (`PRIMARY`, `STANDBY`, `OBSERVER`, `RECOVERING`);
+- ControllerInstanceID;
+- current lease/fencing epoch;
+- lease freshness/expiry/renewal health.
 
 ## Tests required
 
@@ -358,7 +433,14 @@ Expose at least:
 - opposite opportunity cannot create automatic hedge;
 - manual/foreign position never modified and blocks new bot Gold entry;
 - unknown ownership fails closed;
-- multi-instance controller/failover tests.
+- two simultaneous controller-acquire attempts produce exactly one PRIMARY;
+- second laptop with active foreign lease remains OBSERVER;
+- stale fencing epoch cannot broker-write;
+- coordination-store outage blocks irreversible writes;
+- lease expiry alone does not permit trading before broker/state reconciliation;
+- standby takeover obtains a new epoch and reconciles before READY;
+- old primary returning after failover cannot write with stale epoch;
+- planned handoff old-primary release → new-primary acquire/reconcile works without duplicate exposure.
 
 ## Explicit non-goals
 
@@ -373,12 +455,16 @@ Execution must not:
 - assume unknown broker exposure is zero;
 - open a second independent Gold position/automatic hedge in V1;
 - modify manual/foreign positions as bot-owned;
-- let multiple laptops independently write same managed account/symbol;
-- permit alternate broker-write paths around centralized gate.
+- let multiple laptops independently write the same managed account/symbol;
+- treat a local-only lock as sufficient cross-laptop ownership;
+- continue broker writes on an unverified/stale controller lease;
+- permit alternate broker-write paths around the centralized gate.
 
 ## Open questions
 
 - exact DEMO-to-real future release policy;
 - exact healthy-spread sampling window/minimum-sample implementation;
-- exact execution-lease implementation and timeout/failover mechanics;
-- future research-backed changes to initial spread/drift bands.
+- final shared coordination-store backend/library satisfying the frozen atomic lease + fencing contract;
+- exact broker comment/magic/lineage conventions;
+- exact retry policy for safe read-only/pre-submit operations;
+- future research-backed changes to initial spread/drift bands or lease timing.
