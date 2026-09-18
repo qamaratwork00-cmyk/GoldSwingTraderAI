@@ -82,7 +82,7 @@ def test_renew_preserves_epoch_and_moves_expiry_forward(tmp_path) -> None:
     store.integrity_check()
 
 
-def test_controller_manager_uses_same_sqlite_store_contract(tmp_path) -> None:
+def test_controller_takeover_holds_new_epoch_but_blocks_until_reconciled(tmp_path) -> None:
     clock = [NOW]
     database = tmp_path / "coordination.db"
     first = ControllerLeaseManager(
@@ -96,15 +96,60 @@ def test_controller_manager_uses_same_sqlite_store_contract(tmp_path) -> None:
         new_controller_id(),
     )
 
-    assert first.acquire().decision is HardDecision.PASS
-    blocked = second.acquire()
-    assert blocked.decision is HardDecision.BLOCK
-    assert blocked.reason == "ANOTHER_ACTIVE_CONTROLLER"
+    first_status = first.acquire()
+    assert first_status.decision is HardDecision.PASS
+    assert first_status.lease is not None
+    assert second.acquire().reason == "ANOTHER_ACTIVE_CONTROLLER"
 
     clock[0] += timedelta(seconds=31)
     takeover = second.acquire()
-    assert takeover.decision is HardDecision.PASS
+    assert takeover.decision is HardDecision.BLOCK
+    assert takeover.reason == "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED"
+    assert takeover.lease is not None
+    assert takeover.lease.epoch > first_status.lease.epoch
+    assert second.takeover_reconciliation_required
+    assert (
+        second.verify_write_authority(clock[0]).reason
+        == "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED"
+    )
     assert first.verify_write_authority(clock[0]).reason == "ANOTHER_ACTIVE_CONTROLLER"
+
+    reconciled = second.complete_takeover_reconciliation(clock[0])
+    assert reconciled.decision is HardDecision.PASS
+    assert reconciled.reason == "CONTROLLER_PRIMARY"
+    assert not second.takeover_reconciliation_required
+    assert second.verify_write_authority(clock[0]).decision is HardDecision.PASS
+
+
+def test_takeover_reconciliation_cannot_complete_after_authority_is_lost(tmp_path) -> None:
+    clock = [NOW]
+    database = tmp_path / "coordination.db"
+    first = ControllerLeaseManager(
+        SQLiteCoordinationStore(database, lambda: clock[0]),
+        SCOPE,
+        new_controller_id(),
+    )
+    second = ControllerLeaseManager(
+        SQLiteCoordinationStore(database, lambda: clock[0]),
+        SCOPE,
+        new_controller_id(),
+    )
+    third = ControllerLeaseManager(
+        SQLiteCoordinationStore(database, lambda: clock[0]),
+        SCOPE,
+        new_controller_id(),
+    )
+
+    assert first.acquire().decision is HardDecision.PASS
+    clock[0] += timedelta(seconds=31)
+    assert second.acquire().reason == "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED"
+
+    clock[0] += timedelta(seconds=31)
+    assert third.acquire().reason == "CONTROLLER_TAKEOVER_RECONCILIATION_REQUIRED"
+    lost = second.complete_takeover_reconciliation(clock[0])
+    assert lost.decision is HardDecision.BLOCK
+    assert lost.reason == "ANOTHER_ACTIVE_CONTROLLER"
+    assert second.takeover_reconciliation_required
 
 
 def test_cross_machine_certification_is_explicit_and_false_by_default(tmp_path) -> None:
