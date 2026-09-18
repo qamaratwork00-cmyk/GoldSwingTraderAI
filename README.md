@@ -16,7 +16,7 @@ The architecture follows a trading-floor model: multiple specialist desks analys
 - [`docs/00-foundation/TRADING_FLOOR_ARCHITECTURE.md`](docs/00-foundation/TRADING_FLOOR_ARCHITECTURE.md) — specialist-desk ownership model.
 - [`docs/60-engineering/CODER_GUIDE.md`](docs/60-engineering/CODER_GUIDE.md) — feature-oriented developer map, including the centralized broker-write permission feature.
 - [`docs/60-engineering/MODULE_STRUCTURE.md`](docs/60-engineering/MODULE_STRUCTURE.md) — planned module/dependency ownership map.
-- [`FINAL_BUILD_PROMPT.md`](FINAL_BUILD_PROMPT.md) — root-level implementation handoff; currently DRAFT, not yet an implementation authorization.
+- [`docs/FINAL_BUILD_PROMPT.md`](docs/FINAL_BUILD_PROMPT.md) — docs-root implementation handoff; currently DRAFT, not yet an implementation authorization.
 
 ## Core design direction
 
