@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 1.1-design
+**Version:** 1.2-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -26,8 +26,7 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-004 — Opportunity and entry timing are separate
 
 **Decision:** A valid setup may stay `ARMED` while entry timing is poor.  
-**Status:** PROVISIONAL  
-**Reason:** Avoid deleting good opportunities merely because the current M5 candle is late/extended.
+**Status:** PROVISIONAL
 
 ## DEC-005 — Safety is not weighted scoring
 
@@ -106,7 +105,7 @@ This ledger records accepted/provisional architectural decisions so future imple
 
 ## DEC-020 — Structural breaks use graduated states
 
-**Decision:** Wick/probe, qualified completed-candle break, confirmed BOS, MSS candidate, confirmed MSS and failed break are distinct evidence states rather than one binary `break=true` flag.  
+**Decision:** Wick/probe, qualified completed-candle break, confirmed BOS, MSS candidate, confirmed MSS and failed break are distinct evidence states rather than one binary flag.  
 **Status:** PROVISIONAL
 
 ## DEC-021 — MSS means transition before new trend
@@ -116,163 +115,171 @@ This ledger records accepted/provisional architectural decisions so future imple
 
 ## DEC-022 — Timeframes retain independent structure state
 
-**Decision:** H4, H1, M15 and M5 structure states are maintained independently. Lower-timeframe structural change may influence scores/timing but cannot silently overwrite higher-timeframe structure.  
+**Decision:** H4, H1, M15 and M5 structure states are maintained independently. Lower-timeframe change cannot silently overwrite higher-timeframe structure.  
 **Status:** PROVISIONAL
 
 ## DEC-023 — Technical structure owns adaptive zones and location
 
-**Decision:** Support/resistance is modeled as adaptive zones with quality/lifecycle. A separate Location/Target-Room view evaluates where current price stands; location is important evidence but not a universal hard gate.  
+**Decision:** Support/resistance is modeled as adaptive zones with quality/lifecycle. A separate Location/Target-Room view evaluates current price; location is important evidence but not a universal hard gate.  
 **Status:** PROVISIONAL
 
 ## DEC-024 — Liquidity/SMC is contextual evidence, not mandatory confluence
 
-**Decision:** Liquidity pools, sweeps, FVG, qualified OB and premium/discount are context-aware evidence. A sweep requires meaningful liquidity plus post-interaction failure/reclaim; FVG/OB are not mandatory for every trade.  
+**Decision:** Liquidity pools, sweeps, FVG, qualified OB and premium/discount are context-aware evidence and not mandatory for every trade.  
 **Status:** PROVISIONAL
 
 ## DEC-025 — Indicators describe and normalize; price structure leads
 
-**Decision:** EMA20/EMA50, RSI and ATR are initial quantitative tools. They support momentum/volatility/extension analysis but do not independently create or veto trades.  
+**Decision:** EMA20/EMA50, RSI and ATR are initial quantitative tools. They support analysis but do not independently create or veto trades.  
 **Status:** PROVISIONAL
 
 ## DEC-026 — Fundamental opinion and event safety are separate
 
-**Decision:** Macro/fundamental context is soft evidence. Scheduled-event safety may become hard permission through the risk/session state machine. Missing optional macro opinion does not equal missing required event safety.  
+**Decision:** Macro/fundamental context is soft evidence. Scheduled-event safety may become hard permission through risk/session state. Missing optional macro opinion does not equal missing required event safety.  
 **Status:** PROVISIONAL
 
 ## DEC-027 — Structural Trade Plan before risk sizing
 
-**Decision:** Entry reference, structural invalidation, volatility-aware stop buffer and market objectives are defined before monetary sizing. Risk must reject an unaffordable plan rather than distort its structural stop.  
+**Decision:** Entry reference, structural invalidation, volatility-aware stop buffer and objectives are defined before monetary sizing. Risk rejects an unaffordable plan rather than distorting the structural stop.  
 **Status:** PROVISIONAL
 
 ## DEC-028 — Original R is immutable
 
-**Decision:** Original approved risk distance/R remains immutable for analytics and lifecycle attribution even after SL/TP management changes.  
+**Decision:** Original approved risk distance/R remains immutable for analytics and lifecycle attribution even after SL/TP changes.  
 **Status:** PROVISIONAL
 
 ## DEC-029 — UTC calendar risk day
 
-**Decision:** The provisional daily-risk accounting boundary is `00:00 UTC`, independent of XAU reopen/holiday labels.  
-**Status:** PROVISIONAL  
-**Reason:** Deterministic accounting and replayability.
+**Decision:** Daily-risk accounting boundary is `00:00 UTC`, independent of XAU reopen/holiday labels.  
+**Status:** PROVISIONAL
 
 ## DEC-030 — Centralized final broker-write permission gate
 
-**Decision:** All irreversible MT5 create/modify/close actions must pass one centralized Execution Permission Gate/Broker Write Guard that consumes authoritative risk/news/account/data/order/controller results and returns ALLOW/BLOCK/UNKNOWN with reasons.  
-**Status:** PROVISIONAL  
-**Reason:** Make broker authority easy to audit, test, demonstrate and extend without scattered bypasses.
+**Decision:** All irreversible MT5 create/modify/close actions must pass one centralized Execution Permission Gate/Broker Write Guard.  
+**Status:** PROVISIONAL
 
 ## DEC-031 — DEMO-first is a release safeguard, not a permanent LIVE prohibition
 
-**Decision:** Initial implementation/release authorizes broker writes only on the approved DEMO environment. Future REAL execution requires an explicit frozen release/config policy but uses the same strategy, risk, centralized permission gate, one-shot broker path and reconciliation rather than a separate trading engine.  
+**Decision:** Initial release authorizes broker writes only on approved DEMO. Future REAL uses the same strategy/risk/gate/execution path after explicit frozen release approval.  
 **Status:** PROVISIONAL
 
 ## DEC-032 — One-shot irreversible submission with reconciliation
 
-**Decision:** One Execution Intent permits at most one irreversible submit until reconciliation proves the prior attempt did not create broker exposure and a fresh explicit intent is authorized. Ambiguous acknowledgement enters reconciliation; blind retry is prohibited.  
+**Decision:** One Execution Intent permits at most one irreversible submit until reconciliation proves otherwise. Blind retry is prohibited.  
 **Status:** PROVISIONAL
 
 ## DEC-033 — System health is separate from normal trading decisions
 
-**Decision:** `Why no trade?`/decision attribution belongs to decision/risk/execution authorities. Cross-subsystem System Health reports faults, severity, impact and recovery. Normal WAIT/NEWS_BLACKOUT/LOSS_LOCKED are not automatically system errors.  
+**Decision:** Decision attribution and technical System Health are separate. Normal WAIT/NEWS_BLACKOUT/LOSS_LOCKED are not automatically system errors.  
 **Status:** PROVISIONAL
 
 ## DEC-034 — Persistent strategy/learning state is portable
 
-**Decision:** Strategy Registry, strategy genealogy, Champion/Challenger state, entry/exit learning, research/promotion history and critical lifecycle context must survive restart and laptop migration.  
+**Decision:** Strategy Registry, genealogy, Champion/Challenger state, entry/exit learning, research/promotion history and critical lifecycle context survive restart/laptop migration.  
 **Status:** PROVISIONAL
 
 ## DEC-035 — Public repository may back up project intelligence; financial-authority secrets do not belong there
 
-**Decision:** While the repository is public, code, docs, strategy definitions, learned parameters, autonomous candidates, research/promotion history and appropriate state backups may be versioned there for disaster recovery. Credentials/keys/tokens that can enable unauthorized financial action or direct paid-service cost must never be committed.  
+**Decision:** Code/docs/strategy/learning/research state may be versioned for recovery; credentials/keys/tokens with financial or paid-service authority must never be committed.  
 **Status:** PROVISIONAL
 
 ## DEC-036 — Single active execution controller
 
-**Decision:** For one managed account/symbol, only one runtime instance may hold broker-write authority. Other machines may observe/research/shadow. Failover must reconcile broker and local state before takeover.  
+**Decision:** Only one runtime instance may hold broker-write authority for one managed account/symbol.  
 **Status:** PROVISIONAL
 
 ## DEC-037 — Learning includes entry quality and exit/capture quality
 
-**Decision:** Learning evaluates TAKEN/MISSED/BLOCKED/INVALIDATED opportunities and explicitly measures entry efficiency, MFE/MAE, capture efficiency and premature-exit cost. Learning proposes challengers; it does not silently mutate current production.  
+**Decision:** Learning measures taken/missed/blocked/invalidated opportunities, MFE/MAE, capture efficiency and premature-exit cost, and proposes challengers rather than silently mutating production.  
 **Status:** PROVISIONAL
 
 ## DEC-038 — Strategy discovery/invention is governed and declarative
 
-**Decision:** Autonomous candidates are built from approved market primitives/recipes, retain genealogy and rejected-candidate memory, and cannot create arbitrary executable Python, change risk or call the broker directly.  
+**Decision:** Autonomous candidates use approved declarative primitives/recipes, retain genealogy/rejected memory, and cannot create arbitrary executable Python, change risk or call broker directly.  
 **Status:** PROVISIONAL
 
 ## DEC-039 — Promotion uses evidence stages and one-shot final holdout
 
-**Decision:** Candidate promotion proceeds through research/independent validation/locked candidate/final untouched holdout/stress/Shadow/DEMO Canary before production approval as applicable. The final holdout is consumed once for a locked candidate.  
+**Decision:** Candidate promotion proceeds through research, validation, locked candidate, final untouched holdout, stress, Shadow and DEMO Canary before production approval as applicable.  
 **Status:** PROVISIONAL
 
 ## DEC-040 — Compact dashboard with restrained emojis and explicit reasons
 
-**Decision:** Main terminal UX remains compact, uses meaningful emojis as status markers (not decoration), separates Market/Decision/Risk/Execution/System/Learning state, and shows stable reason codes plus human explanation for WAIT/BLOCKED/MISSED/INVALID/EXIT.  
+**Decision:** Main terminal UX remains compact, uses meaningful status emojis, separates major state panels, and shows stable reason codes plus concise explanation.  
 **Status:** PROVISIONAL
 
 ## DEC-041 — Research documentation is consolidated by authority
 
-**Decision:** There is no separate authoritative `OFFLINE_RESEARCH.md`. Chronological/offline methodology belongs to `RESEARCH_AND_VALIDATION.md`; discovery, invention and promotion each have their own documents.  
+**Decision:** No separate authoritative `OFFLINE_RESEARCH.md`; methodology/discovery/invention/promotion remain in their respective authorities.  
 **Status:** PROVISIONAL
 
 ## DEC-042 — Account-size Gold risk profiles use hybrid sizing
 
-**Decision:** Initial V1 profile boundaries are `SMALL $100–$299`, `MEDIUM $300–$999`, and `NORMAL $1,000+`. SMALL normally treats broker minimum `0.01` as the practical base unit and validates its real all-in risk; MEDIUM uses stepped dynamic lots; NORMAL uses fully dynamic percentage sizing. A theoretical raw lot below broker minimum is not by itself a trade blocker.  
+**Decision:** `SMALL $100–$299`, `MEDIUM $300–$999`, `NORMAL $1,000+`. SMALL normally uses practical `0.01` base/min-lot evaluation; MEDIUM stepped dynamic; NORMAL fully dynamic percentage sizing.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-043 — Execution friction is part of effective monetary risk exactly once
 
-**Decision:** Effective trade risk must account for executable entry/SL geometry plus spread, expected slippage reserve and commissions/fees according to broker semantics, without double-counting any cost already embedded in the executable quote/fill. A displayed Gold spread such as `$0.26` is converted through broker symbol/contract facts rather than assumed to equal the same account-currency cost.  
+**Decision:** Effective trade risk accounts for executable geometry plus spread/slippage/fees according to broker semantics without double-counting.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-044 — Minimum-lot excess may preserve the opportunity while current entry is blocked
 
-**Decision:** If broker minimum volume exceeds the profile hard risk ceiling at the current entry, the current plan is blocked, but the underlying opportunity may remain `ARMED` when the thesis is still valid and a naturally better structural entry could reduce risk. Structural SL is never artificially tightened to make the minimum lot fit.  
+**Decision:** If minimum volume exceeds hard risk ceiling, current plan is blocked but opportunity may remain ARMED for a naturally better structural entry.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-045 — Preserve useful GoldScalperAI dashboard observability
 
-**Decision:** GoldSwingTraderAI may reorganize and improve the dashboard, but it must preserve useful operator-facing facts from the prior GoldScalperAI dashboard where the data remains meaningful: mode/runtime identity, Bid/Ask, spread, M5 candle timer, concise trend/structure, EMA20/EMA50, RSI, ATR, action/signal and reason, risk/lot, daily P/L/loss-limit visibility, position count/capacity, loss streak, and open-trade entry/SL/TP/objective context. New decision, execution, learning, backup and health panels are additive rather than a reason to remove this useful visibility.  
+**Decision:** Preserve useful prior dashboard facts including mode, Bid/Ask, spread, M5 timer, trend, EMA20/50, RSI, ATR, signal/reason, risk/lot, daily P/L/loss limit, position count, loss streak and open-trade context.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-046 — Profile hard entry ceilings and daily loss locks
 
-**Decision:** Initial V1 hard new-entry ceilings are `SMALL 7%`, `MEDIUM 5%`, `NORMAL 4%`. Initial UTC-risk-day loss locks are `SMALL 12%`, `MEDIUM 9%`, `NORMAL 7%`. These are hard limits, not normal Target Risk values.  
+**Decision:** New-entry ceilings: `SMALL 7%`, `MEDIUM 5%`, `NORMAL 4%`. Daily locks: `SMALL 12%`, `MEDIUM 9%`, `NORMAL 7%`.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-047 — Initial normal and elevated Gold risk bands
 
-**Decision:** Initial DEMO/research risk bands are: `SMALL normal 3.0%–4.5%, elevated >4.5%–6.5%`; `MEDIUM normal 2.0%–3.0%, elevated >3.0%–4.5%`; `NORMAL normal 1.0%–2.0%, elevated >2.0%–3.5%`. Elevated risk is a bounded tolerance for valid Gold/minimum-lot/structural geometry, not the preferred target and never permission to exceed DEC-046 hard ceilings.  
+**Decision:** `SMALL 3.0–4.5%, >4.5–6.5%`; `MEDIUM 2.0–3.0%, >3.0–4.5%`; `NORMAL 1.0–2.0%, >2.0–3.5%`.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-048 — V1 allows one independently risk-bearing Gold position
 
-**Decision:** V1 position capacity is `0/1`: at most one independently risk-bearing Gold position may be open on the managed account/symbol. An opposite opportunity is first treated as Trade Manager reversal/exit evidence and cannot automatically create a hedge/second position. After the existing position closes and reconciliation completes, a fresh opposite opportunity may qualify normally.  
+**Decision:** Capacity is `0/1`; opposite opportunity first informs Trade Manager rather than opening automatic hedge/second position.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-049 — Unexpected manual/foreign Gold exposure blocks new bot entry
 
-**Decision:** Manual, foreign-EA or unknown-owner Gold positions are never modified as bot-owned. While such Gold exposure exists, V1 blocks new bot Gold entries, continues analysis/research, displays the ownership state, and requires reconciliation after external exposure disappears before becoming entry-ready.  
+**Decision:** External Gold positions are never managed as bot-owned and block new bot Gold entries until reconciled clear.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-050 — Bot-managed Gold positions flatten before scheduled market closure
 
-**Decision:** V1 does not intentionally carry a bot-managed Gold position through the scheduled daily XAU market break or weekend closure. `PRE_CLOSE` blocks new entries and requires any existing bot-managed position to be flattened through the governed execution path while the broker remains tradeable. Runner logic cannot override this session-safety exit. If flatten execution becomes ambiguous/unavailable, exposure remains recorded and must be reconciled rather than silently marked closed.  
+**Decision:** V1 does not intentionally carry bot-managed Gold through daily XAU break/weekend closure. PRE_CLOSE blocks new entries and requires governed flatten.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-051 — Initial scheduled-news blackout policy is short and tiered
 
-**Decision:** V1 uses three news tiers. TIER 1 critical Gold/USD events block new entries from `15 minutes before` through `15 minutes after`; known linked critical-event clusters remain blocked through 15 minutes after the final scheduled critical item. TIER 2 high-impact USD events block new entries from `5 minutes before` through `5 minutes after`. TIER 3 contextual events do not create an automatic hard blackout. Scheduled news does not automatically close an already-open managed position.  
-**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Protect execution around genuine event shocks without blacking out large portions of the trading day.
+**Decision:** TIER 1 blocks `-15/+15 min`, linked critical clusters through final item +15; TIER 2 blocks `-5/+5 min`; TIER 3 has no automatic hard blackout. Scheduled news does not automatically close an open managed trade.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-052 — Post-news warmup is evidence-driven, not a long fixed delay
 
-**Decision:** After the minimum event blackout expires, new entries remain paused only while quotes/spread/data/volatility remain dislocated. If conditions are normal, permission may return promptly. Severe event dislocation requires at least one clean completed M5 candle plus normalized execution conditions before new entries resume. Missing required event-calendar truth across accepted sources produces `NEWS_SAFETY_UNKNOWN`, never a silent `NEWS_CLEAR`.  
+**Decision:** After minimum blackout, entry remains paused only while spread/quotes/data/volatility are dislocated. Severe dislocation requires one clean completed M5 candle plus normalized execution conditions. Missing required calendar truth becomes `NEWS_SAFETY_UNKNOWN`.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+
+## DEC-053 — Manual daily-loss reset is disabled by default and limited to one per UTC day
+
+**Decision:** Manual loss reset remains available as a governed feature but is OFF by default. If explicitly enabled, at most one `R,R` double-confirm reset may occur per UTC risk day, only from `LOSS_LOCKED`. It preserves cumulative broker/day P/L and audit history and cannot clear unrelated hard blockers.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Avoid both immediate post-shock chasing and unnecessary timer-only over-restriction.
+**Reason:** Retain operator recovery authority without turning the daily lock into an unlimited bypass.
+
+## DEC-054 — Cooldown targets churn, not every loss
+
+**Decision:** One ordinary losing trade does not trigger global cooldown. V1 permits at most one genuinely fresh re-entry in the same Market Episode; if that re-entry also loses, the episode is locked. Three consecutive closed bot-trade losses trigger a minimum 30-minute global cooldown, and release also requires fresh completed M15 context plus a fresh valid opportunity/episode. Execution/shock cooldown remains condition-based until the responsible market/execution fault normalizes.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
+**Reason:** Avoid both revenge/re-entry loops and over-restricting normal Gold trading after one loss.
 
 ## Change rule
 
-A decision may be superseded only by an explicit later decision entry that identifies the previous decision and explains the change. Historical decisions should not be silently rewritten to hide design evolution.
+A decision may be superseded only by an explicit later decision entry identifying the previous decision and explaining the change. Historical decisions should not be silently rewritten to hide design evolution.
