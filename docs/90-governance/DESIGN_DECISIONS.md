@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.9-design
+**Version:** 1.0-design
 
 This ledger records accepted/provisional architectural decisions so future implementation does not silently reinterpret past discussion.
 
@@ -245,20 +245,23 @@ This ledger records accepted/provisional architectural decisions so future imple
 ## DEC-047 — Initial normal and elevated Gold risk bands
 
 **Decision:** Initial DEMO/research risk bands are: `SMALL normal 3.0%–4.5%, elevated >4.5%–6.5%`; `MEDIUM normal 2.0%–3.0%, elevated >3.0%–4.5%`; `NORMAL normal 1.0%–2.0%, elevated >2.0%–3.5%`. Elevated risk is a bounded tolerance for valid Gold/minimum-lot/structural geometry, not the preferred target and never permission to exceed DEC-046 hard ceilings.  
-**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Keep Gold tradable across account sizes without reverting to exact-percentage-or-no-trade sizing while preserving explicit hard limits.
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-048 — V1 allows one independently risk-bearing Gold position
 
 **Decision:** V1 position capacity is `0/1`: at most one independently risk-bearing Gold position may be open on the managed account/symbol. An opposite opportunity is first treated as Trade Manager reversal/exit evidence and cannot automatically create a hedge/second position. After the existing position closes and reconciliation completes, a fresh opposite opportunity may qualify normally.  
-**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Keep account exposure, recovery, opposite-signal handling and small-account risk deterministic without imposing a daily trade quota.
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
 
 ## DEC-049 — Unexpected manual/foreign Gold exposure blocks new bot entry
 
 **Decision:** Manual, foreign-EA or unknown-owner Gold positions are never modified as bot-owned. While such Gold exposure exists, V1 blocks new bot Gold entries, continues analysis/research, displays the ownership state, and requires reconciliation after external exposure disappears before becoming entry-ready.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+
+## DEC-050 — Bot-managed Gold positions flatten before scheduled market closure
+
+**Decision:** V1 does not intentionally carry a bot-managed Gold position through the scheduled daily XAU market break or weekend closure. `PRE_CLOSE` blocks new entries and requires any existing bot-managed position to be flattened through the governed execution path while the broker remains tradeable. Runner logic cannot override this session-safety exit. If flatten execution becomes ambiguous/unavailable, exposure remains recorded and must be reconciled rather than silently marked closed.  
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Reason:** Prevent accidental stacking/hedging against exposure the bot does not own.
+**Reason:** Reopen price is uncertain and a gap can jump beyond the intended stop, creating risk that normal intraday SL geometry cannot control.
 
 ## Change rule
 
