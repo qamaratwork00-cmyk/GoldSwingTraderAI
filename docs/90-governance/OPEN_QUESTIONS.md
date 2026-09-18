@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Open Questions
 
 **Status:** LIVING LEDGER  
-**Version:** 0.4-design
+**Version:** 0.5-design
 
 These items are intentionally unresolved. Most are calibration/implementation choices rather than missing major subsystems. Implementation must not silently choose an answer before the relevant contract/config is frozen.
 
@@ -42,9 +42,23 @@ These items are intentionally unresolved. Most are calibration/implementation ch
 
 ## Risk
 
-- Final per-trade Target Risk percentage.
-- New-entry hard risk ceiling and emergency safety ceiling.
-- Aggregate open-risk ceiling.
+**Resolved profile boundaries:**
+
+```text
+SMALL   $100–$299
+MEDIUM  $300–$999
+NORMAL  $1,000+
+```
+
+**Resolved sizing direction:** SMALL uses practical base/minimum-lot hybrid sizing with all-in risk validation; MEDIUM uses stepped dynamic lots; NORMAL uses fully dynamic percentage sizing. `raw lot < broker minimum` is not an automatic trade blocker.
+
+Remaining risk questions:
+
+- Exact Target Risk percentage/range per SMALL, MEDIUM and NORMAL profile.
+- Exact Acceptable Gold Risk Band and New-Entry Hard Ceiling per profile.
+- Emergency safety ceiling and aggregate open-risk ceiling.
+- Policy for accounts below `$100`.
+- Exact slippage-reserve model and commission treatment by broker/account type.
 - Exact daily-loss percentage/tiering and realized/floating P/L accounting formula.
 - Bounded manual-reset count and confirmation timing per UTC risk day.
 - Exact cooldown trigger/release rules.
