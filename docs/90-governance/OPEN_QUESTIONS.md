@@ -2,6 +2,7 @@
 
 **Status:** AUTHORITATIVE FREEZE MATRIX
 **Version:** 3.8-design
+**Authority:** Classification of unresolved calibration, implementation, environment-proof and deferred work.
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
 
@@ -62,6 +63,7 @@ Deterministic core exists through Phase 10 plus Phase-11 recovery and Phase-12 r
      + explicit live startup composition and state selection
      + persistent M5 cycle/lease heartbeat/backup lifecycle
      + governed entry/management orchestration
+     + READINESS stale-data terminal monitor frame
      + live dashboard DTO composition
      + durable discovery-liveness dashboard state
      + strict account/server/symbol-scoped session/news handoff adapter

@@ -1,9 +1,17 @@
 # GoldSwingTraderAI — Session and Risk State Machine
 
 **Status:** PROVISIONAL — PERMISSION STATE-MACHINE CONTRACT
-**Version:** 0.9-implementation
+**Version:** 1.0-implementation
 **Authority:** Hard market/session permission states, risk/system permission composition, news-safety states and state transitions.
 **Depends on:** `RISK_CONTRACT.md`, `EXECUTION_AND_BROKER_SAFETY.md`, `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`, `../10-market-intelligence/SESSION_CONTEXT.md`
+
+## Purpose and scope
+
+This document defines the hard permission state machine between market/news
+facts and the central execution gate. It explains which states block new
+entries, which states require management or flattening, how unknown truth
+fails closed and how risk/system authorities compose. It does not source
+calendar facts or replace the separate monetary-risk contract.
 
 ## Core principle
 

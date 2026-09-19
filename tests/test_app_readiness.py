@@ -9,6 +9,7 @@ from goldswingtraderai.diagnostics.reasons import ReasonCode
 from goldswingtraderai.domain.enums import AccountMode, HardDecision, Timeframe
 from goldswingtraderai.domain.market import AccountFacts, Candle, CandleSeries, Quote, SymbolSpec
 from goldswingtraderai.domain.models import DemoGuardResult, Reason
+from goldswingtraderai.operator import ReadinessDashboardData
 
 
 class StubReader:
@@ -200,6 +201,7 @@ def test_readiness_does_not_grant_permission_without_positive_demo() -> None:
 def test_readiness_monitor_waits_for_fresh_data_without_entering_runtime() -> None:
     reader = StaleThenFreshReader()
     clock = FakeClock()
+    frames: list[ReadinessDashboardData] = []
 
     assert run_readiness(
         _settings(),
@@ -207,8 +209,16 @@ def test_readiness_monitor_waits_for_fresh_data_without_entering_runtime() -> No
         keep_alive=True,
         sleep=clock.sleep,
         utc_now=clock.now,
+        dashboard_sink=frames.append,
     ) == 0
 
     assert reader.snapshot_count == 2
     assert clock.sleeps == [30.0]
     assert reader.shutdown_called is True
+    assert len(frames) == 2
+    assert frames[0].data_quality == "STALE"
+    assert frames[0].waiting_for_fresh_data is True
+    assert frames[0].demo_guard == "PASS"
+    assert frames[0].identity_state == "PASS"
+    assert frames[1].data_quality == "HEALTHY"
+    assert frames[1].waiting_for_fresh_data is False

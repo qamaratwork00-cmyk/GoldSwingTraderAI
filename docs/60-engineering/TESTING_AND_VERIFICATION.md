@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL
-**Version:** 2.1-implementation
+**Version:** 2.2-implementation
 **Authority:** Test taxonomy, executable proof requirements, replay/live parity, recovery/broker-read integrity, controller fencing and release verification.
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../10-market-intelligence/MARKET_DATA_AND_HISTORY.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
@@ -10,6 +10,13 @@
 Testing must prove documented invariants. `VERIFIED` is reserved for behaviour that passed required executable validation against the exact implementation.
 
 > **Software verification and strategy validation are separate.**
+
+The repository documentation contract is executable as well. Run
+`python scripts/verify_documentation.py .` from the repository root to check
+required guide sections, source-area coverage, document metadata and relative
+Markdown links. This check proves documentation structure/consistency, not
+behavioural correctness; it is run by CI and is also covered by
+`tests/test_documentation_contract.py`.
 
 ## Evidence ladder
 
@@ -112,6 +119,7 @@ Fresh-machine certification must use a real restored checkpoint plus current bro
 
 ```text
 Deterministic CI                PASS / count
+Documentation contract          PASS / FAIL — required guides, coverage and links
 Market read contracts           PASS
 Live-recovery adapter software  PASS
 State/checkpoint/backup         PASS
@@ -128,6 +136,13 @@ publication-CLI, dashboard research-state, provider-neutral session/news
 handoff and verified-bundle walk-forward CLI composition. Exact run results
 belong to the release audit for the audited revision.
 
+`tests/test_dashboard.py` proves the read-only readiness frame exposes stale
+data quality, broker/account facts, completed-candle counts, exact issues and
+the explicit strategy/write lock without adding a trading authority.
+`tests/test_app_readiness.py` proves the frame is emitted for each readiness
+snapshot and changes from stale wait to fresh result without entering runtime
+execution.
+
 `tests/test_runtime_loop.py` proves bounded persistent lifecycle behaviour,
 heartbeat renewal, controller-loss fail-closed stopping, startup-not-ready
 shutdown, standby retry after explicit active-primary contention and guaranteed
@@ -141,7 +156,7 @@ is exercised against the injected MT5 boundary; this remains software evidence,
 not real broker DEMO evidence.
 
 Current local deterministic checkpoint for the market-closed wait implementation
-(2026-09-19): **279 tests PASS**. This count includes the earlier runtime,
+(2026-09-19): **281 tests PASS**. This count includes the earlier runtime,
 recovery, persistence and Windows-readiness regression coverage plus the new
 readiness-monitor and pre-`READY` market-data-wait tests. It remains software
 evidence; it does not claim that a real broker is open, closed, connected or

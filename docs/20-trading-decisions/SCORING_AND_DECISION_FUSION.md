@@ -1,9 +1,17 @@
 # GoldSwingTraderAI — Scoring and Decision Fusion
 
 **Status:** PROVISIONAL — DECISION-FUSION CONTRACT
-**Version:** 0.4-implementation
+**Version:** 0.5-implementation
 **Authority:** Analytical scoring, independent BUY/SELL thesis fusion, conflict handling and Red-Team attribution.
 **Depends on:** `STRATEGY_FLOOR.md`, `ENTRY_TIMING.md`, `TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
+
+## Purpose and scope
+
+This document explains how separate family reports become two competing
+directional theses and an attributed analytical result. It preserves evidence
+coverage, correlation, opposition, opportunity identity and timing meaning so
+the final score is explainable. It never converts a soft score into monetary
+risk or final broker-write permission.
 
 ## Core principle
 

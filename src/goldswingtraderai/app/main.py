@@ -8,6 +8,7 @@ import logging
 import time
 
 from goldswingtraderai import __version__
+from goldswingtraderai.app.dashboard import build_readiness_dashboard_data
 from goldswingtraderai.app.runtime import LiveStartupRuntime, SessionNewsProvider
 from goldswingtraderai.app.loop import PersistentRuntimeLoop, RuntimeLoopResult
 from goldswingtraderai.app.session_news import FileSessionNewsProvider
@@ -17,7 +18,12 @@ from goldswingtraderai.domain.enums import DataQuality, HardDecision
 from goldswingtraderai.domain.market import AccountFacts, MarketSnapshot
 from goldswingtraderai.execution import CoordinationError
 from goldswingtraderai.market_data import MT5Reader, MarketDataError, MarketSnapshotBuilder
-from goldswingtraderai.operator import DashboardData, render_dashboard
+from goldswingtraderai.operator import (
+    DashboardData,
+    ReadinessDashboardData,
+    render_dashboard,
+    render_readiness_dashboard,
+)
 from goldswingtraderai.persistence import StateStoreError
 
 _LOG = logging.getLogger("goldswingtraderai.app")
@@ -42,6 +48,7 @@ def run_readiness(
     sleep: Callable[[float], None] | None = None,
     utc_now: Callable[[], datetime] | None = None,
     stop_requested: Callable[[], bool] | None = None,
+    dashboard_sink: Callable[[ReadinessDashboardData], None] | None = None,
 ) -> int:
     """Readiness-check MT5 and wait safely while data is not fresh.
 
@@ -66,6 +73,27 @@ def run_readiness(
             )
             demo_guard = reader.demo_guard(snapshot.account)
             identity_mismatches = _identity_mismatches(settings, snapshot.account)
+            retryable_data_wait = (
+                keep_alive
+                and _readiness_wait_required(snapshot)
+                and not identity_mismatches
+                and demo_guard.decision is HardDecision.PASS
+            )
+            if dashboard_sink is not None:
+                readiness_issues = list(identity_mismatches)
+                if demo_guard.reason is not None:
+                    readiness_issues.append(demo_guard.reason.code.value)
+                dashboard_sink(
+                    build_readiness_dashboard_data(
+                        snapshot,
+                        demo_guard,
+                        identity_ok=not identity_mismatches,
+                        runtime_role=settings.runtime_mode.value,
+                        poll_seconds=settings.readiness_poll_seconds,
+                        waiting_for_fresh_data=retryable_data_wait,
+                        additional_issues=tuple(readiness_issues),
+                    )
+                )
 
             _LOG.info(
                 "MT5 market snapshot ready",
@@ -280,6 +308,12 @@ def _emit_dashboard(data: DashboardData) -> None:
     print(render_dashboard(data), flush=True)
 
 
+def _emit_readiness_dashboard(data: ReadinessDashboardData) -> None:
+    """Render one read-only frame before a governed cycle exists."""
+
+    print(render_readiness_dashboard(data), flush=True)
+
+
 def _resolve_session_news_provider(
     settings: Settings,
     provider: SessionNewsProvider | None,
@@ -331,6 +365,7 @@ def main() -> int:
         settings,
         MT5Reader(),
         keep_alive=settings.readiness_keep_alive,
+        dashboard_sink=_emit_readiness_dashboard,
     )
 
 

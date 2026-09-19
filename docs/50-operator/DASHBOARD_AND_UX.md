@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Dashboard and UX
 
 **Status:** PROVISIONAL — OPERATOR-VISIBILITY CONTRACT
-**Version:** 0.9-implementation
+**Version:** 0.10-implementation
 **Authority:** Main terminal dashboard information architecture, operator visibility, reason presentation and restrained emoji usage.
 **Depends on:** `../20-trading-decisions/SCORING_AND_DECISION_FUSION.md`, `../30-risk-execution/RISK_CONTRACT.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`
 
@@ -38,6 +38,30 @@ percentage, infer a blocker, create a strategy score or invoke MT5. Stable
 reason codes stay machine-readable; human explanations make those reasons
 understandable without changing their meaning.
 
+### Readiness monitor frame
+
+The default READINESS launcher has no strategy, risk or execution result yet.
+It therefore uses a separate compact frame rather than displaying invented
+WAIT, score or permission values. The frame is emitted after every snapshot,
+including retryable stale/insufficient/sparse data:
+
+~~~mermaid
+flowchart TB
+    MT5["MT5Reader + MarketSnapshotBuilder"] --> MAP["app/dashboard.py — build_readiness_dashboard_data"]
+    MAP --> DTO["ReadinessDashboardData — market/read facts only"]
+    DTO --> RENDER["operator/dashboard.py — render_readiness_dashboard"]
+    RENDER --> SCREEN["Terminal — WAIT / freshness / DEMO / write lock"]
+    SCREEN -.->|"Ctrl+C only"| STOP["Safe operator stop"]
+~~~
+
+The readiness frame shows symbol, account mode, DEMO guard, identity result,
+Bid/Ask/spread, quote age, data quality, completed-candle counts, exact data
+issues and the next poll interval. It explicitly shows BROKER WRITES DISABLED
+and STRATEGY NOT RUN. It does not calculate indicators, scores, risk,
+session/news permission or execution authority. A fresh snapshot ends the
+readiness wait, but READINESS remains read-only; the full Decision/Risk/
+Execution dashboard belongs to the governed persistent runtime.
+
 | Panel | Source of truth | Refresh concern |
 |---|---|---|
 | Market | MarketSnapshot/IntelligenceSnapshot | show freshness and completed-candle boundary |
@@ -53,17 +77,24 @@ understandable without changing their meaning.
 Implemented owner:
 
 ```text
-operator/dashboard.py
-operator/__init__.py
+app/dashboard.py — authoritative DTO mapping
+operator/dashboard.py — pure terminal rendering
+operator/__init__.py — public presentation API
 ```
 
-The V1 renderer is pure standard-library terminal presentation. `DashboardData` receives already-authoritative facts and `render_dashboard()` only formats them. `app/dashboard.py` now maps live cycle/recovery/controller/backup DTOs and durable research liveness into this presentation contract without invoking strategy, risk, gate or broker-write code.
+The V1 renderer is pure standard-library terminal presentation. `DashboardData`
+receives already-authoritative cycle facts and `render_dashboard()` only formats
+them. `ReadinessDashboardData` receives only the normalized MT5 snapshot/readiness
+facts and `render_readiness_dashboard()` formats the pre-cycle wait frame.
+`app/dashboard.py` maps both contracts without invoking strategy, risk, gate or
+broker-write code.
 
 Deterministic tests prove the renderer itself has no MT5/risk/gate authority
-and preserves useful prior GoldScalperAI visibility. The persistent runtime
-supplies the DTO after startup/recovery and each cycle; terminal in-place
-refresh and final Windows visual verification remain operator polish/evidence,
-not a second trading authority.
+and preserves useful prior GoldScalperAI visibility. The readiness launcher
+supplies its DTO after every read poll; the persistent runtime supplies the full
+DTO after startup/recovery and each cycle. Terminal in-place refresh and final
+Windows visual verification remain operator polish/evidence, not a second
+trading authority.
 
 ## UX principles
 
@@ -308,6 +339,8 @@ Changing dashboard code must not change trading behaviour.
 - Discovery Health/candidate/suppression visibility once runtime DTO wiring exists;
 - conventional signed money formatting;
 - text fallback;
+- readiness-frame visibility for stale/insufficient/sparse data, DEMO/identity
+  facts, candle counts, exact data issues and explicit broker-write lock;
 - source-level absence of raw broker/risk/execution authority;
 - integration proof that refresh cannot create duplicate decisions/writes.
 
@@ -323,9 +356,13 @@ Dashboard must not:
 - turn Trendline/Fibonacci/POC into red/green mandatory gates;
 - require manual parameter tuning for normal operation;
 - introduce web/UI framework without real requirement.
+- turn the readiness monitor into a strategy, risk or execution authority;
+- hide the stale-data wait behind JSON logs when the terminal monitor is running.
 
 ## Runtime wiring
 
+- READINESS renders a separate read-only frame after every normalized snapshot,
+  including retryable stale/insufficient/sparse polls;
 - persistent M5 loop refreshes the DTO after each fresh cycle;
 - Discovery Health, latest candidate/stage and suppression reason are read from durable research state when present;
 - backup failure is shown as `FAILED` and degrades system health;

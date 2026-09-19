@@ -1,8 +1,16 @@
 # GoldSwingTraderAI — System Contract
 
 **Status:** PROVISIONAL
-**Version:** 0.6-design
+**Version:** 0.7-design
 **Authority:** Highest-level behavioural contract
+
+## Purpose and scope
+
+This is the project constitution. It defines the invariants that every
+runtime mode, analytical desk, risk authority, research path, operator view
+and recovery workflow must preserve. It intentionally stays above individual
+thresholds and implementation details; those belong to the linked topic
+contracts and source maps.
 
 ## Core contract
 

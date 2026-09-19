@@ -1,7 +1,8 @@
 # GoldSwingTraderAI — Final Build Prompt
 
 **Status:** PROVISIONAL — IMPLEMENTATION HANDOFF CONTRACT
-**Version:** 1.0-design
+**Version:** 1.1-handoff
+**Authority:** Compact implementation handoff summary; it never overrides subsystem authorities.
 **Location:** `docs/` root. This is a whole-project implementation handoff, not a competing behavioural authority.
 
 ## Purpose and role
@@ -9,6 +10,10 @@
 Implement and complete **GoldSwingTraderAI**, a fresh XAUUSD/XAUUSDm trading system for meaningful intraday/open-session directional moves. Build the documented system; do not recreate a prior scalper or invent undocumented shortcuts.
 
 Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for large implementation phases, phase completion and recovery after interrupted work.
+Use `docs/90-governance/DOCUMENTATION_STANDARD.md` before changing any
+documentation or declaring a phase complete. A highlighted omission is a
+signal to audit the complete affected contract graph; it is not permission to
+delete useful prior design, phase gates or proof requirements.
 
 ## Authority order
 
@@ -17,10 +22,11 @@ Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for large implementation 
 3. `docs/90-governance/DESIGN_DECISIONS.md`
 4. `docs/90-governance/OPEN_QUESTIONS.md`
 5. `docs/60-engineering/CODING_STANDARD.md`
-6. `docs/60-engineering/MODULE_STRUCTURE.md`
-7. `docs/CODER_GUIDE.md`
-8. operator/testing/release supporting docs
-9. this prompt as summary/handoff only
+6. `docs/90-governance/DOCUMENTATION_STANDARD.md` for documentation change control
+7. `docs/60-engineering/MODULE_STRUCTURE.md`
+8. `docs/CODER_GUIDE.md`
+9. operator/testing/release supporting docs
+10. this prompt as summary/handoff only
 
 If authoritative documents conflict, resolve the documentation contradiction before coding the affected behaviour. Never silently guess a critical rule.
 
@@ -41,10 +47,13 @@ For every requested change, follow this loop:
 5. implement the smallest typed, deterministic change;
 6. add or update focused tests for positive, negative, unknown, chronology,
    restart and boundary cases as applicable;
-7. update the authority, module map, coder guide, operator/research/release
-   docs affected by the change;
+7. update the authority, module map, Coder Guide, phase/recovery guide,
+   operator/research/release docs and documentation index affected by the
+   change; preserve useful prior rationale and explicitly record unaffected
+   areas;
 8. run the standard verification commands and inspect the diff for accidental
-   deletion or secret exposure;
+   deletion or secret exposure, including
+   `python scripts/verify_documentation.py .`;
 9. report what is software-proven, what is environment-pending and what the
    next safe step is.
 
@@ -55,7 +64,7 @@ flowchart TB
     READ["Read authority + dependencies"] --> TRACE["Trace source owner + tests"]
     TRACE --> DESIGN["Design typed boundary — inputs + outputs + failure"]
     DESIGN --> CODE["Implement clean deterministic code"]
-    CODE --> PROVE["Tests + lint + compile + secret scan"]
+    CODE --> PROVE["Tests + lint + compile + docs + secret scans"]
     PROVE --> DOCS["Synchronize docs + release/open questions"]
     DOCS --> HANDOFF["Evidence-backed handoff — no unverified claims"]
 ```
@@ -379,7 +388,7 @@ Restart never means blank financial/order state. Reconcile broker truth before n
 The integrated startup composition now makes state selection explicit:
 
 ```text
-READINESS  → read-only MT5 snapshot; wait/poll on stale data without trading
+READINESS  → read-only MT5 snapshot; render the readiness monitor; wait/poll on stale data without trading
 PRIMARY    → controller-gated persistent startup/recovery/runtime loop
 STANDBY    → governed lease/takeover attempt and recovery
 EXISTING   → use local runtime DB; missing risk state blocks

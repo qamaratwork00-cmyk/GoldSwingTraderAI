@@ -10,13 +10,55 @@ from goldswingtraderai.app.recovery import RecoveryState
 from goldswingtraderai.app.runtime import LiveCycleFacts, LiveStartupRuntime
 from goldswingtraderai.domain.enums import HardDecision, Timeframe
 from goldswingtraderai.domain.market import MarketSnapshot
+from goldswingtraderai.domain.models import DemoGuardResult
 from goldswingtraderai.decisions.opportunity import Opportunity
 from goldswingtraderai.intelligence.snapshot import IntelligenceSnapshot, TimeframeIntelligence
 from goldswingtraderai.management import ManagedTrade
-from goldswingtraderai.operator import DashboardData, OpenTradeView
+from goldswingtraderai.operator import DashboardData, OpenTradeView, ReadinessDashboardData
 from goldswingtraderai.persistence import BackupRunResult, StateStoreError
 from goldswingtraderai.risk import CooldownState, RiskEvaluation, resolve_account_profile
 from goldswingtraderai.research.discovery import CandidateRegistry
+
+
+def build_readiness_dashboard_data(
+    snapshot: MarketSnapshot,
+    demo_guard: DemoGuardResult,
+    *,
+    identity_ok: bool,
+    runtime_role: str,
+    poll_seconds: float,
+    waiting_for_fresh_data: bool,
+    additional_issues: tuple[str, ...] = (),
+) -> ReadinessDashboardData:
+    """Map one read-only MT5 snapshot to the readiness monitor DTO.
+
+    The mapper exposes only facts already produced by the market/read boundary.
+    It does not call strategy, risk, session, execution or broker-write code;
+    in particular, stale data is displayed as a wait state rather than turned
+    into a fabricated trading decision.
+    """
+
+    issues = tuple(dict.fromkeys((*snapshot.issues, *additional_issues)))
+    return ReadinessDashboardData(
+        project="GoldSwingTraderAI",
+        symbol=snapshot.meta.symbol,
+        account_mode=snapshot.account.mode.value,
+        demo_guard=demo_guard.decision.value,
+        identity_state="PASS" if identity_ok else "BLOCK",
+        runtime_role=runtime_role,
+        utc_time=snapshot.meta.as_of_utc,
+        bid=snapshot.quote.bid,
+        ask=snapshot.quote.ask,
+        spread_price=snapshot.quote.spread_price,
+        quote_age_seconds=snapshot.quote.age_seconds(snapshot.meta.as_of_utc),
+        data_quality=snapshot.quality.value,
+        timeframe_bars=tuple(
+            (item.timeframe.value, len(item.candles)) for item in snapshot.series
+        ),
+        issues=issues,
+        poll_seconds=poll_seconds,
+        waiting_for_fresh_data=waiting_for_fresh_data,
+    )
 
 
 def build_dashboard_data(

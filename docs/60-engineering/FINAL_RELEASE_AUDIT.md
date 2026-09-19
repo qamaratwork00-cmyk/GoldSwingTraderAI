@@ -78,7 +78,7 @@ Final Build Prompt current:          PENDING
 
 Current local software evidence snapshot for branch `codex/complete-runtime`
 (2026-09-19; not a release sign-off): `PYTHONPATH=src:. pytest -q` =
-**279 passed**; Ruff check = **PASS**; source/script annotation check =
+**281 passed**; Ruff check = **PASS**; source/script annotation check =
 **PASS**; Python compile check = **PASS**; financial-secret scan = **PASS**;
 `git diff --check` = **PASS**. The strict persisted-state, broker-read
 exception, non-finite configuration, standby-retry, strict portable-manifest and
@@ -87,13 +87,19 @@ acquisition command and walk-forward evidence-package command are implemented,
 but this workspace has
 not produced real-XAU or broker-connected evidence.
 
+The frozen documentation contract check is also **PASS** for this workspace:
+`python scripts/verify_documentation.py .` validates required guides, source
+coverage, metadata and relative links. This is structural documentation
+evidence only; it does not make the external release gates pass.
+
 The CI workflow additionally runs the full dependency-installed suite with a
 coverage report artifact. The local snapshot above is the reproducible software
 checkpoint available in this workspace; it is intentionally not a DEMO release
 sign-off and no real-environment result is inferred from it.
 
 ```text
-Unit / contract tests:              PASS — local deterministic suite (279 passed)
+Unit / contract tests:              PASS — local deterministic suite (281 passed)
+Documentation contract:            PASS — required guides/coverage/links
 Replay / no-lookahead:              PASS — deterministic replay/chronology tests
 Trendline/Fib/POC causality:        PASS — deterministic causal confluence tests
 Confluence bonus-only invariant:    PASS — deterministic score/gate tests

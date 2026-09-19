@@ -32,6 +32,9 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q src tests scripts
 
+      - name: Documentation contract
+        run: python scripts/verify_documentation.py .
+
       - name: Pytest
         env:
           PYTHONPATH: src:.

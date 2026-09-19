@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Architecture
 
 **Status:** PROVISIONAL
-**Version:** 0.7-implementation
+**Version:** 0.8-implementation
 **Authority:** High-level system architecture
 
 ## Purpose
@@ -156,6 +156,29 @@ freshness/warm-up is retryable; corruption, identity mismatch, DEMO failure,
 unknown session/news, persistence integrity and controller faults retain their
 existing fail-closed or terminal behavior. A stale feed is not itself proof of
 a calendar closure, so logs expose the exact `DataQuality`/recovery reason.
+
+### Readiness dashboard visibility
+
+The operator must be able to see the wait state while the runtime is alive.
+Readiness therefore has its own presentation path; it does not borrow the
+full-cycle dashboard because no strategy, risk or execution result exists
+before a governed cycle:
+
+~~~mermaid
+flowchart TB
+    SNAP["Normalized MarketSnapshot"] --> MAP["build_readiness_dashboard_data"]
+    MAP --> FRAME["ReadinessDashboardData"]
+    FRAME --> RENDER["render_readiness_dashboard"]
+    RENDER --> VIEW["Terminal monitor — WAIT / stale reason / write lock"]
+    VIEW -.->|"no authority"| CYCLE["Strategy and broker cycle remain untouched"]
+~~~
+
+The frame is emitted after every READINESS snapshot, including
+STALE/INSUFFICIENT/SPARSE polls. It shows broker/read facts, completed-candle
+counts and exact data issues, and explicitly shows that strategy is not run
+and broker writes are disabled. A healthy READINESS snapshot still remains
+read-only; only the governed persistent runtime can render the Decision/Risk/
+Execution dashboard after a fresh cycle.
 
 ## Runtime cycle topology
 

@@ -1,9 +1,17 @@
 # GoldSwingTraderAI — Risk Contract
 
 **Status:** PROVISIONAL — MONETARY-RISK CONTRACT
-**Version:** 1.1-implementation
+**Version:** 1.2-implementation
 **Authority:** Monetary risk, account-size risk profiles, dynamic/hybrid lot sizing, exposure, daily-loss/manual-reset semantics and risk-policy invariants.
 **Depends on:** `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
+
+## Purpose and scope
+
+This document owns the monetary affordability decision after a structural
+Trade Plan exists. It defines account profiles, executable volume, exposure,
+margin, UTC risk-day accounting, loss locks, reset and cooldown semantics. It
+does not decide market direction, move the structural stop to fit size or send
+an MT5 request.
 
 ## Core principle
 

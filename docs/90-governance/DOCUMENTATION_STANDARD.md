@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Documentation Standard
 
 **Status:** FROZEN
-**Version:** 0.9-design
+**Version:** 1.1-frozen
 **Authority:** Documentation placement, ownership, status and change-control rules.
 
 ## 1. Purpose
@@ -390,3 +390,120 @@ remaining uncertainty
 This makes a documentation update reviewable in the same way as a code change.
 The record belongs in the review/working handoff; ordinary design documents
 should remain timeless manuals rather than becoming chronological change logs.
+
+## 16. Frozen completeness and freeze protocol
+
+This protocol is mandatory for every material implementation or documentation
+change. A user-highlighted defect is an example of a wider impact class, not a
+limit on the audit scope. The agent must inspect the whole affected contract
+graph and must not update only the file named in the request.
+
+### 16.1 Before implementation
+
+Create an internal impact map covering:
+
+| Question | Required inspection |
+|---|---|
+| What is the requested behaviour? | authoritative topic document, system contract and decision ledger |
+| Which phase owns it? | build/recovery phase map, Coder Guide and open/freeze matrix |
+| Where is it implemented? | source package, entry point, configuration and persistence/schema |
+| What can it affect? | upstream inputs, downstream authorities, dashboard/operator, research and recovery |
+| How is it proven? | focused tests, integration tests, live-environment evidence and release audit |
+| Which documents can become stale? | docs index, architecture, module map, coder guide, prompts, setup/manual, testing/release docs |
+
+The implementation may proceed only after every affected area has an owner or
+an explicit reason why it is not affected. A missing feature row, absent phase
+detail, broken cross-link, undocumented source owner or unpropagated state is
+treated as a documentation defect even if the code itself passes tests.
+
+### 16.2 During implementation
+
+Maintain one change packet:
+
+~~~text
+authoritative contract
+→ decision/freeze classification
+→ architecture/dataflow
+→ source owner and entry point
+→ typed inputs/outputs/states
+→ tests and failure cases
+→ persistence/restart impact
+→ dashboard/operator/research impact
+→ release/evidence impact
+~~~
+
+When a rule crosses more than one layer, update the owner first and update
+supporting navigation documents in the same coherent change. Do not leave a
+known interim contradiction between code, topic docs and the Coder Guide.
+
+### 16.3 Required document propagation
+
+For a material feature, inspect and update as applicable:
+
+1. authoritative domain contract;
+2. Architecture and parallel/ordered dataflow;
+3. Design Decisions and Open Questions;
+4. Module Structure and Coder Guide;
+5. Final Build Prompt and ChatGPT Build/Recovery Guide;
+6. Setup/Run Guide and User Manual;
+7. Dashboard/UX and operator evidence;
+8. Testing/Verification and Final Release Audit;
+9. docs index, links, phase map and status labels.
+
+No file is changed mechanically just to satisfy the list. Each affected
+document must either explain the new behaviour or record why the behaviour is
+outside its scope. Useful old rationale, constraints, phase gates, tests and
+unresolved proof requirements must be retained in the correct section.
+
+### 16.4 Freeze review before handoff
+
+Before a change is called complete, run this review:
+
+- every phase and feature has a purpose, owner, source path, entry point and test;
+- DEMO Guard, fail-closed/UNKNOWN behaviour, no-lookahead and write boundary
+  are explicitly traceable where relevant;
+- diagrams use real module/state names and do not imply uncollected evidence;
+- old useful content is preserved or deliberately relocated with no unexplained
+  deletion;
+- Phase 1–9 foundation, Phase 10 research, Phase 11 recovery/backup and Phase
+  12 integration/certification remain visibly distinct;
+- code, tests, docs and current evidence agree;
+- links, headings, status labels and command examples are checked;
+- remaining external/live proof is clearly marked PENDING rather than implied.
+
+Only after this review may the coherent change be frozen, committed or
+published. This protocol is itself frozen project process; future exceptions
+require an explicit governance decision.
+
+## 17. Whole-project guide minimum
+
+The high-visibility guides are not allowed to collapse the system into a vague
+summary. Their minimum content is frozen as follows:
+
+| Guide | Minimum explanation that must remain present |
+|---|---|
+| `docs/README.md` | reading order, folder ownership, every authoritative document, status vocabulary and source-area coverage route |
+| `docs/CODER_GUIDE.md` | individually explained Phases 1–9, separate Phase 10, Phase 11 and Phase 12 contracts, architecture/dataflow diagrams, feature → authority → source → entry point → tests, DEMO Guard, runtime and recovery traces |
+| `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` | implementation loop, impact audit, phase exit gates, resume/context-loss recovery and evidence language |
+| `docs/FINAL_BUILD_PROMPT.md` | compact handoff, authority order, architecture invariants, feature route, frozen coding/safety rules and final validation boundary |
+| `docs/SETUP_AND_RUN_GUIDE.md` | installation, configuration, launcher modes, stale/closed-market wait, startup/recovery, shutdown, restore and operator commands |
+| `docs/USER_MANUAL.md` | human interpretation of runtime states, dashboard, safety, no-trade reasons and recovery actions |
+
+Phase headings alone do not satisfy the Coder Guide requirement. Each phase
+must identify purpose, outputs, owner modules, boundaries, tests and its exit
+condition. Removing those details to make a guide shorter is a documentation
+regression, even when the replacement prose is technically true.
+
+## 18. Final documentation gate
+
+Before a branch is published or a project checkpoint is called complete, the
+reviewer/agent must be able to answer “where is this defined?” for every
+source-area, feature, state, operator view, research artifact and release
+claim. The answer must resolve to a documented authority and a source/test
+map, or to an explicit `OUT OF SCOPE` / `PENDING EXTERNAL EVIDENCE` record.
+
+The final gate includes the executable
+`python scripts/verify_documentation.py .` check, a repository link check,
+source/script/test filename coverage, duplicate/accidental-deletion review,
+stale evidence-count review and a comparison of code, tests and docs against
+the same commit. Passing tests cannot waive this documentation gate.

@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Setup and Run Guide
 
 **Status:** DRAFT — OPERATOR WORKFLOW MANUAL
-**Version:** 0.10-implementation
+**Version:** 0.11-implementation
 **Authority:** Operator workflow for installation, startup, safe shutdown, migration, restore and common blocked-state handling.
 **Depends on:** `50-operator/DASHBOARD_AND_UX.md`, `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
@@ -16,6 +16,7 @@ through safe shutdown, restore and release proof.
 |---|---|---|
 | Settings and launcher mode | `config/settings.py`, `app/main.py` | `tests/test_settings.py`, `tests/test_app_readiness.py` |
 | Readiness stale-data monitor | `config/settings.py`, `app/main.py` | `tests/test_settings.py`, `tests/test_app_readiness.py` |
+| Readiness terminal dashboard | `app/dashboard.py`, `operator/dashboard.py` | `tests/test_app_readiness.py`, `tests/test_dashboard.py` |
 | MT5 initialization and broker facts | `market_data/mt5_reader.py`, `app/recovery_mt5.py` | `tests/test_market_data.py`, `tests/test_recovery_mt5.py` |
 | Startup/recovery/controller | `app/runtime.py`, `app/startup.py`, `app/recovery.py`, `execution/controller.py` | `tests/test_live_startup_runtime.py`, `tests/test_startup_recovery.py`, `tests/test_sqlite_coordination.py` |
 | Persistent cycle and shutdown | `app/cycle.py`, `app/loop.py` | `tests/test_runtime_loop.py` |
@@ -240,6 +241,7 @@ load/validate non-secret settings
 → build normalized MarketSnapshot
 → evaluate positive DEMO fact
 → check optional account identity pins
+→ map and render read-only readiness dashboard
 → log readiness/data quality
 → if data is retryably stale, wait and poll again; otherwise shutdown MT5 bridge
 ```
@@ -272,6 +274,10 @@ unknown session/news truth, missing risk state, account identity mismatch,
 persistence failure and controller failure remain blocked/terminal according to
 their existing recovery contracts. Only freshness/warm-up states are retried;
 no safety authority is converted into a permissive default.
+
+The READINESS launcher renders one read-only monitor frame after every
+normalized snapshot, including stale-data waits. It displays only market/
+broker freshness facts and makes the strategy/broker-write lock explicit.
 
 The persistent launcher renders one read-only terminal dashboard frame after
 each fresh cycle. It displays the already-produced market/decision/risk/

@@ -1,7 +1,8 @@
 # GoldSwingTraderAI — Design Decisions
 
 **Status:** AUTHORITATIVE DECISION LEDGER
-**Version:** 2.2-design
+**Version:** 2.3-design
+**Authority:** Cross-document architectural decisions and explicit supersession ledger.
 
 This ledger records accepted/provisional architectural decisions so
 implementation does not silently reinterpret the system contract.
@@ -406,6 +407,52 @@ broker, provider or research dataset has been exercised.
 **Decision:** `READINESS` remains read-only and, by default, continues polling while normalized market quality is `STALE`, `INSUFFICIENT` or `SPARSE`; `GSTAI_READINESS_KEEP_ALIVE=false` is an explicit one-shot diagnostic override. `PRIMARY`/`STANDBY` retain the controller heartbeat and re-capture broker facts during the same narrow pre-`READY` data-wait states. No strategy cycle, risk sizing, intent creation or broker write may run until fresh data and all other recovery authorities pass. `CORRUPT`, identity, DEMO, persistence, controller and unknown session/news failures remain fail-closed/terminal under their existing contracts. A stale feed is not interpreted as proof of a calendar closure; the exact quality/recovery reason remains visible.
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 **Reason:** The process must remain operationally observable across weekend/closed-market periods without weakening freshness or broker-write safety.
+
+## DEC-069 — Readiness wait must remain visibly observable without creating authority
+
+**Decision:** Every normalized READINESS snapshot, including retryable
+STALE/INSUFFICIENT/SPARSE polls, emits a compact terminal readiness frame.
+The frame shows broker/read facts, DEMO and identity state, freshness quality,
+completed-candle counts, exact issues, next poll timing and an explicit
+STRATEGY NOT RUN / BROKER WRITES DISABLED state. It uses a separate
+ReadinessDashboardData contract because a pre-cycle snapshot has no
+authoritative strategy score, risk sizing, session/news permission or execution
+permission. The full DashboardData frame remains reserved for a governed
+persistent cycle.
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+**Reason:** Operator visibility must not disappear precisely when stale data
+requires monitoring, and the dashboard must never fill missing authority with
+invented values.
+
+## DEC-070 — Documentation completeness is a frozen project gate
+
+**Decision:** Documentation work is reviewed as a complete contract graph, not
+as isolated file edits. Every material feature/change must be traced from
+requirement to authoritative contract, phase, architecture/dataflow, source
+owner, typed states, persistence/restart impact, tests, dashboard/operator and
+research impact, setup/prompt propagation and release evidence. User-highlighted
+examples are signals to audit the wider affected graph. Phase 1–9 foundation,
+Phase 10 research, Phase 11 recovery/backup and Phase 12
+integration/certification remain visibly distinct. Useful prior meaning may be
+rewritten for clarity but may not be silently discarded. A change is not
+frozen/published while known code/docs/test contradictions, missing feature
+maps, broken links or unexplained deletions remain.
+**Status:** FROZEN
+**Reason:** The repository is documentation-first; incomplete navigation can
+cause a coder to implement the wrong authority even when individual modules and
+tests appear correct.
+
+## DEC-071 — Documentation completeness has an executable structural gate
+
+**Decision:** The repository runs `scripts/verify_documentation.py` in CI and
+through `tests/test_documentation_contract.py`. The check verifies required
+whole-project guides and frozen markers, source-area coverage, document
+metadata and relative Markdown links. It is a structural consistency guard; it
+does not replace behavioural tests, code review, research evidence or live
+broker proof.
+**Status:** FROZEN
+**Reason:** A frozen process should detect common documentation drift
+mechanically instead of relying only on memory or a manual review.
 
 ## Change rule
 

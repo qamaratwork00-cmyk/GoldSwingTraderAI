@@ -13,9 +13,10 @@ GoldSwingTraderAI is a fresh, independent Gold trading system. It is not intende
 - [`docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`](docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md) — large build phases, resume/recovery and completion procedure.
 - [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md) — operator-facing behaviour guide.
 - [`docs/SETUP_AND_RUN_GUIDE.md`](docs/SETUP_AND_RUN_GUIDE.md) — setup/startup/shutdown/migration/recovery guide.
-- [`docs/CODER_GUIDE.md`](docs/CODER_GUIDE.md) — feature-oriented developer map.
+- [`docs/CODER_GUIDE.md`](docs/CODER_GUIDE.md) — complete phase-by-phase developer manual with feature, source, entry-point, test and operator/evidence ownership.
 - [`docs/00-foundation/SYSTEM_CONTRACT.md`](docs/00-foundation/SYSTEM_CONTRACT.md) — highest-level behavioural contract.
 - [`docs/60-engineering/CODING_STANDARD.md`](docs/60-engineering/CODING_STANDARD.md) — frozen lightweight production-code standard.
+- [`docs/90-governance/DOCUMENTATION_STANDARD.md`](docs/90-governance/DOCUMENTATION_STANDARD.md) — frozen rule that documentation updates preserve meaning and propagate through the whole affected graph.
 - [`docs/60-engineering/MODULE_STRUCTURE.md`](docs/60-engineering/MODULE_STRUCTURE.md) — module/dependency ownership map.
 
 ## Current implementation checkpoint
@@ -36,10 +37,13 @@ Deterministic implementation currently includes:
 - public-safe verified-backup staging and fresh-DB restore operator CLIs; publication/push remains an explicit external action;
 - read-only Windows/MT5 exact-count dataset acquisition plus verified-bundle fixed-policy walk-forward/evidence-package tooling; real-XAU evidence remains an external certification step;
 - HOLD/PROTECT/TRAIL/RUNNER/EXIT Trade Manager and governed execution bridge;
-- compact read-only terminal dashboard renderer;
+- compact read-only terminal cycle dashboard renderer plus a separate
+  READINESS stale-data monitor frame;
 - chronological replay, research metrics, StrategyMemory, durable episode journal, working discovery/invention liveness, candidate registry and governed promotion lifecycle.
 
-CI currently protects Ruff, Pytest and financial-secret scanning. Deterministic CI is software evidence, not live broker proof or profitability proof.
+CI currently protects Ruff, Pytest, the frozen documentation contract and
+financial-secret scanning. Deterministic CI is software evidence, not live
+broker proof or profitability proof.
 
 ## Core design direction
 
@@ -75,6 +79,9 @@ A strong coherent strategy family may lead without every optional primitive agre
 ## Documentation-first development
 
 The documentation under `docs/` is the design source of truth. One behavioural or engineering rule should have one authoritative home; supporting guides point to that authority rather than create competing versions.
+
+Documentation changes follow the frozen whole-project protocol in
+[`docs/90-governance/DOCUMENTATION_STANDARD.md`](docs/90-governance/DOCUMENTATION_STANDARD.md): a highlighted omission is treated as a signal to audit the full affected graph. Useful prior meaning is retained or deliberately relocated; authority, architecture, source/test maps, operator/research impact, prompts and release evidence are synchronized before a change is published.
 
 Document statuses:
 

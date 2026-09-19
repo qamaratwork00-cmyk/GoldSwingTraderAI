@@ -1,8 +1,16 @@
 # GoldSwingTraderAI — Strategy Floor
 
 **Status:** PROVISIONAL
-**Version:** 0.4-implementation-baseline
+**Version:** 0.5-implementation-baseline
 **Authority:** Production strategy-family architecture
+
+## Purpose and scope
+
+This document defines the six initial production strategy families as
+independent, auditable hypotheses. It explains each family’s market question,
+evidence boundary, shared inputs, optional confluence relationship, runtime
+handoff and proof requirements. It does not own risk sizing, broker permission
+or order execution.
 
 ## Core principle
 

@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — User Manual
 
 **Status:** DRAFT — OPERATOR BEHAVIOUR MANUAL
-**Version:** 0.8-implementation
+**Version:** 0.9-implementation
 **Authority:** Human-facing explanation of normal operation and operator actions.
 **Depends on:** `50-operator/DASHBOARD_AND_UX.md`, `SETUP_AND_RUN_GUIDE.md`
 
@@ -48,6 +48,14 @@ MT5 snapshot → data not fresh → WAIT / no strategy cycle / no broker write
 waiting before `READY`, then resume the normal M5 loop only after recovery
 authorities pass. `CORRUPT`, identity, DEMO, persistence and unknown
 session/news states remain fail-closed and are not disguised as market closure.
+
+While READINESS is alive, the terminal now shows a compact readiness monitor
+after every poll. It displays symbol, DEMO/identity facts, Bid/Ask/spread,
+quote age, data quality, completed-candle counts and exact stale-data issues.
+The frame explicitly says `STRATEGY NOT RUN` and
+`BROKER WRITES DISABLED`. It is not the full Decision/Risk/Execution
+dashboard because those values do not exist until a governed persistent cycle
+is allowed to run.
 
 ## What happens during a normal cycle
 

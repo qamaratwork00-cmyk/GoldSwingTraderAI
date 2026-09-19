@@ -1,8 +1,17 @@
 # GoldSwingTraderAI — Market Data and History
 
 **Status:** PROVISIONAL — MARKET FACT AND RECOVERY-READ CONTRACT
-**Version:** 0.5-implementation
+**Version:** 0.6-implementation
 **Authority:** Runtime market history, normalized broker read facts, current position facts and candle-data handling
+
+## Purpose and scope
+
+This document is the single read-fact contract for the MT5 terminal. It
+explains how raw account, symbol, quote, candle and open-position data becomes
+typed evidence for analysis and recovery, which timestamps are authoritative,
+how stale/unknown/corrupt data behaves and where fresh reads are still
+required. It does not define strategy quality, monetary permission or broker
+writes.
 
 ## Core principle
 

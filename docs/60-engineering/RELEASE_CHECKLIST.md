@@ -60,6 +60,7 @@ V1 release scope ends at controlled DEMO verification. It does not define a sepa
 - [ ] `FINAL_BUILD_PROMPT.md` matches current architecture and safety rules.
 - [ ] `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` phase status matches reality.
 - [ ] Root `README.md` does not advertise an obsolete implementation phase.
+- [ ] `python scripts/verify_documentation.py .` passes for the exact audited build.
 
 ## Market data / no-lookahead gates
 

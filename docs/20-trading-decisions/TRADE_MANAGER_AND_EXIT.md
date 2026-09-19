@@ -1,8 +1,16 @@
 # GoldSwingTraderAI — Trade Manager and Exit
 
 **Status:** PROVISIONAL — TRADE-MANAGEMENT CONTRACT
-**Version:** 0.5-implementation
+**Version:** 0.6-implementation
 **Authority:** Post-entry position-management behaviour
+
+## Purpose and scope
+
+This document defines the post-entry decision floor for a bot-owned Gold
+position. It explains how fresh structure, continuation, reversal, target and
+session evidence produces HOLD/PROTECT/TRAIL/RUNNER/EXIT, how broker
+verification controls durable state changes and why management uses the same
+hard execution boundary as entry. It does not create new entry authority.
 
 ## Core principle
 
