@@ -7,6 +7,8 @@ safe-looking default.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -412,12 +414,24 @@ class StateStore:
                     f"unsupported database schema {row[0]}; expected {DATABASE_SCHEMA_VERSION}"
                 )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=5.0)
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
-        return connection
+        try:
+            connection.execute("PRAGMA foreign_keys=ON")
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=FULL")
+            yield connection
+        except BaseException:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
+        finally:
+            # sqlite3.Connection.__exit__ commits/rolls back but does not close
+            # the handle. Explicit closure is required before Windows can move
+            # or remove a WAL database family during checkpoint restore.
+            connection.close()
 
 
 def _decode_record(
