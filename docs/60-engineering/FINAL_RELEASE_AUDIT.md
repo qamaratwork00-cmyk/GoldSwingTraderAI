@@ -78,7 +78,7 @@ Final Build Prompt current:          PENDING
 
 Current local software evidence snapshot for branch `codex/complete-runtime`
 (2026-09-19; not a release sign-off): `PYTHONPATH=src:. pytest -q` =
-**274 passed**; Ruff check = **PASS**; source/script annotation check =
+**275 passed**; Ruff check = **PASS**; source/script annotation check =
 **PASS**; Python compile check = **PASS**; financial-secret scan = **PASS**;
 `git diff --check` = **PASS**. The strict persisted-state, broker-read
 exception, non-finite configuration, standby-retry, strict portable-manifest and
@@ -93,7 +93,7 @@ checkpoint available in this workspace; it is intentionally not a DEMO release
 sign-off and no real-environment result is inferred from it.
 
 ```text
-Unit / contract tests:              PASS — local deterministic suite (274 passed)
+Unit / contract tests:              PASS — local deterministic suite (275 passed)
 Replay / no-lookahead:              PASS — deterministic replay/chronology tests
 Trendline/Fib/POC causality:        PASS — deterministic causal confluence tests
 Confluence bonus-only invariant:    PASS — deterministic score/gate tests
@@ -110,13 +110,36 @@ Financial-secret scan:              PASS — repository scan
 
 Use actual counts when available.
 
+## Windows MT5 readiness evidence
+
+Recorded from the controlled Windows operator run on 2026-09-19 against the
+runtime branch at commit `4ad6ab20c872270142fee9cd83479a298782e415`:
+
+```text
+Command: python -m goldswingtraderai
+Account mode: DEMO
+Symbol: XAUUSDm
+Identity pins: PASS (not configured; runtime identity check PASS)
+DEMO guard: PASS
+Broker writes: NOT PERFORMED (READINESS mode)
+Market data quality: STALE
+Quote age: 47298.8 seconds (> 10.0 second readiness threshold)
+H4/H1/M15/M5 completed candles: STALE
+```
+
+This proves the Windows terminal can be initialized and the connected account
+was positively identified as DEMO for a read-only readiness snapshot. It does
+not prove fresh market-data readiness, persistent PRIMARY operation, order
+lifecycle, restart reconciliation or failover. The stale-data result must be
+rechecked while the terminal is receiving fresh XAUUSDm ticks.
+
 ## Broker DEMO verification
 
 ```text
 Final persistent runtime wired:     SOFTWARE FOUNDATION PASS; LIVE EVIDENCE PENDING
-Connected account DEMO verified:    PENDING
-DEMO Guard PASS:                    PENDING
-Account/symbol verification:        PENDING
+Connected account DEMO verified:    PARTIAL PASS — readiness log; lifecycle pending
+DEMO Guard PASS:                    PARTIAL PASS — readiness log; lifecycle pending
+Account/symbol verification:        PARTIAL PASS — XAUUSDm; freshness stale
 Order lifecycle:                    PENDING
 One-shot duplicate prevention:      PENDING
 Ambiguous ACK reconciliation:       PENDING
