@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
+from pathlib import Path
 import sqlite3
 
 import pytest
@@ -79,6 +80,16 @@ def test_runtime_checkpoint_roundtrip_restores_typed_state_and_event_history(tmp
     memory = fresh_store.load_record("strategy_memory", "gold-v1")
     assert memory is not None
     assert memory.payload == {"quality": 0.71, "sample_count": 14}
+
+
+def test_state_store_closes_sqlite_handles_before_database_family_cleanup(tmp_path) -> None:
+    database = tmp_path / "closeable.db"
+    store = StateStore(database)
+    store.save_record("test", "one", {"value": 1})
+    store.checkpoint_database()
+
+    for path in (database, Path(f"{database}-wal"), Path(f"{database}-shm")):
+        path.unlink(missing_ok=True)
 
 
 def test_checkpoint_export_blocks_financial_authority_secret_and_leaves_no_artifact(tmp_path) -> None:
