@@ -99,6 +99,14 @@ Controller tests protect one-winner contention, monotonic epochs, stale-holder d
 
 Public CI can verify the read adapter with fake MT5 modules, but cannot prove the intended Windows terminal/broker actually returns equivalent account/symbol/open-position facts. That evidence remains controlled external work.
 
+
+Windows readiness result: the controlled operator run initialized the MT5
+terminal, resolved XAUUSDm, positively verified DEMO mode and completed a
+read-only snapshot without broker writes. The snapshot was marked STALE because
+the quote and completed candles exceeded the freshness threshold. Fresh-data,
+persistent-runtime, order-lifecycle, restart-reconciliation and failover proof
+remain separate release gates.
+
 Fresh-machine certification must use a real restored checkpoint plus current broker positions/orders/deals and prove no stale replay before READY.
 
 ## Evidence reporting
@@ -109,7 +117,7 @@ Market read contracts           PASS
 Live-recovery adapter software  PASS
 State/checkpoint/backup         PASS
 Controller/startup recovery     PASS
-Real Windows MT5 recovery read  PENDING/PASS
+Real Windows MT5 recovery read  PARTIAL PASS — READINESS DEMO snapshot; stale freshness
 Fresh-machine broker reconcile  PENDING/PASS
 Cross-laptop coordination       PENDING/PASS
 Remote backup publication       PENDING/PASS
