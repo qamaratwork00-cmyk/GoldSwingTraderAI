@@ -88,6 +88,14 @@ _SOURCE_AREAS = (
     "tests/",
 )
 
+# The legacy contract excludes the independent Documents manual verifier and
+# its test. The old docs/ tree remains unchanged while the new manual is
+# checked by scripts/verify_documents_manual.py.
+_NEW_MANUAL_FILES = {
+    "scripts/verify_documents_manual.py",
+    "tests/test_documents_manual_contract.py",
+}
+
 
 def _is_redirect(path: Path) -> bool:
     """Return whether a Markdown file is an intentional compatibility redirect."""
@@ -161,9 +169,13 @@ def check_documentation(repository_root: Path) -> list[str]:
             errors.append(f"source module is not named in documentation: {relative}")
     for path in sorted((root / "scripts").glob("*.py")):
         relative = path.relative_to(root).as_posix()
+        if relative in _NEW_MANUAL_FILES:
+            continue
         if relative not in all_documentation and path.name not in all_documentation:
             errors.append(f"script is not named in documentation: {relative}")
     for path in sorted((root / "tests").glob("test_*.py")):
+        if path.relative_to(root).as_posix() in _NEW_MANUAL_FILES:
+            continue
         if path.name not in all_documentation:
             errors.append(f"test module is not named in documentation: {path.name}")
 
