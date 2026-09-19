@@ -523,11 +523,11 @@ Every material change should be reviewed in this order:
 
 The minimum verification command set for a code checkpoint is:
 
-    PYTHONPATH=src python -m pytest -q
-    PYTHONPATH=src python -m ruff check src tests scripts
-    PYTHONPATH=src python -m compileall -q src tests scripts
+    PYTHONPATH=src:. python -m pytest -q
+    PYTHONPATH=src:. python -m ruff check src tests scripts
+    PYTHONPATH=src:. python -m compileall -q src tests scripts
     git diff --check
-    PYTHONPATH=src python scripts/scan_financial_secrets.py .
+    PYTHONPATH=src:. python scripts/scan_financial_secrets.py .
 
 The CI workflow additionally runs the source/script annotation contract and
 publishes a `pytest-cov` report as an artifact. Coverage is an engineering
