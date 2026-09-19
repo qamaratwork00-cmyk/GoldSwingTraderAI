@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Candle Structure and Price Behaviour
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.3-implementation  
-**Authority:** Candle anatomy, sequence behaviour, swing formation, protected structure, BOS/MSS classification, displacement, rejection, compression/expansion and exhaustion evidence.  
+**Status:** PROVISIONAL — CAUSAL STRUCTURE CONTRACT
+**Version:** 0.4-implementation
+**Authority:** Candle anatomy, sequence behaviour, swing formation, protected structure, BOS/MSS classification, displacement, rejection, compression/expansion and exhaustion evidence.
 **Depends on:** `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
@@ -21,7 +21,36 @@ The Candle/Structure desk is market intelligence only. It never sizes lots, gran
 6. **Candidate/early evidence is distinct from confirmed/protected authority.**
 7. **No lookahead.** Replay cannot expose a swing/event before it became knowable.
 
-## Current implementation checkpoint
+## Causal structure pipeline
+
+The structure desk is a chronology-preserving transformation. It explains how
+raw completed candles become graduated evidence without turning a provisional
+observation into a future-looking fact.
+
+```mermaid
+flowchart TB
+    CANDLES["Completed chronological candles — one timeframe"] --> ANATOMY["Candle anatomy + normalized range/body/wicks"]
+    ANATOMY --> SEQUENCE["Sequence state — continuation / rejection / compression / expansion"]
+    SEQUENCE --> SWING["Swing lifecycle — candidate → confirmed → protected"]
+    SWING --> BREAK["Break lifecycle — probe → qualified → BOS/MSS → failed"]
+    BREAK --> REPORT["StructureReport — state + evidence + coverage + timestamps"]
+    REPORT --> CONSUMERS["Technical / liquidity / strategies / management"]
+```
+
+The key timestamp is confirmed_at, not only pivot_time. A pivot may be located
+at an earlier candle but must remain invisible to a replay prefix until the
+later confirmation candle has closed. This is the rule that keeps live and
+prior decisions honest.
+
+| Output | Consumer use | Authority limit |
+|---|---|---|
+| candle anatomy | normalize quality and expansion/rejection clues | not a trade command |
+| sequence state | describe local price behaviour | not a universal gate |
+| confirmed/protected swing | geometry for structure, invalidation or trailing context | does not place stops |
+| BOS/MSS maturity | family-specific directional evidence | not automatic opposite authority |
+| coverage/unknown | explain data sufficiency | unknown cannot be silently bullish/bearish |
+
+## Implementation ownership and proof boundary
 
 Implemented in:
 
@@ -176,7 +205,7 @@ MarketSnapshot CandleSeries
 
 The Structure desk does not query MT5 independently.
 
-## Replay requirements and current foundation
+## Replay requirements and implementation boundary
 
 Phase-10 bar-close replay reuses production Intelligence/Decision semantics on chronological prefixes. Structure parity requires:
 
@@ -203,7 +232,7 @@ Latest Event     QUALIFIED_BREAK ↑
 Protected Low    4312.40
 ```
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic coverage includes:
 

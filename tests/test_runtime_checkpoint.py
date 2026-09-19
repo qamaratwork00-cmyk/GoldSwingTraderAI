@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 import json
 import sqlite3
 
@@ -138,6 +139,51 @@ def test_checkpoint_import_detects_manifest_tamper(tmp_path) -> None:
     manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
     with pytest.raises(RuntimeCheckpointError, match="manifest hash mismatch"):
+        import_runtime_checkpoint(checkpoint)
+
+
+def test_checkpoint_import_rejects_coercive_record_metadata_even_with_valid_hashes(
+    tmp_path,
+) -> None:
+    source, _, _ = _seed_runtime(tmp_path / "source.db")
+    checkpoint = tmp_path / "checkpoint"
+    export_runtime_checkpoint(
+        source,
+        checkpoint,
+        source_label="test",
+        source_version="v1",
+        created_at_utc=NOW,
+    )
+
+    records_path = checkpoint / "records.jsonl"
+    records = [json.loads(line) for line in records_path.read_text(encoding="utf-8").splitlines()]
+    records[0]["schema_version"] = "1"
+    records_text = "\n".join(
+        json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        for item in records
+    ) + "\n"
+    records_path.write_text(records_text, encoding="utf-8")
+
+    manifest_path = checkpoint / "checkpoint_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["records_sha256"] = sha256(records_text.encode("utf-8")).hexdigest()
+    base_manifest = {
+        key: value for key, value in manifest.items() if key != "checkpoint_sha256"
+    }
+    manifest["checkpoint_sha256"] = sha256(
+        json.dumps(
+            base_manifest,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeCheckpointError, match="schema version must be an integer"):
         import_runtime_checkpoint(checkpoint)
 
 

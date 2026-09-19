@@ -57,6 +57,10 @@ class DashboardData:
     learning_state: str = "PENDING"
     backup_state: str = "PENDING"
     system_health: str = "HEALTHY"
+    discovery_state: str = "PENDING"
+    candidate: str | None = None
+    candidate_stage: str | None = None
+    suppression_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.utc_time.tzinfo is None or self.utc_time.utcoffset() is None:
@@ -170,7 +174,13 @@ def render_dashboard(data: DashboardData, *, emoji: bool = True, width: int = 78
             divider,
             _fit(
                 f"{marker['learning']} Learning {data.learning_state} | "
+                f"Discovery {data.discovery_state} | Candidate {data.candidate or '—'} "
+                f"({data.candidate_stage or '—'})",
+                width,
+            ),
+            _fit(
                 f"{marker['state']} Backup {data.backup_state} | "
+                f"Suppression {data.suppression_reason or '—'} | "
                 f"{marker['health']} Health {data.system_health}",
                 width,
             ),

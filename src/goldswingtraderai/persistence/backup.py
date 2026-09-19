@@ -177,7 +177,7 @@ def _load_catalog_optional(root: Path, *, verify_checkpoints: bool) -> BackupCat
     expected_hash = _hash_payload({key: value for key, value in raw.items() if key != "catalog_sha256"})
 
     try:
-        schema = int(raw["schema_version"])
+        schema = _required_int(raw["schema_version"], "backup catalog schema version")
         if schema != BACKUP_CATALOG_SCHEMA_VERSION:
             raise BackupCatalogError("unsupported backup catalog schema version")
         entries_raw = raw["entries"]
@@ -186,9 +186,9 @@ def _load_catalog_optional(root: Path, *, verify_checkpoints: bool) -> BackupCat
         entries = tuple(_parse_entry(item) for item in entries_raw)
         catalog = BackupCatalog(
             schema_version=schema,
-            updated_at_utc=_parse_utc(str(raw["updated_at_utc"])),
+            updated_at_utc=_parse_utc(raw["updated_at_utc"]),
             entries=entries,
-            catalog_sha256=_require_sha256(str(raw["catalog_sha256"]), "catalog hash"),
+            catalog_sha256=_require_sha256(raw["catalog_sha256"], "catalog hash"),
         )
     except KeyError as exc:
         raise BackupCatalogError("backup catalog is missing required fields") from exc
@@ -269,14 +269,14 @@ def _parse_entry(value: Any) -> BackupCatalogEntry:
     if not isinstance(value, dict):
         raise BackupCatalogError("backup catalog entry must be an object")
     try:
-        name = str(value["name"])
+        name = _required_text(value["name"], "backup checkpoint name")
         _validate_entry_name(name)
         entry = BackupCatalogEntry(
             name=name,
-            created_at_utc=_parse_utc(str(value["created_at_utc"])),
-            checkpoint_sha256=_require_sha256(str(value["checkpoint_sha256"]), "checkpoint hash"),
-            records_count=int(value["records_count"]),
-            events_count=int(value["events_count"]),
+            created_at_utc=_parse_utc(value["created_at_utc"]),
+            checkpoint_sha256=_require_sha256(value["checkpoint_sha256"], "checkpoint hash"),
+            records_count=_required_int(value["records_count"], "backup record count"),
+            events_count=_required_int(value["events_count"], "backup event count"),
         )
     except KeyError as exc:
         raise BackupCatalogError("backup catalog entry is missing fields") from exc
@@ -312,7 +312,9 @@ def _validate_entry_name(name: str) -> None:
         raise BackupCatalogError("backup checkpoint name must be a basename")
 
 
-def _parse_utc(value: str) -> datetime:
+def _parse_utc(value: Any) -> datetime:
+    if not isinstance(value, str):
+        raise BackupCatalogError("backup catalog timestamp must be a string")
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError as exc:
@@ -328,7 +330,24 @@ def _require_utc(value: datetime) -> None:
         raise BackupCatalogError("backup timestamps must be UTC")
 
 
-def _require_sha256(value: str, label: str) -> str:
+def _required_text(value: Any, label: str) -> str:
+    if not isinstance(value, str):
+        raise BackupCatalogError(f"{label} must be a string")
+    cleaned = value.strip()
+    if not cleaned:
+        raise BackupCatalogError(f"{label} cannot be empty")
+    return cleaned
+
+
+def _required_int(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise BackupCatalogError(f"{label} must be an integer")
+    return value
+
+
+def _require_sha256(value: Any, label: str) -> str:
+    if not isinstance(value, str):
+        raise BackupCatalogError(f"{label} must be a string")
     if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
         raise BackupCatalogError(f"{label} must be lowercase SHA-256 hex")
     return value

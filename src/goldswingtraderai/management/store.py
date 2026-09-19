@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from math import isfinite
 from typing import Any
 
 from goldswingtraderai.decisions.trade_plan import PlanTarget, TargetRole
@@ -67,11 +68,11 @@ def _target_from_payload(payload: Any) -> PlanTarget | None:
         raise StateIntegrityError("invalid persisted PlanTarget")
     try:
         return PlanTarget(
-            role=TargetRole(str(payload["role"])),
-            price=float(payload["price"]),
-            quality=float(payload["quality"]),
-            source=str(payload["source"]),
-            rr=float(payload["rr"]),
+            role=TargetRole(_required_text(payload["role"], "target role")),
+            price=_required_float(payload["price"], "target price"),
+            quality=_required_float(payload["quality"], "target quality"),
+            source=_required_text(payload["source"], "target source"),
+            rr=_required_float(payload["rr"], "target rr"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StateIntegrityError("invalid persisted PlanTarget") from exc
@@ -105,26 +106,64 @@ def _trade_to_payload(trade: ManagedTrade) -> dict[str, Any]:
 def _trade_from_payload(payload: dict[str, Any]) -> ManagedTrade:
     try:
         return ManagedTrade(
-            trade_id=EntityId.parse(str(payload["trade_id"])),
-            position_ticket=int(payload["position_ticket"]),
-            plan_id=EntityId.parse(str(payload["plan_id"])),
-            opportunity_id=EntityId.parse(str(payload["opportunity_id"])),
-            episode_id=EntityId.parse(str(payload["episode_id"])),
-            symbol=str(payload["symbol"]),
-            direction=Direction(str(payload["direction"])),
-            volume=float(payload["volume"]),
-            entry_price=float(payload["entry_price"]),
-            original_stop=float(payload["original_stop"]),
-            original_r_price=float(payload["original_r_price"]),
-            current_stop=float(payload["current_stop"]),
-            broker_tp=None if payload.get("broker_tp") is None else float(payload["broker_tp"]),
+            trade_id=EntityId.parse(_required_text(payload["trade_id"], "trade_id")),
+            position_ticket=_required_int(payload["position_ticket"], "position_ticket"),
+            plan_id=EntityId.parse(_required_text(payload["plan_id"], "plan_id")),
+            opportunity_id=EntityId.parse(
+                _required_text(payload["opportunity_id"], "opportunity_id")
+            ),
+            episode_id=EntityId.parse(_required_text(payload["episode_id"], "episode_id")),
+            symbol=_required_text(payload["symbol"], "symbol"),
+            direction=Direction(_required_text(payload["direction"], "direction")),
+            volume=_required_float(payload["volume"], "volume"),
+            entry_price=_required_float(payload["entry_price"], "entry_price"),
+            original_stop=_required_float(payload["original_stop"], "original_stop"),
+            original_r_price=_required_float(payload["original_r_price"], "original_r_price"),
+            current_stop=_required_float(payload["current_stop"], "current_stop"),
+            broker_tp=_optional_float(payload.get("broker_tp")),
             primary_target=_target_from_payload(payload.get("primary_target")),
             expansion_target=_target_from_payload(payload.get("expansion_target")),
             runner_candidate=_target_from_payload(payload.get("runner_candidate")),
             active_runner_target=_target_from_payload(payload.get("active_runner_target")),
-            objective_stage=ObjectiveStage(str(payload["objective_stage"])),
-            opened_at_utc=datetime.fromisoformat(str(payload["opened_at_utc"])),
-            updated_at_utc=datetime.fromisoformat(str(payload["updated_at_utc"])),
+            objective_stage=ObjectiveStage(
+                _required_text(payload["objective_stage"], "objective_stage")
+            ),
+            opened_at_utc=_required_datetime(payload["opened_at_utc"]),
+            updated_at_utc=_required_datetime(payload["updated_at_utc"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StateIntegrityError("invalid persisted ManagedTrade") from exc
+
+
+def _required_text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise StateIntegrityError(f"persisted {label} must be non-empty text")
+    return value
+
+
+def _required_int(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise StateIntegrityError(f"persisted {label} must be an integer")
+    return value
+
+
+def _required_float(value: Any, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise StateIntegrityError(f"persisted {label} must be numeric")
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise StateIntegrityError(f"persisted {label} must be finite")
+    return parsed
+
+
+def _optional_float(value: Any) -> float | None:
+    return None if value is None else _required_float(value, "optional float")
+
+
+def _required_datetime(value: Any) -> datetime:
+    if not isinstance(value, str):
+        raise StateIntegrityError("persisted managed-trade timestamp must be an ISO-8601 string")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise StateIntegrityError("invalid persisted managed-trade timestamp") from exc

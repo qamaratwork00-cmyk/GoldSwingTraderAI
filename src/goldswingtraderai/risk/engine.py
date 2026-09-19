@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from math import ceil, floor
+from math import ceil, floor, isfinite
 
 from goldswingtraderai.decisions.trade_plan import PlanState, TradePlan
 from goldswingtraderai.domain.enums import HardDecision
@@ -54,6 +54,24 @@ class ProfilePolicy:
     daily_lock_pct: float
     sizing_mode: SizingMode
 
+    def __post_init__(self) -> None:
+        values = (
+            self.normal_low_pct,
+            self.normal_high_pct,
+            self.elevated_high_pct,
+            self.hard_ceiling_pct,
+            self.daily_lock_pct,
+        )
+        if any(not isfinite(value) for value in values):
+            raise ValueError("risk policy percentages must be finite")
+        if not (
+            0 <= self.normal_low_pct <= self.normal_high_pct
+            <= self.elevated_high_pct <= self.hard_ceiling_pct
+        ):
+            raise ValueError("risk policy bands are invalid")
+        if self.daily_lock_pct <= 0:
+            raise ValueError("daily loss lock must be positive")
+
     @property
     def target_pct(self) -> float:
         return (self.normal_low_pct + self.normal_high_pct) / 2.0
@@ -71,7 +89,12 @@ class RiskFriction:
     commission_per_lot: float = 0.0
 
     def __post_init__(self) -> None:
-        if self.slippage_reserve_ticks < 0 or self.commission_per_lot < 0:
+        if (
+            not isfinite(self.slippage_reserve_ticks)
+            or not isfinite(self.commission_per_lot)
+            or self.slippage_reserve_ticks < 0
+            or self.commission_per_lot < 0
+        ):
             raise ValueError("risk friction cannot be negative")
 
 
@@ -97,7 +120,9 @@ class RiskContext:
     broker_required_margin: float | None = None
 
     def __post_init__(self) -> None:
-        if self.broker_required_margin is not None and self.broker_required_margin < 0:
+        if self.broker_required_margin is not None and (
+            not isfinite(self.broker_required_margin) or self.broker_required_margin < 0
+        ):
             raise ValueError("broker required margin cannot be negative")
 
 

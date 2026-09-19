@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from math import isfinite
 
 from goldswingtraderai.decisions.opportunity import Opportunity
 from goldswingtraderai.decisions.snapshot import DecisionConfig, DecisionSnapshot, build_decision_snapshot
@@ -50,7 +51,7 @@ class ReplayDataset:
     realism: ReplayRealism = ReplayRealism.BAR_CLOSE
 
     def __post_init__(self) -> None:
-        if self.spread_price < 0:
+        if not isfinite(self.spread_price) or self.spread_price < 0:
             raise ValueError("replay spread cannot be negative")
         timeframes = tuple(item.timeframe for item in self.series)
         required = {Timeframe.H4, Timeframe.H1, Timeframe.M15, Timeframe.M5}

@@ -9,6 +9,7 @@ mandatory before trading authority can become READY.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -268,12 +269,12 @@ def _event_payload(event: StoredEvent) -> dict[str, Any]:
 def _parse_record(payload: dict[str, Any]) -> StoredRecord:
     try:
         return StoredRecord(
-            namespace=_required_text(str(payload["namespace"]), "record namespace"),
-            key=_required_text(str(payload["key"]), "record key"),
-            schema_version=int(payload["schema_version"]),
+            namespace=_required_text(payload["namespace"], "record namespace"),
+            key=_required_text(payload["key"], "record key"),
+            schema_version=_required_int(payload["schema_version"], "record schema version"),
             payload=_required_object(payload["payload"], "record payload"),
-            checksum=_require_sha256(str(payload["checksum"]), "record checksum"),
-            updated_at_utc=_parse_utc(str(payload["updated_at_utc"]), "record timestamp"),
+            checksum=_require_sha256(payload["checksum"], "record checksum"),
+            updated_at_utc=_parse_utc(payload["updated_at_utc"], "record timestamp"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeCheckpointError("invalid runtime checkpoint record") from exc
@@ -282,13 +283,13 @@ def _parse_record(payload: dict[str, Any]) -> StoredRecord:
 def _parse_event(payload: dict[str, Any]) -> StoredEvent:
     try:
         return StoredEvent(
-            event_id=int(payload["event_id"]),
-            namespace=_required_text(str(payload["namespace"]), "event namespace"),
-            key=_required_text(str(payload["key"]), "event key"),
-            event_type=_required_text(str(payload["event_type"]), "event type"),
+            event_id=_required_int(payload["event_id"], "event id"),
+            namespace=_required_text(payload["namespace"], "event namespace"),
+            key=_required_text(payload["key"], "event key"),
+            event_type=_required_text(payload["event_type"], "event type"),
             payload=_required_object(payload["payload"], "event payload"),
-            checksum=_require_sha256(str(payload["checksum"]), "event checksum"),
-            created_at_utc=_parse_utc(str(payload["created_at_utc"]), "event timestamp"),
+            checksum=_require_sha256(payload["checksum"], "event checksum"),
+            created_at_utc=_parse_utc(payload["created_at_utc"], "event timestamp"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeCheckpointError("invalid runtime checkpoint event") from exc
@@ -296,8 +297,11 @@ def _parse_event(payload: dict[str, Any]) -> StoredEvent:
 
 def _parse_manifest(payload: dict[str, Any]) -> RuntimeCheckpointManifest:
     try:
-        schema_version = int(payload["schema_version"])
-        database_schema_version = int(payload["database_schema_version"])
+        schema_version = _required_int(payload["schema_version"], "checkpoint schema version")
+        database_schema_version = _required_int(
+            payload["database_schema_version"],
+            "checkpoint database schema version",
+        )
         if schema_version != RUNTIME_CHECKPOINT_SCHEMA_VERSION:
             raise RuntimeCheckpointError("unsupported runtime checkpoint schema version")
         if database_schema_version != DATABASE_SCHEMA_VERSION:
@@ -305,18 +309,16 @@ def _parse_manifest(payload: dict[str, Any]) -> RuntimeCheckpointManifest:
         manifest = RuntimeCheckpointManifest(
             schema_version=schema_version,
             database_schema_version=database_schema_version,
-            source_label=_required_text(str(payload["source_label"]), "source label"),
-            source_version=_required_text(str(payload["source_version"]), "source version"),
-            created_at_utc=_parse_utc(str(payload["created_at_utc"]), "checkpoint timestamp"),
-            records_file=str(payload["records_file"]),
-            records_sha256=_require_sha256(str(payload["records_sha256"]), "records hash"),
-            records_count=int(payload["records_count"]),
-            events_file=str(payload["events_file"]),
-            events_sha256=_require_sha256(str(payload["events_sha256"]), "events hash"),
-            events_count=int(payload["events_count"]),
-            checkpoint_sha256=_require_sha256(
-                str(payload["checkpoint_sha256"]), "checkpoint hash"
-            ),
+            source_label=_required_text(payload["source_label"], "source label"),
+            source_version=_required_text(payload["source_version"], "source version"),
+            created_at_utc=_parse_utc(payload["created_at_utc"], "checkpoint timestamp"),
+            records_file=_required_text(payload["records_file"], "records filename"),
+            records_sha256=_require_sha256(payload["records_sha256"], "records hash"),
+            records_count=_required_int(payload["records_count"], "records count"),
+            events_file=_required_text(payload["events_file"], "events filename"),
+            events_sha256=_require_sha256(payload["events_sha256"], "events hash"),
+            events_count=_required_int(payload["events_count"], "events count"),
+            checkpoint_sha256=_require_sha256(payload["checkpoint_sha256"], "checkpoint hash"),
         )
     except KeyError as exc:
         raise RuntimeCheckpointError("runtime checkpoint manifest is missing fields") from exc
@@ -392,7 +394,7 @@ def _parse_jsonl(text: str, label: str) -> tuple[dict[str, Any], ...]:
     return tuple(items)
 
 
-def _jsonl(items) -> str:
+def _jsonl(items: Iterable[dict[str, Any]]) -> str:
     lines = [_canonical_json(item) for item in items]
     return "" if not lines else "\n".join(lines) + "\n"
 
@@ -413,14 +415,24 @@ def _required_object(value: Any, label: str) -> dict[str, Any]:
     return dict(value)
 
 
-def _required_text(value: str, label: str) -> str:
+def _required_text(value: Any, label: str) -> str:
+    if not isinstance(value, str):
+        raise RuntimeCheckpointError(f"{label} must be a string")
     cleaned = value.strip()
     if not cleaned:
         raise RuntimeCheckpointError(f"{label} cannot be empty")
     return cleaned
 
 
-def _parse_utc(value: str, label: str) -> datetime:
+def _required_int(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RuntimeCheckpointError(f"{label} must be an integer")
+    return value
+
+
+def _parse_utc(value: Any, label: str) -> datetime:
+    if not isinstance(value, str):
+        raise RuntimeCheckpointError(f"{label} must be a string")
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError as exc:
@@ -436,7 +448,9 @@ def _require_utc(value: datetime) -> None:
         raise RuntimeCheckpointError("checkpoint timestamps must be UTC")
 
 
-def _require_sha256(value: str, label: str) -> str:
+def _require_sha256(value: Any, label: str) -> str:
+    if not isinstance(value, str):
+        raise RuntimeCheckpointError(f"{label} must be a string")
     if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
         raise RuntimeCheckpointError(f"{label} must be lowercase SHA-256 hex")
     return value

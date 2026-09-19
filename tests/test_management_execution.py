@@ -190,3 +190,37 @@ def test_verified_exit_clears_managed_trade(tmp_path) -> None:
     )
     assert result is None
     assert repository.load() is None
+
+
+def test_verified_management_result_rejects_intent_for_another_position(tmp_path) -> None:
+    trade = _trade()
+    repository = ManagedTradeRepository(StateStore(tmp_path / "state.db"), "scope")
+    repository.save(trade)
+    decision = _decision(TradeManagerAction.RUNNER)
+    intent = management_intent_from_decision(
+        trade,
+        decision,
+        account_login=123456,
+        account_server="Broker-Demo",
+        controller_id=new_controller_id(),
+        fencing_epoch=1,
+        created_at_utc=NOW,
+        filling_mode=1,
+    )
+    assert intent is not None
+    mismatched = replace(
+        intent,
+        position_ticket=9999,
+        state=IntentState.ACCEPTED_VERIFIED,
+        submit_attempts=1,
+    )
+
+    with pytest.raises(ValueError, match="identity"):
+        apply_verified_management_result(
+            repository,
+            trade,
+            decision,
+            mismatched,
+            verified_at_utc=NOW,
+        )
+    assert repository.load() == trade

@@ -1,15 +1,48 @@
 # GoldSwingTraderAI — Session Context
 
-**Status:** PROVISIONAL  
-**Version:** 0.2-implementation-baseline  
-**Authority:** Asia/London/New York session context as soft market evidence.  
+**Status:** PROVISIONAL
+**Version:** 0.3-implementation-baseline
+**Authority:** Asia/London/New York session context as soft market evidence.
 **Depends on:** `MARKET_DATA_AND_HISTORY.md`, `TECHNICAL_STRUCTURE_AND_LEVELS.md`, `FUNDAMENTAL_AND_NEWS.md`
 
 ## Purpose
 
 This document defines session context as market evidence. It does **not** own hard OPEN/CLOSED/PRE_CLOSE/LOSS_LOCKED permission; those states belong to `../30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md`.
 
+## Session-context flow
+
+Session context is a timezone-safe description of participation and range
+behaviour. It is not the broker schedule and cannot grant permission.
+
+```mermaid
+flowchart TB
+    TIME["UTC completed-candle timestamps"] --> ZONE["zoneinfo conversion — London/New York DST-safe"]
+    ZONE --> LABEL["Session label — Asia / London / New York / overlap / off-hours"]
+    LABEL --> RANGE["Chronological session high/low/range — current + previous where knowable"]
+    RANGE --> REPORT["SessionReport — context + holiday flag + coverage"]
+    REPORT --> EVIDENCE["Technical / liquidity / strategy context"]
+    REPORT --> HARD["Hard session authority — risk/permissions uses broker schedule separately"]
+```
+
+The key distinction is:
+
+| Fact | Owned here? | Meaning |
+|---|---:|---|
+| session label and overlap | yes | descriptive market context |
+| session high/low/range | yes | chronological location/liquidity context |
+| holiday context | yes | participation context |
+| broker open/closed/PRE_CLOSE | no | hard schedule/permission authority |
+| daily loss/cooldown | no | risk state authority |
+
 ## Session model
+
+## Source ownership and tests
+
+`intelligence/session.py` owns timezone conversion, session labels and
+chronological session ranges; `intelligence/snapshot.py` attaches the result to
+the shared intelligence snapshot. `tests/test_intelligence_snapshot.py`
+proves DST-aware classification and shared-snapshot integration. Hard broker
+schedule permission remains in `risk/permissions.py` and its permission suite.
 
 The market-intelligence layer classifies:
 
@@ -108,7 +141,7 @@ London Range  EXPANDING
 Context       ACTIVE
 ```
 
-## Tests required / current evidence
+## Tests required and evidence boundary
 
 Required:
 - timezone/DST conversion;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from math import isfinite
 
 from goldswingtraderai.domain.enums import DataQuality, Timeframe
 from goldswingtraderai.domain.ids import new_snapshot_id
@@ -26,6 +27,14 @@ _TIMEFRAME_SECONDS: dict[Timeframe, int] = {
     Timeframe.M1: 60,
 }
 
+_CANONICAL_TIMEFRAME_ORDER = (
+    Timeframe.H4,
+    Timeframe.H1,
+    Timeframe.M15,
+    Timeframe.M5,
+    Timeframe.M1,
+)
+
 
 class MarketSnapshotBuilder:
     """Build one reusable verified snapshot from a single MT5 read pass."""
@@ -40,10 +49,12 @@ class MarketSnapshotBuilder:
         self._reader = reader
         self._history_bars = dict(history_bars or DEFAULT_HISTORY_BARS)
         self._max_quote_age_seconds = float(max_quote_age_seconds)
-        if self._max_quote_age_seconds <= 0:
+        if not isfinite(self._max_quote_age_seconds) or self._max_quote_age_seconds <= 0:
             raise ValueError("max_quote_age_seconds must be positive")
         if not self._history_bars:
             raise ValueError("history_bars cannot be empty")
+        if any(timeframe not in _TIMEFRAME_SECONDS for timeframe in self._history_bars):
+            raise ValueError("history_bars contains an unsupported timeframe")
         if any(count <= 0 for count in self._history_bars.values()):
             raise ValueError("history bar counts must be positive")
 
@@ -63,9 +74,15 @@ class MarketSnapshotBuilder:
         symbol_spec = self._reader.symbol_spec(symbol)
         quote = self._reader.quote(symbol)
 
+        ordered_timeframes = tuple(
+            timeframe
+            for timeframe in _CANONICAL_TIMEFRAME_ORDER
+            if timeframe in self._history_bars
+        )
         series = tuple(
             self._reader.completed_candles(symbol, timeframe, count)
-            for timeframe, count in self._history_bars.items()
+            for timeframe in ordered_timeframes
+            for count in (self._history_bars[timeframe],)
         )
         quality, issues = self._assess_quality(series, quote_age=quote.age_seconds(now), now_utc=now)
 

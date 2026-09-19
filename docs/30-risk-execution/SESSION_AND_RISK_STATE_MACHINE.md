@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Session and Risk State Machine
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.8-implementation  
-**Authority:** Hard market/session permission states, risk/system permission composition, news-safety states and state transitions.  
+**Status:** PROVISIONAL — PERMISSION STATE-MACHINE CONTRACT
+**Version:** 0.9-implementation
+**Authority:** Hard market/session permission states, risk/system permission composition, news-safety states and state transitions.
 **Depends on:** `RISK_CONTRACT.md`, `EXECUTION_AND_BROKER_SAFETY.md`, `../10-market-intelligence/FUNDAMENTAL_AND_NEWS.md`, `../10-market-intelligence/SESSION_CONTEXT.md`
 
 ## Core principle
@@ -11,7 +11,38 @@ Market state, risk state and system/execution safety are separate authorities. T
 
 This document owns **permission states**, not session-analysis quality, event-fact sourcing or daily-loss arithmetic.
 
-## Current implementation checkpoint
+## State and permission topology
+
+The state machine keeps market schedule, news safety, risk state and system
+health separate until the central permission composition. This avoids a
+holiday label or a high strategy score masquerading as broker permission.
+
+```mermaid
+flowchart TB
+    MARKET["Market schedule — OPEN / PRE_CLOSE / CLOSED / REOPEN_WARMUP"] --> COMPOSE["Permission composition"]
+    NEWS["News truth — CLEAR / BLACKOUT / UNKNOWN / WARMUP"] --> COMPOSE
+    RISK["Risk state — NORMAL / LOSS_LOCKED / COOLDOWN"] --> COMPOSE
+    SYSTEM["Data + account + position + controller"] --> COMPOSE
+    COMPOSE --> DECISION{"all required hard authorities pass?"}
+    DECISION -->|"no"| BLOCK["BLOCK or UNKNOWN — new entry fails closed"]
+    DECISION -->|"yes"| ALLOW["ALLOW candidate — ExecutionService still performs fresh checks"]
+    MARKET --> MANAGE["Open-trade management — PRE_CLOSE flatten has priority"]
+    NEWS --> MANAGE
+    RISK --> MANAGE
+```
+
+The same market/news/risk state can block a new entry while allowing safe
+management of an existing trade. PRE_CLOSE is the explicit exception: it
+requires governed flatten before the known XAU closure.
+
+| State family | Typical transitions | Effect on new entry | Effect on open trade |
+|---|---|---|---|
+| market schedule | OPEN → PRE_CLOSE → CLOSED → REOPEN_WARMUP → OPEN | block according to window/warmup | PRE_CLOSE requires flatten |
+| news safety | CLEAR ↔ BLACKOUT/UNKNOWN/WARMUP | block while unsafe | scheduled news alone does not force-close |
+| risk | NORMAL → LOSS_LOCKED/COOLDOWN → release | block until exact release criteria | management remains active where safe |
+| system/controller | healthy → BLOCKED/UNKNOWN | fail closed | preserve and reconcile unresolved state |
+
+## Implementation ownership and proof boundary
 
 Hard session/news permission is implemented in:
 
@@ -55,7 +86,11 @@ Important current behaviour:
 - severe post-news dislocation requires normalized execution conditions + one clean completed M5;
 - these permission outputs have no raw broker-write call themselves; the centralized Execution Gate owns final composition.
 
-Production broker-session schedule sourcing and external news-provider adapters remain integration work. The permission policy itself is implemented deterministically.
+The provider-neutral file handoff is implemented in `app/session_news.py` and
+the launcher can construct it from `GSTAI_SESSION_NEWS_FILE`. Production
+broker-session schedule sourcing, accepted external producer selection and
+credential operation remain integration work. The permission policy itself is
+implemented deterministically.
 
 ## Market/session permission states
 
@@ -259,7 +294,7 @@ Show as available:
 - REOPEN_WARMUP progress;
 - centralized Execution Permission result.
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic coverage includes:
 
@@ -272,13 +307,14 @@ Deterministic coverage includes:
 - required news truth failure;
 - severe post-news one-clean-M5 rule;
 - session/news permission composition;
+- provider-neutral snapshot schema/scope/freshness fail-closed behaviour;
 - PRE_CLOSE flatten propagation;
 - integration with centralized execution gate inputs.
 
 Still required for release evidence:
 
 - real broker-session schedule sourcing;
-- production news-provider integration;
+- production external news-provider operation and broker-session schedule sourcing;
 - controlled MT5 DEMO scheduled close/reopen/news observations;
 - failover/restart interaction under real broker conditions.
 

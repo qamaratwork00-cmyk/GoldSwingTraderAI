@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from math import isfinite
 
 from goldswingtraderai.domain.enums import (
     CandleSequenceState,
@@ -13,6 +15,7 @@ from goldswingtraderai.domain.enums import (
     TradeManagerAction,
 )
 from goldswingtraderai.domain.market import MarketSnapshot
+from goldswingtraderai.decisions.trade_plan import PlanTarget
 from goldswingtraderai.intelligence.liquidity import LiquidityPath
 from goldswingtraderai.intelligence.snapshot import IntelligenceSnapshot, TimeframeIntelligence
 from goldswingtraderai.management.models import (
@@ -43,6 +46,23 @@ class TradeManagerConfig:
     trail_buffer_atr: float = 0.12
 
     def __post_init__(self) -> None:
+        thresholds = (
+            self.protect_min_r,
+            self.trail_min_r,
+            self.runner_activation_distance_r,
+            self.trail_buffer_atr,
+            self.protect_structure_min,
+            self.exit_reversal_score,
+            self.exit_continuation_ceiling,
+            self.target_exhaustion_reversal,
+            self.target_exhaustion_continuation_ceiling,
+            self.runner_continuation_min,
+            self.runner_reversal_max,
+            self.runner_structure_min,
+            self.runner_path_min,
+        )
+        if any(not isfinite(value) for value in thresholds):
+            raise ValueError("management thresholds must be finite")
         if self.protect_min_r < 0 or self.trail_min_r <= self.protect_min_r:
             raise ValueError("management R thresholds are invalid")
         if self.runner_activation_distance_r < 0 or self.trail_buffer_atr <= 0:
@@ -325,7 +345,7 @@ def _current_r(trade: ManagedTrade, exit_price: float) -> float:
     return move / trade.original_r_price
 
 
-def _target_reached(trade: ManagedTrade, target, exit_price: float) -> bool:
+def _target_reached(trade: ManagedTrade, target: PlanTarget | None, exit_price: float) -> bool:
     if target is None:
         return False
     return _directional_distance(trade.direction, exit_price, target.price) <= 0
@@ -364,7 +384,7 @@ def _stop_references(
 def _multi_frame_score(
     intelligence: IntelligenceSnapshot,
     direction: Direction,
-    scorer,
+    scorer: Callable[[TimeframeIntelligence, Direction], float | None],
     weights: tuple[tuple[Timeframe, float], ...],
 ) -> float | None:
     parts: list[tuple[float | None, float]] = []

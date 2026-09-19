@@ -1,20 +1,22 @@
-"""GoldSwingTraderAI application bootstrap.
-
-Phase 2 connects to MT5 for read-only account, Gold symbol, quote and completed-candle
-facts. Irreversible broker writes are intentionally absent until the governed
-execution phase.
-"""
+"""GoldSwingTraderAI launcher and persistent runtime entry point."""
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import logging
 
 from goldswingtraderai import __version__
-from goldswingtraderai.config import ConfigError, Settings
+from goldswingtraderai.app.runtime import LiveStartupRuntime, SessionNewsProvider
+from goldswingtraderai.app.loop import PersistentRuntimeLoop, RuntimeLoopResult
+from goldswingtraderai.app.session_news import FileSessionNewsProvider
+from goldswingtraderai.config import ConfigError, RuntimeMode, Settings
 from goldswingtraderai.diagnostics.logging import configure_logging
 from goldswingtraderai.domain.enums import HardDecision
 from goldswingtraderai.domain.market import AccountFacts
+from goldswingtraderai.execution import CoordinationError
 from goldswingtraderai.market_data import MT5Reader, MarketDataError, MarketSnapshotBuilder
+from goldswingtraderai.operator import DashboardData, render_dashboard
+from goldswingtraderai.persistence import StateStoreError
 
 _LOG = logging.getLogger("goldswingtraderai.app")
 
@@ -117,6 +119,122 @@ def run_readiness(settings: Settings, reader: MT5Reader) -> int:
         reader.shutdown()
 
 
+def run_startup(
+    settings: Settings,
+    reader: MT5Reader,
+    *,
+    now_utc: datetime | None = None,
+    session_news_provider: SessionNewsProvider | None = None,
+) -> int:
+    """Run one bounded startup/recovery diagnostic and release all authorities.
+
+    The launcher uses :func:`run_persistent`; this helper remains useful for
+    deterministic operator diagnostics and compatibility with one-cycle tests.
+    """
+
+    runtime = LiveStartupRuntime(
+        settings,
+        reader,
+        session_news_provider=_resolve_session_news_provider(
+            settings,
+            session_news_provider,
+        ),
+    )
+    exit_code = 5
+    try:
+        result = runtime.start(now_utc=now_utc or datetime.now(timezone.utc))
+        traces = {
+            trace.name: {
+                "decision": trace.decision.value,
+                "reason": trace.reason,
+            }
+            for trace in result.authorities.traces
+        }
+        _LOG.info(
+            "integrated startup recovery evaluated",
+            extra={
+                "event": "STARTUP_RECOVERY_EVALUATED",
+                "context": {
+                    "scope": runtime.scope,
+                    "symbol": result.recovery_truth.snapshot.symbol,
+                    "recovery_state": result.recovery.state.value,
+                    "recovery_reason": result.recovery.reason,
+                    "authorities": traces,
+                    "controller": (
+                        None
+                        if result.recovery.controller_status is None
+                        else result.recovery.controller_status.reason
+                    ),
+                },
+            },
+        )
+        exit_code = {
+            "READY": 0,
+            "RECONCILING": 6,
+            "BLOCKED": 7,
+        }[result.recovery.state.value]
+    except (MarketDataError, StateStoreError, CoordinationError, ValueError, RuntimeError) as exc:
+        _LOG.error(
+            "integrated startup recovery failed",
+            extra={
+                "event": "STARTUP_RECOVERY_FAILED",
+                "context": {"error": str(exc), "error_type": type(exc).__name__},
+            },
+        )
+    finally:
+        try:
+            runtime.shutdown()
+        except Exception as exc:  # shutdown must remain visible and fail closed
+            _LOG.error(
+                "runtime shutdown could not release every authority",
+                extra={
+                    "event": "RUNTIME_SHUTDOWN_FAILED",
+                    "context": {"error": str(exc), "error_type": type(exc).__name__},
+                },
+            )
+            exit_code = 8
+    return exit_code
+
+
+def run_persistent(
+    settings: Settings,
+    reader: MT5Reader,
+    *,
+    session_news_provider: SessionNewsProvider | None = None,
+) -> RuntimeLoopResult:
+    """Run the controller-gated persistent M5 runtime until it stops safely."""
+
+    runtime = LiveStartupRuntime(
+        settings,
+        reader,
+        session_news_provider=_resolve_session_news_provider(
+            settings,
+            session_news_provider,
+        ),
+    )
+    return PersistentRuntimeLoop(runtime, dashboard_sink=_emit_dashboard).run()
+
+
+def _emit_dashboard(data: DashboardData) -> None:
+    """Render one authoritative read-only frame for the persistent terminal."""
+
+    print(render_dashboard(data), flush=True)
+
+
+def _resolve_session_news_provider(
+    settings: Settings,
+    provider: SessionNewsProvider | None,
+) -> SessionNewsProvider | None:
+    """Resolve the configured provider boundary without selecting a vendor."""
+
+    if provider is not None or settings.session_news_file is None:
+        return provider
+    return FileSessionNewsProvider(
+        settings.session_news_file,
+        freshness_ttl=timedelta(seconds=settings.session_news_ttl_seconds),
+    )
+
+
 def main() -> int:
     try:
         settings = Settings.from_env()
@@ -130,16 +248,26 @@ def main() -> int:
 
     configure_logging(settings.logging_level)
     _LOG.info(
-        "GoldSwingTraderAI starting read-only MT5 readiness",
+        "GoldSwingTraderAI starting",
         extra={
-            "event": "PHASE_2_READINESS_START",
+            "event": "RUNTIME_START",
             "context": {
                 "version": __version__,
                 **settings.safe_summary(),
-                "broker_write_implemented": False,
             },
         },
     )
+    if settings.runtime_mode is not RuntimeMode.READINESS:
+        result = run_persistent(settings, MT5Reader())
+        return {
+            "STOP_REQUESTED": 0,
+            "MAX_CYCLES": 0,
+            "INTERRUPTED": 0,
+            "STARTUP_NOT_READY": 6,
+            "CONTROLLER_LOST": 7,
+            "CYCLE_FAILED": 8,
+            "SHUTDOWN_FAILED": 9,
+        }[result.stop_reason.value]
     return run_readiness(settings, MT5Reader())
 
 

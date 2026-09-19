@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Fundamental and News Intelligence
 
-**Status:** PROVISIONAL — FACT NORMALIZATION IMPLEMENTED; PRODUCTION PROVIDER PENDING  
-**Version:** 0.4-implementation  
-**Authority:** Macro/fundamental Gold context, scheduled-event facts, provider freshness and holiday context.  
+**Status:** PROVISIONAL — EVENT AND NEWS FACT CONTRACT
+**Version:** 0.5-implementation
+**Authority:** Macro/fundamental Gold context, scheduled-event facts, provider freshness and holiday context.
 **Depends on:** `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
@@ -11,7 +11,31 @@ This document defines market-intelligence facts/opinions related to Gold fundame
 
 > **Macro/fundamental opinion is soft evidence. Event-risk permission is enforced by the risk/session safety layer.**
 
-## Current implementation checkpoint
+## Facts-to-permission pipeline
+
+News has two deliberately separate products: factual context for intelligence
+and a hard permission result for risk/session safety. Keeping the arrows
+separate prevents a calendar provider from becoming a hidden execution owner.
+
+```mermaid
+flowchart TB
+    PROVIDER["External producer or file handoff — raw event + session facts"] --> HANDOFF["app/session_news.py — scope + UTC + freshness validation"]
+    HANDOFF --> NORMALIZE["intelligence/news.py — tier + windows + provider health"]
+    NORMALIZE --> SNAPSHOT["IntelligenceSnapshot — NewsFacts for context"]
+    NORMALIZE --> PERMISSION["risk/permissions.py — CLEAR / BLACKOUT / UNKNOWN / WARMUP"]
+    SNAPSHOT --> DECISION["Strategy/decision context"]
+    PERMISSION --> GATE["Central execution gate — new-entry authority"]
+    GATE --> BROKER["Execution only if every hard authority passes"]
+```
+
+| Information | Owner | Can affect | Cannot affect |
+|---|---|---|---|
+| macro opinion | intelligence/news and future accepted macro adapters | soft BUY/SELL context and reasons | hard permission or direct writes |
+| scheduled event facts | intelligence/news | tier/window context and hard-permission input | strategy direction by itself |
+| provider health/freshness | handoff + normalizer | NEWS_SAFETY_UNKNOWN when required truth is unsafe | silent NEWS_CLEAR |
+| news permission | risk/permissions | new-entry gate and post-news warmup | automatic close of an open trade solely because news is scheduled |
+
+## Implementation ownership and proof boundary
 
 Provider-neutral scheduled-event normalization is implemented in:
 
@@ -25,7 +49,7 @@ Hard news permission is implemented separately in:
 src/goldswingtraderai/risk/permissions.py
 ```
 
-A production external calendar provider/credential adapter is **not yet selected/implemented**. The code therefore has the correct fact/permission contracts without pretending current live event truth is already wired.
+A provider-neutral live handoff adapter is implemented in `app/session_news.py` and is wired from the launcher through `GSTAI_SESSION_NEWS_FILE`. It validates account/server/symbol scope, UTC timestamps, freshness and event payloads before reusing the existing normalizer and permission owners. A production external calendar provider/credential adapter is **not selected here**; the handoff therefore does not pretend that a live commercial feed is already available. See [`SESSION_NEWS_PROVIDER_CONTRACT.md`](../30-risk-execution/SESSION_NEWS_PROVIDER_CONTRACT.md).
 
 Implemented normalized outputs include:
 
@@ -165,7 +189,7 @@ News Permission  NEWS_CLEAR / BLACKOUT / UNKNOWN / WARMUP
 
 Hard permission shown on the dashboard must come from the risk/session authority, not be recreated here.
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic coverage includes:
 
@@ -179,7 +203,9 @@ Deterministic coverage includes:
 - hard permission composition in `risk/permissions.py`;
 - severe post-news one-clean-M5 behaviour.
 
-Production provider/fallback and live DEMO event timing remain pending integration evidence.
+Deterministic coverage now also includes the provider-neutral file handoff, scope
+rejection, stale/future timestamps and fail-closed launcher boundary. Production
+provider/fallback and live DEMO event timing remain pending integration evidence.
 
 ## Explicit non-goals
 

@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Documentation Standard
 
-**Status:** PROVISIONAL  
-**Version:** 0.7-design  
+**Status:** FROZEN
+**Version:** 0.9-design
 **Authority:** Documentation placement, ownership, status and change-control rules.
 
 ## 1. Purpose
@@ -11,6 +11,14 @@ GoldSwingTraderAI is documentation-first.
 > **One behavioural or engineering rule has one authoritative home. Other documents link to it; they do not restate a competing version.**
 
 This standard prevents overlapping Markdown files from silently disagreeing about the same behaviour or implementation-quality rule.
+
+This document is itself the **frozen documentation-maintenance contract**.
+Freezing the standard does not freeze the project content: topic documents,
+source maps, tests, release evidence and operator guidance must continue to
+evolve as implementation advances. It freezes the rules for preserving prior
+meaning, synchronizing related documents, classifying status and recording
+material changes. Changing this standard requires an explicit governance
+decision; ordinary feature work must follow it.
 
 ## 2. Repository root and docs-root primary guides
 
@@ -126,6 +134,7 @@ PROVISIONAL
 FROZEN
 IMPLEMENTED
 VERIFIED
+SUPERSEDED
 ```
 
 - `DRAFT` — incomplete working document;
@@ -133,6 +142,9 @@ VERIFIED
 - `FROZEN` — approved behavioural or engineering contract for implementation;
 - `IMPLEMENTED` — corresponding behaviour/rule exists in code/process;
 - `VERIFIED` — exact implementation passed required executable validation.
+- `SUPERSEDED` — replaced by a named authoritative document or contract; keep
+  a redirect or traceable replacement note rather than silently deleting useful
+  meaning.
 
 Do not mark a document `IMPLEMENTED` because a plan exists, or `VERIFIED` because Markdown is complete.
 
@@ -163,6 +175,54 @@ Open questions
 ```
 
 Engineering standards may adapt this shape where states/market inputs are not relevant, but authority/status/change rules still apply.
+
+### 5.1 Self-contained explanation rule
+
+Each non-redirect document must be understandable without opening a second file
+to discover what the document is trying to explain. Cross-links are for
+authoritative detail, not for hiding the document's purpose or execution path.
+At minimum, the reader must be able to answer:
+
+| Reader question | Required answer in the document |
+|---|---|
+| Why does this exist? | Purpose, scope and explicit non-goals |
+| Where does it run? | Layer, owning modules and entry points |
+| What does it consume and produce? | Inputs, outputs, schemas or typed models |
+| What happens in order? | Lifecycle, state transitions and authority gates |
+| What can run independently? | Parallel/dataflow lanes and shared snapshot rules |
+| What happens when information is missing? | `UNKNOWN`, fail-closed, retry, quarantine or explicit error semantics |
+| How is it proven? | Source paths, executable tests and live-evidence boundary |
+| How is it operated or researched? | Dashboard/operator visibility and replay/calibration implications |
+
+### 5.2 Diagram and table rule
+
+Use a visual when prose alone would make ownership, parallelism, state
+transitions, dependency direction or event order difficult to verify.
+
+```mermaid
+flowchart TB
+    A["Authoritative contract"] --> B["Source ownership"]
+    B --> C["Executable tests"]
+    C --> D["Operator / research evidence"]
+    D --> E["Release audit"]
+```
+
+Choose the smallest visual that makes the relationship precise:
+
+| Relationship being explained | Preferred form |
+|---|---|
+| Exact field/module/authority mapping | Markdown table |
+| Ownership, dependency or dataflow | Mermaid flowchart |
+| Lifecycle or permission transitions | Mermaid state diagram |
+| Ordered events or handoff | Mermaid sequence/timeline |
+| Repeated numeric comparison | Table or chart with named units |
+| One fact or one short sequence | Prose; no decorative diagram |
+
+Diagram labels must use the same names as the code and authoritative contract.
+Do not draw “parallel” boxes unless the work really shares one immutable
+snapshot and has no hidden ordering dependency. A chart must identify its
+metric, time basis and data source; it must never imply live or broker evidence
+that has not been collected.
 
 ## 6. Avoiding duplication
 
@@ -263,3 +323,70 @@ It points to authoritative documents rather than inventing behavioural or engine
 ## 12. Reference-project rule
 
 External/prior projects may be studied for lessons, but GoldSwingTraderAI documentation describes GoldSwingTraderAI itself. Do not copy legacy project identity, compatibility constraints or architecture merely because they existed elsewhere.
+
+## 13. Preservation-first update rule
+
+Documentation updates are **append-first and contract-preserving**. A new
+implementation must not erase the earlier rationale, constraints, planned
+sequence, verification boundary or unresolved decision merely because the code
+has advanced.
+
+Preserve earlier information by placing its useful meaning in the correct
+design section. For example, if a read-only launcher becomes an integrated
+startup service, the startup section must still explain the read-only readiness
+path, the full startup sequence, the authority handoff and the evidence
+required before live use. The reader should learn the whole design in one
+place, not hunt through a dated status diary.
+
+Use status/evidence labels only where they prevent a dangerous
+misunderstanding. Do not turn normal topic documents into a chronology of
+patches. A superseded implementation detail may be named briefly inside the
+design explanation, but the document's main voice must remain the intended
+system contract.
+
+Normal documentation edits should not produce unexplained deletions. Before
+finalizing a docs change, inspect the diff for removed paragraphs, tables,
+checklists, prompt instructions and phase gates. A deletion is acceptable only
+when it is an exact duplicate, a security exposure, or the same information is
+moved into the correct authoritative section without loss of meaning.
+
+## 14. Complete-explanation rule
+
+Every non-redirect document must explain its subject from purpose to evidence.
+At the appropriate depth, include:
+
+- why the subject exists and what problem it solves;
+- where it sits in the end-to-end runtime and which documents surround it;
+- inputs, outputs, state transitions and authority boundaries;
+- what may run independently/parallel and what must remain ordered;
+- exact source modules, public entry points and important tests;
+- persistence/restart and failure/unknown behaviour;
+- operator/dashboard/research visibility where applicable;
+- a small flow or ownership diagram when relationships are easier to understand
+  visually;
+- current software evidence versus live broker/DEMO evidence;
+- explicit non-goals, calibration items and next proof required.
+
+The root prompt and ChatGPT guide must additionally explain how an implementation
+agent should navigate the documentation, choose the next phase, preserve prior
+work, verify changes and recover from context loss. They are summaries and
+process guides, not hidden replacements for topic authorities.
+
+## 15. Documentation change record
+
+Material documentation work should leave an auditable record in the working
+diff or task handoff. The record should name:
+
+```text
+date/checkpoint
+documents touched
+old information retained or moved
+new implementation/evidence added
+links or source owners updated
+tests/link checks run
+remaining uncertainty
+```
+
+This makes a documentation update reviewable in the same way as a code change.
+The record belongs in the review/working handoff; ordinary design documents
+should remain timeless manuals rather than becoming chronological change logs.

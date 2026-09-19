@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from goldswingtraderai.app.recovery import BrokerRecoveryPosition, BrokerRecoverySnapshot
-from goldswingtraderai.domain.market import SymbolSpec
+from goldswingtraderai.domain.market import OpenPositionFacts, SymbolSpec
 from goldswingtraderai.market_data import MT5Reader
 
 
@@ -16,6 +16,7 @@ class MT5RecoveryTruth:
 
     snapshot: BrokerRecoverySnapshot
     symbol_spec: SymbolSpec
+    open_positions: tuple[OpenPositionFacts, ...] = ()
 
     @property
     def price_tolerance(self) -> float:
@@ -62,7 +63,11 @@ def build_mt5_recovery_truth(
         captured_at_utc=captured,
         positions_complete=True,
     )
-    return MT5RecoveryTruth(snapshot=snapshot, symbol_spec=spec)
+    return MT5RecoveryTruth(
+        snapshot=snapshot,
+        symbol_spec=spec,
+        open_positions=positions,
+    )
 
 
 def _require_utc(value: datetime) -> None:

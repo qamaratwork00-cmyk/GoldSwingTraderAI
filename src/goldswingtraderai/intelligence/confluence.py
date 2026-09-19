@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from math import floor
+from math import floor, isfinite
 
 from goldswingtraderai.domain.enums import Direction, SwingRole, SwingSide, Timeframe
 from goldswingtraderai.domain.market import Candle
@@ -61,6 +61,14 @@ class ConfluenceConfig:
     poc_near_atr: float = 0.15
 
     def __post_init__(self) -> None:
+        thresholds = (
+            self.trendline_near_atr,
+            self.trendline_break_buffer_atr,
+            self.min_fib_leg_atr,
+            self.poc_near_atr,
+        )
+        if any(not isfinite(value) for value in thresholds):
+            raise ValueError("confluence thresholds must be finite")
         if self.trendline_near_atr <= 0 or self.trendline_break_buffer_atr < 0:
             raise ValueError("trendline thresholds are invalid")
         if self.min_fib_leg_atr < 0:

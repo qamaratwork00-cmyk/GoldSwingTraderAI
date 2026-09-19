@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import StrEnum
+from math import isfinite
 
 from goldswingtraderai.domain.enums import Direction, HardDecision
 from goldswingtraderai.domain.ids import EntityId
@@ -65,11 +66,20 @@ class ExecutionIntent:
             raise ValueError("execution account server/symbol cannot be empty")
         if self.direction is Direction.NONE:
             raise ValueError("execution direction must be BUY or SELL")
-        if self.volume <= 0 or self.approved_entry_reference <= 0:
+        if (
+            not isfinite(self.volume)
+            or not isfinite(self.approved_entry_reference)
+            or self.volume <= 0
+            or self.approved_entry_reference <= 0
+        ):
             raise ValueError("execution volume/entry reference must be positive")
-        if self.stop_loss is not None and self.stop_loss <= 0:
+        if self.stop_loss is not None and (
+            not isfinite(self.stop_loss) or self.stop_loss <= 0
+        ):
             raise ValueError("execution stop must be positive when supplied")
-        if self.take_profit is not None and self.take_profit <= 0:
+        if self.take_profit is not None and (
+            not isfinite(self.take_profit) or self.take_profit <= 0
+        ):
             raise ValueError("execution target must be positive when supplied")
         if self.fencing_epoch <= 0:
             raise ValueError("execution fencing epoch must be positive")
@@ -81,6 +91,14 @@ class ExecutionIntent:
             raise ValueError("accepted intent must record its single send attempt")
         if self.state in {IntentState.CREATED, IntentState.APPROVED} and self.submit_attempts != 0:
             raise ValueError("pre-submit intent cannot already consume its send attempt")
+        for ticket_name, ticket in (
+            ("broker ticket", self.broker_ticket),
+            ("position ticket", self.position_ticket),
+        ):
+            if ticket is not None and ticket <= 0:
+                raise ValueError(f"{ticket_name} must be positive when supplied")
+        if self.filling_mode is not None and self.filling_mode < 0:
+            raise ValueError("execution filling mode cannot be negative")
         if self.action in {ExecutionAction.MODIFY, ExecutionAction.CLOSE} and self.position_ticket is None:
             raise ValueError("modify/close intent requires the managed position ticket")
 
@@ -167,10 +185,13 @@ def reconcile_accepted(
 
     if intent.state not in {IntentState.SUBMITTING, IntentState.ACCEPTED_UNKNOWN}:
         raise ValueError("only ambiguous/submitting intent can reconcile as accepted")
+    ticket = broker_ticket or intent.broker_ticket
+    if ticket is None or ticket <= 0:
+        raise ValueError("verified broker acceptance requires a positive broker ticket")
     return replace(
         intent,
         state=IntentState.ACCEPTED_VERIFIED,
-        broker_ticket=broker_ticket or intent.broker_ticket,
+        broker_ticket=ticket,
         result_message=message,
     )
 

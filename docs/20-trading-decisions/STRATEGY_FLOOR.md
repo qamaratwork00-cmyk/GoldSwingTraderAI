@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Strategy Floor
 
-**Status:** PROVISIONAL  
-**Version:** 0.3-implementation-baseline  
+**Status:** PROVISIONAL
+**Version:** 0.4-implementation-baseline
 **Authority:** Production strategy-family architecture
 
 ## Core principle
@@ -12,7 +12,44 @@ Strategy families run in parallel against the same verified `IntelligenceSnapsho
 
 > **Trendline, Fibonacci and POC are optional accuracy/confluence inputs. They can strengthen an existing hypothesis but are not mandatory conditions and do not become hidden trade blockers.**
 
-## Implementation checkpoint
+## Six-family parallel map
+
+Every family receives the same IntelligenceSnapshot. The family outputs are
+kept separate until fusion so a single label cannot hide which hypothesis
+actually carried the opportunity.
+
+```mermaid
+flowchart TB
+    SNAPSHOT["One verified IntelligenceSnapshot"] --> PULLBACK["Trend Pullback"]
+    SNAPSHOT --> BREAKOUT["Breakout Expansion"]
+    SNAPSHOT --> RETEST["Breakout Retest"]
+    SNAPSHOT --> SWEEP["Liquidity Sweep Reversal"]
+    SNAPSHOT --> FAILED["Failed Breakout Reversal"]
+    SNAPSHOT --> COMPRESSION["Compression Expansion"]
+    PULLBACK --> REPORT["FamilyReport per family — BUY + SELL + coverage + reasons"]
+    BREAKOUT --> REPORT
+    RETEST --> REPORT
+    SWEEP --> REPORT
+    FAILED --> REPORT
+    COMPRESSION --> REPORT
+    REPORT --> CONFLUENCE["Bounded optional confluence"]
+    CONFLUENCE --> FUSION["Decision Fusion — correlation + conflict remain visible"]
+```
+
+The diagram describes logical parallelism. A single-threaded evaluation order
+is acceptable if it uses the same immutable snapshot and produces stable
+results. A family may be neutral; it does not have to manufacture a score.
+
+| Family | Market question | Distinctive evidence | Does not require |
+|---|---|---|---|
+| trend pullback | is an established directional move resuming from useful location? | HTF context, pullback, M5 resumption, room | FVG/OB/Fib/trendline |
+| breakout expansion | is accepted break releasing directional expansion? | qualified/confirmed break, acceptance, momentum, path | perfect retest |
+| breakout retest | did a meaningful break hold on a retest? | break, location, M5 rejection/continuation | every SMC primitive |
+| liquidity sweep reversal | was an existing pool taken and rejected? | pool existence, sweep, reclaim, MSS/rejection | wick alone |
+| failed breakout reversal | did attempted acceptance fail and reverse? | failed-break event, opposing response, location | identical sweep narrative |
+| compression expansion | did compressed range release with evidence? | compression, directional release, break, volatility build | guessed direction before release |
+
+## Implementation ownership and proof boundary
 
 Implemented in:
 

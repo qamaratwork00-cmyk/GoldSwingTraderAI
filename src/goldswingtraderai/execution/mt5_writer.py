@@ -210,6 +210,29 @@ class MT5Writer:
 
         return f"{self.config.comment_prefix}:{intent.intent_id.value[:12]}"
 
+    def required_margin_for(
+        self,
+        *,
+        direction: Direction,
+        symbol: str,
+        volume: float,
+        quote: Quote,
+    ) -> float | None:
+        """Return broker-calculated margin when MT5 exposes that authority.
+
+        Risk may use this value as a second pass after lot sizing. A missing or
+        invalid broker calculation remains ``None`` and is never replaced with a
+        guessed margin value.
+        """
+
+        if volume <= 0 or not symbol.strip():
+            raise ValueError("margin request requires positive volume and symbol")
+        if quote.symbol != symbol:
+            raise ValueError("margin quote symbol does not match requested symbol")
+        order_type = self._order_type(direction)
+        price = quote.ask if direction is Direction.BUY else quote.bid
+        return self._calculate_required_margin(order_type, symbol, volume, price)
+
     def _modify_request(self, intent: ExecutionIntent) -> dict[str, Any]:
         return {
             "action": self._constant("TRADE_ACTION_SLTP"),
@@ -224,13 +247,26 @@ class MT5Writer:
     def _required_margin(self, intent: ExecutionIntent, quote: Quote) -> float | None:
         if intent.action is not ExecutionAction.OPEN:
             return 0.0
+        price = quote.ask if intent.direction is Direction.BUY else quote.bid
+        return self._calculate_required_margin(
+            self._order_type(intent.direction),
+            intent.symbol,
+            intent.volume,
+            price,
+        )
+
+    def _calculate_required_margin(
+        self,
+        order_type: int,
+        symbol: str,
+        volume: float,
+        price: float,
+    ) -> float | None:
         calculator = getattr(self._mt5, "order_calc_margin", None)
         if not callable(calculator):
             return None
-        order_type = self._order_type(intent.direction)
-        price = quote.ask if intent.direction is Direction.BUY else quote.bid
         try:
-            value = calculator(order_type, intent.symbol, intent.volume, price)
+            value = calculator(order_type, symbol, volume, price)
         except Exception:
             return None
         if value is None:

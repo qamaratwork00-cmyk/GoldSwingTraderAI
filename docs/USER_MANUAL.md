@@ -1,21 +1,24 @@
 # GoldSwingTraderAI — User Manual
 
-**Status:** DRAFT — OPERATOR BEHAVIOUR CURRENT; LIVE INTEGRATED RUNTIME PENDING  
-**Version:** 0.6-implementation  
-**Authority:** Human-facing explanation of normal operation and operator actions.  
+**Status:** DRAFT — OPERATOR BEHAVIOUR MANUAL
+**Version:** 0.8-implementation
+**Authority:** Human-facing explanation of normal operation and operator actions.
 **Depends on:** `50-operator/DASHBOARD_AND_UX.md`, `SETUP_AND_RUN_GUIDE.md`
 
 ## Purpose
 
 This manual explains how to operate and interpret GoldSwingTraderAI. It does not redefine trading logic; authoritative subsystem documents own behaviour.
 
-Important project-state distinction:
+Runtime-mode distinction:
 
-- strategy/risk/execution/management/research modules exist as deterministic tested components;
-- the current `goldswing` launcher is still a read-only MT5 readiness entrypoint;
-- a fully integrated persistent trading runtime and controlled live MT5 DEMO certification are still pending.
+- `READINESS` performs a read-only MT5 readiness snapshot and exits;
+- `PRIMARY`/`STANDBY` compose startup recovery, controller ownership and the
+  persistent M5 cycle only after the documented authorities pass;
+- absent or invalid session/news truth remains `UNKNOWN` and fail-closed;
+- deterministic software proof, research evidence and connected DEMO proof are
+  separate evidence classes.
 
-## Intended normal daily use after runtime integration
+## Intended normal daily workflow
 
 ```text
 1. Open MT5 and connect the intended DEMO account.
@@ -28,7 +31,35 @@ Important project-state distinction:
 
 Normal use should not require editing code or manually tuning scores.
 
+## What happens during a normal cycle
+
+The operator should understand the visible flow without reading source code:
+
+```mermaid
+flowchart TB
+    START["Startup READY — role + DEMO + recovery visible"] --> OBSERVE["Fresh market/session/news facts"]
+    OBSERVE --> THINK["Intelligence + six strategy families — BUY/SELL + timing"]
+    THINK --> PLAN["Trade Plan — structural SL + targets + original R"]
+    PLAN --> PROTECT["Risk + session/news + position + controller"]
+    PROTECT --> ACTION{"Action?"}
+    ACTION -->|"WAIT / BLOCK / INVALID"| WHY["Reason remains visible — no broker write"]
+    ACTION -->|"ENTER"| EXEC["One governed execution request — broker verification"]
+    EXEC --> MANAGE["Open Trade Manager — HOLD / PROTECT / TRAIL / RUNNER / EXIT"]
+```
+
+The dashboard is the operator's view of this flow. It is normal to see WAIT,
+NEWS_BLACKOUT, LOSS_LOCKED or REOPEN_WARMUP; those states are not automatically
+software faults. A fault is indicated by the health/recovery panel and an
+explicit subsystem reason.
+
 ## V1 DEMO guard
+
+Use `GSTAI_RUNTIME_MODE=READINESS` for the safe read-only check. `PRIMARY` and
+`STANDBY` additionally require explicit non-secret MT5 magic/deviation settings,
+durable state selection and successful governed startup recovery. A missing
+session/news provider or configured snapshot remains UNKNOWN and cannot become
+execution-ready. The snapshot schema and freshness rules are in
+`30-risk-execution/SESSION_NEWS_PROVIDER_CONTRACT.md`.
 
 Broker writes are permitted only when the connected MT5 account is positively verified as DEMO and every other required authority passes.
 
@@ -269,8 +300,10 @@ After restore on another laptop, validate state, acquire controller ownership an
 
 Do not delete/edit order lifecycle, risk state, Strategy Registry, promotion history or critical trade state merely to clear an error. Use governed recovery/reset workflows.
 
-## Project status caveat
+## Verification and evidence boundary
 
-Core deterministic modules are implemented well beyond the current launcher. The current CLI still performs read-only MT5 readiness, while full runtime orchestration, cross-machine production coordination backend, backup/fresh-machine drill and controlled Windows MT5 DEMO certification remain integration work.
-
-Do not interpret deterministic CI as profitability proof or live DEMO certification.
+Component and integration tests prove deterministic software behaviour; replay
+proves only the declared historical simulation; connected Windows MT5/DEMO
+execution, restart and failover require operator evidence recorded by
+`FINAL_RELEASE_AUDIT.md`. Do not interpret deterministic CI as profitability
+proof or live DEMO certification.

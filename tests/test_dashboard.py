@@ -135,6 +135,24 @@ def test_plain_text_fallback_keeps_meaning() -> None:
     assert "[EXEC]" in rendered
 
 
+def test_dashboard_shows_research_liveness_without_granting_authority() -> None:
+    rendered = render_dashboard(
+        replace(
+            _data(),
+            learning_state="ACTIVE",
+            discovery_state="HEALTHY",
+            candidate="CAND_123",
+            candidate_stage="PROPOSED",
+            suppression_reason="—",
+        ),
+        width=180,
+    )
+    assert "Learning ACTIVE" in rendered
+    assert "Discovery HEALTHY" in rendered
+    assert "CAND_123" in rendered
+    assert "PROPOSED" in rendered
+
+
 def test_dashboard_is_read_only_presentation_module() -> None:
     source = inspect.getsource(dashboard_module)
     assert "order_send(" not in source

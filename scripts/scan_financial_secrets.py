@@ -8,6 +8,7 @@ actual credential-looking values are not.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
 from pathlib import Path
 
 from goldswingtraderai.security.financial_secrets import scan_text_for_financial_secrets
@@ -42,7 +43,7 @@ TEXT_SUFFIXES = {
 }
 
 
-def iter_text_files(root: Path):
+def iter_text_files(root: Path) -> Iterator[Path]:
     for path in root.rglob("*"):
         if not path.is_file():
             continue

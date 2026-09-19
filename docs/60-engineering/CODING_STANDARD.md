@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Coding Standard
 
-**Status:** FROZEN FOR INITIAL IMPLEMENTATION  
-**Version:** 1.0  
-**Authority:** Source-code quality, complexity, dependency, commenting, performance and maintainability rules for V1 implementation.  
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+**Version:** 1.2
+**Authority:** Source-code quality, complexity, dependency, commenting, performance and maintainability rules for all maintained project code, with the V1 production-runtime baseline frozen below.
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `MODULE_STRUCTURE.md`, `../CODER_GUIDE.md`
 
 ## Purpose
@@ -12,6 +12,27 @@ GoldSwingTraderAI must be production-grade without becoming architecturally heav
 > **Implement the minimum clear code that fully expresses the required behaviour and safety. No clever shortcuts, no decorative complexity, no duplicate calculations, and no unnecessary abstraction.**
 
 This standard applies to ChatGPT, coding agents and human contributors.
+
+## Project-wide applicability
+
+This is the engineering standard for the **whole maintained repository**, not
+only the live trading loop. The same quality principles apply to:
+
+| Code area | Required treatment |
+|---|---|
+| `src/` runtime, broker, risk, execution, persistence, dashboard and operator code | Full production-grade rules, especially safety, chronology, bounded work and explicit failure handling |
+| `src/research/` and research/replay tooling | The same typing, chronology, determinism and auditability rules; heavier research dependencies are allowed only within the documented runtime boundary |
+| `scripts/` and operator CLIs | Deterministic, validated inputs, safe failure, secret-safe output and restart/retry-aware behaviour where applicable |
+| `tests/`, fixtures and fakes | Clear contract-focused tests that do not hide unsafe production assumptions behind unrealistic mocks |
+| configuration, migration, backup, restore and diagnostic code | Explicit schemas, validation, idempotency and evidence-preserving failure behaviour |
+| executable examples or maintained tooling outside these folders | The same rules unless a documented, approved exception names the reason and boundary |
+
+Scope-specific differences do not create a loophole. For example, a research
+module may use pandas while an equivalent live-runtime module may not, but both
+must preserve chronology, deterministic ordering, explicit missing-data
+semantics and reproducible evidence. Documentation itself is governed by
+`docs/90-governance/DOCUMENTATION_STANDARD.md`; code examples inside docs must
+still follow this standard.
 
 ## Core engineering style
 
@@ -160,7 +181,168 @@ A simpler O(n) calculation on a small bounded M5 window may be better than a com
 
 Correctness and chronology always beat a premature speed optimization.
 
-## Comments and docstrings
+## Expert-level implementation rules
+
+The standard above describes the style. The rules below describe how to make
+that style reliable in a safety-sensitive runtime.
+
+### Design before code
+
+Before changing a module, write down the smallest contract that answers:
+
+| Question | Required answer |
+|---|---|
+| What problem is being solved? | one sentence tied to an authoritative document |
+| What are the inputs? | typed values, freshness and timezone/chronology assumptions |
+| What is the output? | typed result, state transition or durable event |
+| Who owns the rule? | exactly one module or authority |
+| What is unknown/failure? | explicit decision/fault, never a convenient default |
+| What is the cost? | expected time, memory, broker calls and persistence writes |
+| How is it proved? | focused tests plus the relevant integration/recovery evidence |
+
+If the answers are unclear, improve the contract or documentation before
+adding code. A short implementation built on an unclear boundary becomes
+expensive safety debt.
+
+### Immutable facts and logical parallelism
+
+Build one verified snapshot for a cycle and pass it into independent
+calculators. Prefer frozen dataclasses, tuples and new result values over
+in-place mutation. A function that receives a market snapshot must not reach
+into a global MT5 client, read the clock unexpectedly or mutate the snapshot.
+
+Independent intelligence/strategy functions may be evaluated sequentially for
+determinism. They are logically parallel only when each can be run from the
+same inputs without hidden ordering. Fusion, timing, Trade Plan, risk,
+permission, intent and broker reconciliation are ordered authorities and must
+remain visibly ordered in code.
+
+### Complexity and resource budgets
+
+Use the simplest algorithm that meets the bounded live workload. Treat these as
+review budgets, not invitations to premature micro-optimization:
+
+| Area | Default budget | Review trigger |
+|---|---|---|
+| Live candle history | bounded per timeframe/configuration | an unbounded list or full-history scan |
+| Per-cycle broker reads | one shared snapshot plus explicitly fresh execution reads | duplicate reads from multiple desks |
+| Per-cycle derived calculations | one calculation per evidence scope | repeated EMA/ATR/structure recomputation |
+| Scheduling | one sleep/wakeup mechanism with monotonic timing | busy-wait or nested polling loops |
+| Dashboard | read-only mapping at a lower cadence than trading | dashboard work delaying a cycle |
+| Persistence | one clear transaction per lifecycle transition | partial multi-record updates |
+| Research | heavier/offline computation allowed | research dependency imported by live startup |
+
+Prefer O(n) over bounded n when it is easier to audit. Introduce an incremental
+algorithm, cache or specialized data structure only after measuring a real
+cost or when the data contract makes the bound necessary. Every cache must
+state its key, freshness, invalidation rule and whether stale data is safe.
+
+### Deterministic ordering
+
+For identical facts, policy version and clock, results must be identical:
+
+- sort broker tickets, events, candidates and evidence labels explicitly;
+- never depend on set/dict iteration for decision order;
+- use UTC-aware datetimes and explicit tie-breakers;
+- do not use random values in production decisions without a recorded seed and
+  an explicit research contract;
+- keep reason-code ordering stable so dashboards, logs and tests are comparable;
+- make first-match/last-match semantics visible instead of relying on incidental
+  loop order.
+
+### Chronology and time
+
+Every time-sensitive function must state whether it uses:
+
+- the latest completed candle;
+- a forming candle for display only;
+- the broker quote captured at a particular UTC instant;
+- the risk-day clock;
+- a scheduled session/news timestamp.
+
+Use timezone-aware UTC internally. Reject naive datetimes at boundaries. Never
+use a future-confirmed swing, future event result, later candle high/low or
+post-entry outcome while constructing an earlier decision. Replay and live code
+must share the same chronology semantics.
+
+### Boundary normalization
+
+Normalize untrusted external data once at the boundary:
+
+1. verify presence and type;
+2. normalize units, direction, symbol, timestamp and optional fields;
+3. validate domain invariants;
+4. return a typed fact or explicit unavailable/corrupt result;
+5. keep the raw external shape out of business-rule modules.
+
+Do not scatter defensive conversions through every consumer. Do not convert
+missing, corrupt or unavailable broker truth into zero, false, empty exposure
+or a passing permission.
+
+Persisted JSON is also an external boundary: a restart, checkpoint or backup
+may contain valid-looking but incorrectly typed values. Runtime restore code
+must preserve JSON types instead of coercing arbitrary strings/numbers through
+`str(...)`, `int(...)`, `float(...)` or `bool(...)`. Required booleans and
+integers must be type-checked, numeric values must be finite, optional values
+must preserve explicit `null`, and malformed state must raise an explicit
+integrity error. In V1 this rule is enforced at the critical restore owners:
+`persistence/runtime_state.py`, `execution/intent_store.py`,
+`management/store.py`, `research/episode_journal.py` and the discovery-status
+repository. Portable checkpoint/catalog, candidate/promotion registry, dataset
+bundle and evidence-package parsers follow the same rule. The domain model
+remains the final invariant check after parsing.
+
+### Error and fault taxonomy
+
+Use the narrowest useful error/result category:
+
+| Situation | Required behaviour |
+|---|---|
+| invalid caller input | raise/return a clear validation failure at the boundary |
+| unavailable external truth | return UNKNOWN/UNAVAILABLE and fail closed where required |
+| corrupt external data | return DATA_CORRUPT with diagnostic context; never continue as valid |
+| policy rejection | return a stable BLOCK reason, not an exception used as normal control flow |
+| broker acknowledgement ambiguity | persist unresolved intent and reconcile; never blind-retry |
+| invariant/programming defect | fail loudly with context and preserve durable state |
+| shutdown/cancellation | stop at a safe boundary and report whether authority was released |
+
+Catch an exception only if the module can add useful context or convert it to a
+safe typed result. Preserve the original cause when re-raising. Never catch
+Exception around a broker write, recovery transaction or controller check and
+then continue.
+
+### Configuration and policy ownership
+
+Every threshold must have one owner and one source:
+
+- frozen V1 rule → authoritative contract and its policy module;
+- calibration value → versioned research/config input with evidence;
+- operational setting → validated Settings/environment field;
+- technical invariant → local constant with a comment explaining why it is
+  invariant.
+
+Do not read environment variables deep inside a calculation. Do not let a
+dashboard option, candidate recipe or runtime convenience override a frozen
+hard safety policy.
+
+### Persistence and idempotency
+
+For every durable transition, define:
+
+- identity key and scope;
+- legal previous states;
+- new state/event;
+- transaction boundary;
+- retry/restart behaviour;
+- checksum/schema version where portable;
+- what broker truth can still contradict it.
+
+An operation that can be retried after a crash must be idempotent or carry an
+intent/fencing identity that makes duplicate action impossible. A successful
+database commit is not proof of broker execution; a broker acknowledgement is
+not proof of final exposure.
+
+### Comments and docstrings
 
 Comments must explain **why**, invariants, non-obvious market/broker behaviour, safety constraints or chronology—not narrate obvious syntax.
 
@@ -192,6 +374,24 @@ Safety-sensitive sections should document the reason behind the guard, especiall
 - critical persistence behaviour.
 
 Do not fill files with decorative comments that make the actual logic harder to scan.
+
+### Comment requirements by code type
+
+| Code | Required documentation |
+|---|---|
+| public function/class | purpose, inputs/outputs and the important invariant or failure result |
+| pure market/risk calculation | units, chronology, edge cases and why the formula is appropriate |
+| broker adapter | raw-to-domain mapping, missing-value semantics and broker quirk |
+| execution/reconciliation | one-shot/idempotency rule, freshness requirement and ambiguity path |
+| persistence transition | identity/scope, transaction reason and restart behaviour |
+| scheduler/loop | cadence, clock choice, stop condition and fail-closed behaviour |
+| research metric/replay | chronology, outcome labeling and what it must not claim |
+| non-obvious branch | why the branch is necessary and which contract it protects |
+
+Docstrings should be short enough to remain accurate. Update them when a
+contract changes. Comments must not describe a line of syntax that a competent
+reader can already see; they should protect the reader from a wrong but
+tempting change.
 
 ## Naming
 
@@ -298,6 +498,45 @@ Prefer:
 Avoid tests that merely mirror implementation line-by-line without protecting meaningful behaviour.
 
 Mocks/fakes should be used at external boundaries, not to mock every internal function.
+
+## Verification and code-review checklist
+
+Every material change should be reviewed in this order:
+
+1. **Contract:** Is the authoritative document and single rule owner clear?
+2. **Data:** Are inputs typed, normalized, fresh enough and chronology-safe?
+3. **Purity:** Does a calculation avoid hidden I/O, global mutation and duplicate
+   broker reads?
+4. **Safety:** Can unknown, corrupt, stale or ambiguous truth accidentally pass?
+5. **Authority:** Is the change placed before/after the correct gate, and can it
+   reach the writer through only the intended path?
+6. **Durability:** Does restart, retry, takeover or partial failure leave a
+   reconstructable state?
+7. **Performance:** Is the work bounded, measured where relevant and free of
+   unnecessary allocations/queries?
+8. **Observability:** Are reason codes, structured logs, dashboard fields and
+   health impact sufficient to reconstruct the result without secrets?
+9. **Tests:** Are positive, negative, unknown, boundary, chronology and
+   interruption cases covered?
+10. **Documentation:** Are the module map, coder guide, topic authority,
+    testing/release docs and open questions synchronized?
+
+The minimum verification command set for a code checkpoint is:
+
+    PYTHONPATH=src python -m pytest -q
+    PYTHONPATH=src python -m ruff check src tests scripts
+    PYTHONPATH=src python -m compileall -q src tests scripts
+    git diff --check
+    PYTHONPATH=src python scripts/scan_financial_secrets.py .
+
+The CI workflow additionally runs the source/script annotation contract and
+publishes a `pytest-cov` report as an artifact. Coverage is an engineering
+signal, not a substitute for controlled Windows MT5, broker, failover or DEMO
+evidence; no coverage percentage alone can promote a release.
+
+Passing these commands proves repository-level software quality only. It does
+not prove broker connectivity, multi-machine fencing, real DEMO execution,
+profitability or a fresh-machine recovery drill.
 
 ## Research/runtime separation
 

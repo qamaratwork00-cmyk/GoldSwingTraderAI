@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Research and Validation
 
-**Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
-**Version:** 1.2-implementation  
-**Authority:** Chronological replay, no-lookahead validation, dataset/evidence identity, portable research datasets, historical acquisition, historical session-policy replay, immutable evidence packaging, holdouts, robustness/stress evidence and research claims.  
+**Status:** PROVISIONAL — RESEARCH AND VALIDATION CONTRACT
+**Version:** 1.4-implementation
+**Authority:** Chronological replay, no-lookahead validation, dataset/evidence identity, portable research datasets, historical acquisition, historical session-policy replay, immutable evidence packaging, holdouts, robustness/stress evidence and research claims.
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../20-trading-decisions/ENTRY_TIMING.md`, `../20-trading-decisions/TRADE_MANAGER_AND_EXIT.md`
 
 ## Purpose
@@ -11,7 +11,33 @@ Research must test the real documented trading semantics without future leakage,
 
 > **A positive backtest is evidence about a specified historical simulation, not proof of future profitability.**
 
-## Current implementation checkpoint — Phase 10
+## Research boundary and evidence pipeline
+
+Research is an offline evidence factory. It may reuse production semantics to
+avoid a fake simplified backtest, but its outputs are artifacts for review—not
+runtime broker authority.
+
+```mermaid
+flowchart TB
+    INPUT["Portable verified dataset — candles + declared spread/session facts"] --> IDENTITY["Dataset identity + provenance — content hashes and coverage"]
+    IDENTITY --> REPLAY["Chronological production-semantics replay — decisions + plans + management"]
+    REPLAY --> METRICS["Outcomes + MFE/MAE + capture — ablation + stress"]
+    METRICS --> VALIDATE["Fixed-policy walk-forward — development/validation boundaries"]
+    VALIDATE --> PACKAGE["Immutable evidence manifest/package — limitations + fingerprints"]
+    PACKAGE --> GOVERN["Governed candidate/promotion review"]
+    GOVERN --> RUNTIME["Only explicit approved policy can enter runtime — ordinary Risk + Execution still apply"]
+```
+
+| Research layer | Produces | Must preserve |
+|---|---|---|
+| acquisition/dataset | portable candle bundle | exact counts, source/version, completed-bar chronology |
+| replay | decision/trade/management outcomes | no-lookahead and production semantics |
+| ablation/stress | marginal value and fragility | same chronology/policy, declared assumptions |
+| walk-forward/holdout | out-of-sample evidence | non-overlap and one-shot holdout identity |
+| package | portable review artifact | hashes, code/policy/dataset identity, limitations |
+| promotion | governed stage transition | explicit approval, rollback target, no self-promotion |
+
+## Implementation ownership and proof boundary
 
 Implemented owners include:
 
@@ -33,11 +59,13 @@ research/episode_journal.py
 research/discovery.py
 research/invention.py
 research/promotion.py
+scripts/run_walk_forward.py
+scripts/acquire_mt5_dataset.py
 ```
 
 The foundation reuses production Intelligence, Decision, Trade Plan, hard session permission and Trade Manager semantics rather than separate simplified backtest rules.
 
-Implemented deterministic infrastructure includes prefix-only replay, confluence ablation, ambiguity-safe Trade Plan/Trade Manager outcomes, declared execution stress, fixed-policy walk-forward, content-addressed dataset/evidence identity, portable datasets, read-only MT5 historical acquisition, verified historical PRE_CLOSE/session-policy replay, immutable evidence packages, metrics/learning and governed discovery/invention/promotion.
+Implemented deterministic infrastructure includes prefix-only replay, confluence ablation, ambiguity-safe Trade Plan/Trade Manager outcomes, declared execution stress, fixed-policy walk-forward, content-addressed dataset/evidence identity, portable datasets, read-only MT5 historical acquisition, verified historical PRE_CLOSE/session-policy replay, immutable evidence packages, metrics/learning and governed discovery/invention/promotion. The offline `scripts/run_walk_forward.py` boundary now imports a verified dataset bundle, runs fixed-policy validation and exports an immutable evidence package without MT5 or broker authority.
 
 This remains a **software/research foundation**, not completed market validation. Broad real XAU datasets, trustworthy real broker-session history, empirical calibration, sufficiently large validation, untouched holdout and DEMO forward evidence remain required before claiming edge.
 
@@ -115,9 +143,25 @@ Rules:
 - `acquire_and_export_mt5_bundle()` composes directly with the portable dataset writer;
 - acquisition has zero broker-write/promotion authority.
 
+The controlled Windows operator command is:
+
+```text
+python scripts/acquire_mt5_dataset.py DATASET_BUNDLE \
+  --source-label <broker-history-source> \
+  --source-version <terminal-export-version>
+```
+
+The default counts match the setup guide (`H4=400`, `H1=750`, `M15=2000`,
+`M5=4000`). Repeated `--count TIMEFRAME=COUNT` options may replace them, but
+all required timeframes must remain explicit. The command requires the already
+connected local MT5 terminal, reads exact completed candles through
+`MT5Reader`, derives spread from positive historical M5 spread points unless an
+explicit non-negative override is supplied, and writes a verified portable
+bundle. It never sends, modifies or closes a broker order.
+
 Controlled Windows/MT5 evidence against real broker history remains pending.
 
-## Immutable research evidence packages — implemented
+## Immutable research evidence packages
 
 `research/packages.py` persists a finished `ResearchEvidenceManifest` as an immutable integrity-checked directory without copying a potentially large historical dataset.
 
@@ -166,6 +210,28 @@ dataset_sha256
 
 The evidence package has no trading, risk, execution or promotion authority.
 
+## Reproducible walk-forward operator command
+
+The operator command consumes only a verified portable dataset bundle and writes
+to a new evidence-package directory. It does not tune parameters, consume the
+final holdout, connect to MT5 or grant broker authority:
+
+```text
+python scripts/run_walk_forward.py DATASET_BUNDLE EVIDENCE_PACKAGE \
+  --development-events 200 \
+  --validation-events 50 \
+  --step-events 50 \
+  --horizon-m5-bars 96 \
+  --code-revision <reviewed-code-revision> \
+  --policy-version <policy-version>
+```
+
+`--minimum-bars TIMEFRAME=COUNT` may be repeated for explicit history
+requirements; `--without-stress` omits the declared execution-stress layer.
+The command binds the evidence identity to the imported dataset bundle manifest
+and records the fixed-policy report, configuration and limitations. A successful
+command is reproducible research evidence, not real-broker or DEMO certification.
+
 ## Execution realism
 
 ```text
@@ -203,9 +269,9 @@ A feature that slightly raises accuracy by removing too many good opportunities 
 
 Serious evidence should identify code revision, policy version, configuration, dataset source/version/content hash, bundle manifest hash where applicable, historical-session source/version/coverage when session-aware, evidence input/manifest/package hashes, historical windows, realism/stress assumptions and limitations. A mutable filename alone is insufficient.
 
-## Tests / current evidence
+## Tests and evidence boundary
 
-Deterministic coverage includes no-lookahead replay, confluence ablation, ambiguity-safe outcomes, production Trade Manager reuse, verified historical-session/PRE_CLOSE integration, execution stress, walk-forward boundary isolation, dataset/evidence identity, portable dataset integrity, exact-count MT5 acquisition and immutable evidence package integrity.
+Deterministic coverage includes no-lookahead replay, confluence ablation, ambiguity-safe outcomes, production Trade Manager reuse, verified historical-session/PRE_CLOSE integration, execution stress, walk-forward boundary isolation, dataset/evidence identity, portable dataset integrity, exact-count MT5 acquisition, immutable evidence package integrity and the verified-bundle walk-forward/evidence-package CLI boundary.
 
 Historical-session tests prove:
 
@@ -216,7 +282,9 @@ Historical-session tests prove:
 - interval overlap rejection;
 - manager-replay integration where a verified T-5 DAILY event exits through production `PRE_CLOSE_FLATTEN`.
 
-Current deterministic CI after historical-session/PRE_CLOSE integration: **189 tests PASS**, Ruff PASS and financial-secret scan PASS.
+Current deterministic CI after integrated runtime, dashboard/research DTO and
+verified-bundle walk-forward CLI composition: **256 tests PASS**, Ruff PASS and
+financial-secret scan PASS.
 
 Still required for full validation:
 

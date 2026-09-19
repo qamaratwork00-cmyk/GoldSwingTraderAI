@@ -21,6 +21,8 @@ from goldswingtraderai.persistence import StateStore
 
 REGISTRY_SCHEMA_VERSION = 1
 _REGISTRY_NAMESPACE = "strategy_candidate_registry"
+DISCOVERY_STATUS_SCHEMA_VERSION = 1
+_DISCOVERY_STATUS_NAMESPACE = "discovery_cycle_status"
 
 
 class ApprovedPrimitive(StrEnum):
@@ -182,6 +184,24 @@ class StrategyCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class DiscoveryStatusSnapshot:
+    """Durable discovery liveness result exposed without broker authority."""
+
+    health: str
+    reasons: tuple[str, ...]
+    observations_seen: int
+    eligible_clusters: int
+    updated_at_utc: datetime
+
+    def __post_init__(self) -> None:
+        if not self.health.strip():
+            raise ValueError("discovery status health cannot be empty")
+        if self.observations_seen < 0 or self.eligible_clusters < 0:
+            raise ValueError("discovery status counts cannot be negative")
+        _require_utc(self.updated_at_utc)
+
+
+@dataclass(frozen=True, slots=True)
 class DiscoveryConfig:
     minimum_independent_episodes: int = 3
     minimum_mean_strength_r: float = 1.0
@@ -193,6 +213,15 @@ class DiscoveryConfig:
     duplicate_similarity: float = 0.90
 
     def __post_init__(self) -> None:
+        thresholds = (
+            self.minimum_mean_strength_r,
+            self.required_support_fraction,
+            self.optional_support_fraction,
+            self.variant_similarity,
+            self.duplicate_similarity,
+        )
+        if any(not isfinite(value) for value in thresholds):
+            raise ValueError("discovery thresholds must be finite")
         if self.minimum_independent_episodes < 2:
             raise ValueError("discovery requires at least two independent episodes")
         if self.minimum_mean_strength_r < 0:
@@ -398,6 +427,73 @@ class CandidateRegistry:
             raise ValueError("candidate registry payload is invalid")
         return tuple(_candidate_from_payload(item) for item in raw)
 
+    def load_discovery_status(self) -> DiscoveryStatusSnapshot | None:
+        record = self._store.load_record(
+            _DISCOVERY_STATUS_NAMESPACE,
+            self._scope,
+            expected_schema_version=DISCOVERY_STATUS_SCHEMA_VERSION,
+        )
+        if record is None:
+            return None
+        try:
+            reasons = record.payload["reasons"]
+            if not isinstance(reasons, list) or any(not isinstance(item, str) for item in reasons):
+                raise ValueError("discovery status reasons are invalid")
+            health = record.payload["health"]
+            observations_seen = record.payload["observations_seen"]
+            eligible_clusters = record.payload["eligible_clusters"]
+            if not isinstance(health, str) or not health.strip():
+                raise ValueError("discovery status health is invalid")
+            if (
+                isinstance(observations_seen, bool)
+                or not isinstance(observations_seen, int)
+                or isinstance(eligible_clusters, bool)
+                or not isinstance(eligible_clusters, int)
+            ):
+                raise ValueError("discovery status counts are invalid")
+            updated_at = record.payload["updated_at_utc"]
+            if not isinstance(updated_at, str):
+                raise ValueError("discovery status timestamp is invalid")
+            return DiscoveryStatusSnapshot(
+                health=health,
+                reasons=tuple(reasons),
+                observations_seen=observations_seen,
+                eligible_clusters=eligible_clusters,
+                updated_at_utc=_parse_utc(updated_at),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("discovery status payload is invalid") from exc
+
+    def save_discovery_status(
+        self,
+        *,
+        health: str,
+        reasons: tuple[str, ...],
+        observations_seen: int,
+        eligible_clusters: int,
+        updated_at_utc: datetime,
+    ) -> None:
+        status = DiscoveryStatusSnapshot(
+            health=health,
+            reasons=reasons,
+            observations_seen=observations_seen,
+            eligible_clusters=eligible_clusters,
+            updated_at_utc=updated_at_utc,
+        )
+        self._store.save_record(
+            _DISCOVERY_STATUS_NAMESPACE,
+            self._scope,
+            {
+                "health": status.health,
+                "reasons": list(status.reasons),
+                "observations_seen": status.observations_seen,
+                "eligible_clusters": status.eligible_clusters,
+                "updated_at_utc": status.updated_at_utc.isoformat(),
+            },
+            schema_version=DISCOVERY_STATUS_SCHEMA_VERSION,
+            event_type="DISCOVERY_STATUS_SAVED",
+        )
+
     def save(self, candidate: StrategyCandidate, *, event_type: str = "CANDIDATE_SAVED") -> None:
         current = list(self.all())
         for index, existing in enumerate(current):
@@ -556,33 +652,48 @@ def _candidate_from_payload(payload: object) -> StrategyCandidate:
     recipe_raw = payload.get("recipe")
     if not isinstance(recipe_raw, dict):
         raise ValueError("candidate recipe payload is invalid")
-    created = datetime.fromisoformat(str(payload["created_at_utc"]))
-    _require_utc(created)
+    created = _parse_utc(payload["created_at_utc"])
     parent_raw = payload.get("parent_family")
     recipe = CandidateRecipe(
-        required=tuple(ApprovedPrimitive(value) for value in recipe_raw["required"]),
-        optional=tuple(ApprovedPrimitive(value) for value in recipe_raw["optional"]),
-        preferred_regime=str(recipe_raw["preferred_regime"]),
-        timing_profile=TimingProfile(str(recipe_raw["timing_profile"])),
-        invalidation_model=InvalidationModel(str(recipe_raw["invalidation_model"])),
-        target_model=TargetModel(str(recipe_raw["target_model"])),
+        required=tuple(
+            ApprovedPrimitive(value)
+            for value in _required_text_sequence(recipe_raw["required"], "required primitives")
+        ),
+        optional=tuple(
+            ApprovedPrimitive(value)
+            for value in _required_text_sequence(recipe_raw["optional"], "optional primitives")
+        ),
+        preferred_regime=_required_text(recipe_raw["preferred_regime"], "preferred regime"),
+        timing_profile=TimingProfile(
+            _required_text(recipe_raw["timing_profile"], "timing profile")
+        ),
+        invalidation_model=InvalidationModel(
+            _required_text(recipe_raw["invalidation_model"], "invalidation model")
+        ),
+        target_model=TargetModel(_required_text(recipe_raw["target_model"], "target model")),
     )
     return StrategyCandidate(
-        candidate_id=EntityId.parse(str(payload["candidate_id"])),
-        kind=CandidateKind(str(payload["kind"])),
-        stage=CandidateStage(str(payload["stage"])),
-        direction=Direction(str(payload["direction"])),
-        parent_family=StrategyFamily(str(parent_raw)) if parent_raw else None,
+        candidate_id=EntityId.parse(_required_text(payload["candidate_id"], "candidate ID")),
+        kind=CandidateKind(_required_text(payload["kind"], "candidate kind")),
+        stage=CandidateStage(_required_text(payload["stage"], "candidate stage")),
+        direction=Direction(_required_text(payload["direction"], "candidate direction")),
+        parent_family=(
+            None
+            if parent_raw is None
+            else StrategyFamily(_required_text(parent_raw, "parent family"))
+        ),
         recipe=recipe,
         created_at_utc=created,
-        trigger=DiscoveryTrigger(str(payload["trigger"])),
-        evidence_source_ids=tuple(str(value) for value in payload["evidence_source_ids"]),
-        hypothesis=str(payload["hypothesis"]),
-        fingerprint=str(payload["fingerprint"]),
+        trigger=DiscoveryTrigger(_required_text(payload["trigger"], "discovery trigger")),
+        evidence_source_ids=tuple(
+            _required_text_sequence(payload["evidence_source_ids"], "evidence source IDs")
+        ),
+        hypothesis=_required_text(payload["hypothesis"], "candidate hypothesis"),
+        fingerprint=_required_text(payload["fingerprint"], "candidate fingerprint"),
         rejection_reason=(
-            str(payload["rejection_reason"])
-            if payload.get("rejection_reason") is not None
-            else None
+            None
+            if payload.get("rejection_reason") is None
+            else _required_text(payload["rejection_reason"], "rejection reason")
         ),
     )
 
@@ -592,3 +703,26 @@ def _require_utc(value: datetime) -> None:
         raise ValueError("discovery timestamp must be timezone-aware UTC")
     if value.utcoffset() != timezone.utc.utcoffset(value):
         raise ValueError("discovery timestamp must be UTC")
+
+
+def _required_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"discovery {label} must be non-empty text")
+    return value
+
+
+def _required_text_sequence(value: object, label: str) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        raise ValueError(f"discovery {label} must be a sequence")
+    return tuple(_required_text(item, label) for item in value)
+
+
+def _parse_utc(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("discovery status timestamp must be a string")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("discovery status timestamp is invalid") from exc
+    _require_utc(parsed)
+    return parsed

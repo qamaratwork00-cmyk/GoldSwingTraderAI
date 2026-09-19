@@ -352,6 +352,19 @@ class StateStore:
                 ).fetchone()
         return int(row[0]) if row is not None else 0
 
+    def is_empty(self) -> bool:
+        """Return whether no durable records or audit events exist yet."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM state_records),
+                    (SELECT COUNT(*) FROM state_events)
+                """
+            ).fetchone()
+        return row is not None and int(row[0]) == 0 and int(row[1]) == 0
+
     def checkpoint_database(self) -> None:
         """Force WAL contents into the main database before an external file move."""
 

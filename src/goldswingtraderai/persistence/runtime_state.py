@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from math import isfinite
 from typing import Any
 
 from goldswingtraderai.decisions.opportunity import Opportunity
@@ -190,13 +191,25 @@ def _risk_day_to_payload(state: RiskDayState) -> dict[str, Any]:
 def _risk_day_from_payload(payload: dict[str, Any]) -> RiskDayState:
     try:
         return RiskDayState(
-            utc_day=date.fromisoformat(str(payload["utc_day"])),
-            day_start_equity=float(payload["day_start_equity"]),
-            net_non_trading_cash_flow=float(payload["net_non_trading_cash_flow"]),
-            cycle_reference_equity=float(payload["cycle_reference_equity"]),
-            cycle_start_safety_pl=float(payload["cycle_start_safety_pl"]),
-            manual_reset_enabled=bool(payload["manual_reset_enabled"]),
-            manual_reset_count=int(payload["manual_reset_count"]),
+            utc_day=date.fromisoformat(_required_text(payload["utc_day"], "utc_day")),
+            day_start_equity=_required_float(payload["day_start_equity"], "day_start_equity"),
+            net_non_trading_cash_flow=_required_float(
+                payload["net_non_trading_cash_flow"],
+                "net_non_trading_cash_flow",
+            ),
+            cycle_reference_equity=_required_float(
+                payload["cycle_reference_equity"],
+                "cycle_reference_equity",
+            ),
+            cycle_start_safety_pl=_required_float(
+                payload["cycle_start_safety_pl"],
+                "cycle_start_safety_pl",
+            ),
+            manual_reset_enabled=_required_bool(
+                payload["manual_reset_enabled"],
+                "manual_reset_enabled",
+            ),
+            manual_reset_count=_required_int(payload["manual_reset_count"], "manual_reset_count"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StateIntegrityError("invalid persisted RiskDayState") from exc
@@ -213,11 +226,11 @@ def _cooldown_to_payload(state: CooldownState) -> dict[str, Any]:
 def _cooldown_from_payload(payload: dict[str, Any]) -> CooldownState:
     try:
         return CooldownState(
-            consecutive_losses=int(payload["consecutive_losses"]),
+            consecutive_losses=_required_int(payload["consecutive_losses"], "consecutive_losses"),
             triggered_at_utc=_dt_in(payload.get("triggered_at_utc")),
             cooldown_until_utc=_dt_in(payload.get("cooldown_until_utc")),
         )
-    except (TypeError, ValueError) as exc:
+    except (KeyError, TypeError, ValueError) as exc:
         raise StateIntegrityError("invalid persisted CooldownState") from exc
 
 
@@ -233,10 +246,10 @@ def _episode_to_payload(state: EpisodeRiskState) -> dict[str, Any]:
 def _episode_from_payload(payload: dict[str, Any]) -> EpisodeRiskState:
     try:
         return EpisodeRiskState(
-            episode_id=EntityId.parse(str(payload["episode_id"])),
-            entries_taken=int(payload["entries_taken"]),
-            losses=int(payload["losses"]),
-            locked=bool(payload["locked"]),
+            episode_id=EntityId.parse(_required_text(payload["episode_id"], "episode_id")),
+            entries_taken=_required_int(payload["entries_taken"], "entries_taken"),
+            losses=_required_int(payload["losses"], "losses"),
+            locked=_required_bool(payload["locked"], "locked"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StateIntegrityError("invalid persisted EpisodeRiskState") from exc
@@ -259,16 +272,19 @@ def _opportunity_to_payload(opportunity: Opportunity) -> dict[str, Any]:
 def _opportunity_from_payload(payload: dict[str, Any]) -> Opportunity:
     try:
         return Opportunity(
-            opportunity_id=EntityId.parse(str(payload["opportunity_id"])),
-            episode_id=EntityId.parse(str(payload["episode_id"])),
-            direction=Direction(str(payload["direction"])),
-            stage=OpportunityStage(str(payload["stage"])),
+            opportunity_id=EntityId.parse(
+                _required_text(payload["opportunity_id"], "opportunity_id")
+            ),
+            episode_id=EntityId.parse(_required_text(payload["episode_id"], "episode_id")),
+            direction=Direction(_required_text(payload["direction"], "direction")),
+            stage=OpportunityStage(_required_text(payload["stage"], "stage")),
             created_at_utc=_dt_required(payload["created_at_utc"]),
             updated_at_utc=_dt_required(payload["updated_at_utc"]),
-            opportunity_score=float(payload["opportunity_score"]),
-            thesis_score=float(payload["thesis_score"]),
+            opportunity_score=_required_float(payload["opportunity_score"], "opportunity_score"),
+            thesis_score=_required_float(payload["thesis_score"], "thesis_score"),
             source_families=tuple(
-                StrategyFamily(str(value)) for value in payload["source_families"]
+                StrategyFamily(_required_text(value, "source_family"))
+                for value in _required_sequence(payload["source_families"], "source_families")
             ),
         )
     except (KeyError, TypeError, ValueError) as exc:
@@ -307,30 +323,35 @@ def _trade_plan_to_payload(plan: TradePlan) -> dict[str, Any]:
 def _trade_plan_from_payload(payload: dict[str, Any]) -> TradePlan:
     try:
         return TradePlan(
-            plan_id=EntityId.parse(str(payload["plan_id"])),
-            opportunity_id=EntityId.parse(str(payload["opportunity_id"])),
-            episode_id=EntityId.parse(str(payload["episode_id"])),
-            family=StrategyFamily(str(payload["family"])),
-            direction=Direction(str(payload["direction"])),
-            state=PlanState(str(payload["state"])),
-            signal_price=float(payload["signal_price"]),
-            approved_entry_reference=float(payload["approved_entry_reference"]),
+            plan_id=EntityId.parse(_required_text(payload["plan_id"], "plan_id")),
+            opportunity_id=EntityId.parse(
+                _required_text(payload["opportunity_id"], "opportunity_id")
+            ),
+            episode_id=EntityId.parse(_required_text(payload["episode_id"], "episode_id")),
+            family=StrategyFamily(_required_text(payload["family"], "family")),
+            direction=Direction(_required_text(payload["direction"], "direction")),
+            state=PlanState(_required_text(payload["state"], "state")),
+            signal_price=_required_float(payload["signal_price"], "signal_price"),
+            approved_entry_reference=_required_float(
+                payload["approved_entry_reference"],
+                "approved_entry_reference",
+            ),
             invalidation_level=_optional_float(payload.get("invalidation_level")),
-            invalidation_source=str(payload["invalidation_source"]),
+            invalidation_source=_required_text(payload["invalidation_source"], "invalidation_source"),
             initial_stop=_optional_float(payload.get("initial_stop")),
             stop_buffer=_optional_float(payload.get("stop_buffer")),
-            stop_quality=StopQuality(str(payload["stop_quality"])),
+            stop_quality=StopQuality(_required_text(payload["stop_quality"], "stop_quality")),
             original_r_price=_optional_float(payload.get("original_r_price")),
             immediate_obstacle=_target_from_payload(payload.get("immediate_obstacle")),
             primary_target=_target_from_payload(payload.get("primary_target")),
             expansion_target=_target_from_payload(payload.get("expansion_target")),
             runner_target=_target_from_payload(payload.get("runner_target")),
             broker_tp_target=_target_from_payload(payload.get("broker_tp_target")),
-            rr_class=RRClass(str(payload["rr_class"])),
-            path_quality=float(payload["path_quality"]),
-            plan_quality=float(payload["plan_quality"]),
+            rr_class=RRClass(_required_text(payload["rr_class"], "rr_class")),
+            path_quality=_required_float(payload["path_quality"], "path_quality"),
+            plan_quality=_required_float(payload["plan_quality"], "plan_quality"),
             created_at_utc=_dt_required(payload["created_at_utc"]),
-            reason=str(payload["reason"]),
+            reason=_required_text(payload["reason"], "reason"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StateIntegrityError("invalid persisted TradePlan") from exc
@@ -355,11 +376,11 @@ def _target_from_payload(payload: Any) -> PlanTarget | None:
         raise StateIntegrityError("invalid persisted PlanTarget")
     try:
         return PlanTarget(
-            role=TargetRole(str(payload["role"])),
-            price=float(payload["price"]),
-            quality=float(payload["quality"]),
-            source=str(payload["source"]),
-            rr=float(payload["rr"]),
+            role=TargetRole(_required_text(payload["role"], "target role")),
+            price=_required_float(payload["price"], "target price"),
+            quality=_required_float(payload["quality"], "target quality"),
+            source=_required_text(payload["source"], "target source"),
+            rr=_required_float(payload["rr"], "target rr"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StateIntegrityError("invalid persisted PlanTarget") from exc
@@ -374,8 +395,10 @@ def _dt_in(value: Any) -> datetime | None:
 
 
 def _dt_required(value: Any) -> datetime:
+    if not isinstance(value, str):
+        raise StateIntegrityError("persisted datetime must be an ISO-8601 string")
     try:
-        parsed = datetime.fromisoformat(str(value))
+        parsed = datetime.fromisoformat(value)
     except ValueError as exc:
         raise StateIntegrityError("invalid persisted datetime") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
@@ -384,4 +407,37 @@ def _dt_required(value: Any) -> datetime:
 
 
 def _optional_float(value: Any) -> float | None:
-    return None if value is None else float(value)
+    return None if value is None else _required_float(value, "optional float")
+
+
+def _required_text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise StateIntegrityError(f"persisted {label} must be non-empty text")
+    return value
+
+
+def _required_bool(value: Any, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise StateIntegrityError(f"persisted {label} must be boolean")
+    return value
+
+
+def _required_int(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise StateIntegrityError(f"persisted {label} must be an integer")
+    return value
+
+
+def _required_float(value: Any, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise StateIntegrityError(f"persisted {label} must be numeric")
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise StateIntegrityError(f"persisted {label} must be finite")
+    return parsed
+
+
+def _required_sequence(value: Any, label: str) -> list[Any] | tuple[Any, ...]:
+    if not isinstance(value, (list, tuple)):
+        raise StateIntegrityError(f"persisted {label} must be a sequence")
+    return value

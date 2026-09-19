@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Governed Strategy Discovery
 
-**Status:** PROVISIONAL  
-**Version:** 0.3-implementation  
-**Authority:** Parameter discovery, strategy-recipe discovery, candidate comparison and evidence-driven market-behaviour discovery.  
+**Status:** PROVISIONAL
+**Version:** 0.4-implementation
+**Authority:** Parameter discovery, strategy-recipe discovery, candidate comparison and evidence-driven market-behaviour discovery.
 **Depends on:** `RESEARCH_AND_VALIDATION.md`, `../20-trading-decisions/STRATEGY_FLOOR.md`, `LEARNING_AND_AI_BOUNDARIES.md`
 
 ## Purpose
@@ -10,6 +10,30 @@
 The discovery system searches for improvements while preserving production semantics, safety boundaries and statistical discipline.
 
 > **Discovery proposes candidates. It does not directly change production.**
+
+## Discovery liveness and boundary
+
+Discovery is a durable evidence process, not a class that merely exists in the
+package. Every eligible cluster must end in a candidate or an explicit
+suppression reason.
+
+```mermaid
+flowchart TB
+    EPISODES["ResearchEpisodeRecord — taken / missed / blocked / exit evidence"] --> MAP["Audited primitive mapping"]
+    MAP --> CLUSTER["Recurring independent episode cluster"]
+    CLUSTER --> OUTCOME{"eligible and novel?"}
+    OUTCOME -->|"yes"| CANDIDATE["Declarative StrategyCandidate — CandidateRegistry"]
+    OUTCOME -->|"no"| SUPPRESS["Durable suppression/rejection reason"]
+    CANDIDATE --> VALIDATE["Validation/promotion pipeline"]
+    SUPPRESS --> HEALTH["Discovery Health — HEALTHY only when auditable"]
+    VALIDATE --> HEALTH
+```
+
+The candidate recipe is data: primitive names, timing profile, invalidation,
+target model, regime and evidence lineage. It cannot contain executable source,
+MT5 calls, risk limits or a permission override. A duplicate or rejected idea
+must remain remembered so restart cannot create an endless loop of identical
+proposals.
 
 ## Discovery liveness contract
 
@@ -28,7 +52,7 @@ Examples of legitimate non-creation reasons include insufficient independent epi
 
 If eligible evidence cannot be processed and no governed reason is produced, discovery health is `DEGRADED`; it must not pretend to be healthy.
 
-## Automatic evidence feed — implemented baseline
+## Automatic evidence feed
 
 ```text
 Replay / forward outcome
@@ -55,7 +79,7 @@ May search repeated missed/losing/winning episode clusters for recurring behavio
 
 The objective is evidence-driven hypothesis generation, not random combinatorial search.
 
-## Implemented candidate sources
+## Candidate source map
 
 The initial implementation can derive discovery triggers from repeated:
 
@@ -159,7 +183,7 @@ Candidate Registry
 
 Discovery/invention contains no direct production-edit or broker-write authority.
 
-## Current implementation checkpoint — 2026-09-18
+## Implementation ownership and proof boundary
 
 Implemented files:
 

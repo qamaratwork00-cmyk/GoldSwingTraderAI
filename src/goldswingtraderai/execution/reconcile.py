@@ -74,10 +74,16 @@ class MT5Reconciler:
         accepted = self._accepted_evidence(intent, positions, orders, deals)
         if accepted is not None:
             row, reason = accepted
+            broker_ticket = _ticket(row) or intent.position_ticket
+            if broker_ticket is None or broker_ticket <= 0:
+                return ReconciliationResult(
+                    ReconciliationStatus.UNRESOLVED,
+                    "MATCHED_BROKER_EVIDENCE_WITHOUT_TICKET",
+                )
             return ReconciliationResult(
                 ReconciliationStatus.VERIFIED_ACCEPTED,
                 reason,
-                broker_ticket=_ticket(row) or intent.position_ticket,
+                broker_ticket=broker_ticket,
             )
 
         if allow_verified_not_created and self._can_prove_not_created(intent, positions):
@@ -165,6 +171,7 @@ class MT5Reconciler:
         closing: bool,
     ) -> Any | None:
         tag = f"{self.config.comment_prefix}:{intent.intent_id.value[:12]}"
+        matches: list[Any] = []
         for row in rows:
             if _text(row, "symbol") not in {None, intent.symbol}:
                 continue
@@ -181,8 +188,16 @@ class MT5Reconciler:
                 position_id = _int(row, "position_id")
                 if position_id not in {None, intent.position_ticket}:
                     continue
-            return row
-        return None
+            matches.append(row)
+
+        # One intent may appear in more than one broker collection (for example
+        # an order and its resulting position). That is safe when the evidence
+        # resolves to one ticket; distinct tickets are ambiguous and must stay
+        # unresolved rather than selecting broker iteration order.
+        tickets = {_ticket(row) for row in matches if _ticket(row) is not None}
+        if len(tickets) > 1:
+            return None
+        return matches[0] if matches else None
 
     def _direction_matches(self, intent: ExecutionIntent, row: Any, *, closing: bool) -> bool:
         row_type = _int(row, "type")
@@ -230,10 +245,8 @@ def _levels_match(row: Any, intent: ExecutionIntent) -> bool:
 def _by_ticket(rows: Sequence[Any], ticket: int | None) -> Any | None:
     if ticket is None:
         return None
-    for row in rows:
-        if _ticket(row) == ticket:
-            return row
-    return None
+    matches = [row for row in rows if _ticket(row) == ticket]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _field(row: Any, name: str, default: Any = None) -> Any:

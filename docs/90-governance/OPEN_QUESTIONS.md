@@ -1,9 +1,16 @@
 # GoldSwingTraderAI — Open Questions / Freeze Matrix
 
-**Status:** LIVING LEDGER  
-**Version:** 3.3-design
+**Status:** AUTHORITATIVE FREEZE MATRIX
+**Version:** 3.8-design
 
 This file separates remaining items so implementation is not delayed by values that should be learned from evidence or ordinary engineering choices.
+
+## Purpose and scope
+
+This matrix prevents a coder from treating calibration, environment evidence
+or an ordinary implementation choice as an undocumented behavioural redesign.
+It is read together with the decision ledger and the authoritative topic
+contract; it is not a substitute for either.
 
 ```text
 FIX BEFORE BUILD       = required architecture/safety decision still missing
@@ -12,11 +19,35 @@ IMPLEMENTATION CHOICE  = coder may choose implementation preserving frozen contr
 DEFER LATER            = not required for V1
 ```
 
-At behavioural-contract level there are currently **no known `FIX BEFORE BUILD` items**.
+At behavioural-contract level there are **no `FIX BEFORE BUILD` items in the
+frozen V1 contract**. Remaining rows in this document describe calibration,
+environment proof or ordinary implementation choices; they do not silently
+change the hard authority model.
 
-## Current implementation status
+## How a question moves to closure
 
-Deterministic core exists through Phase 10 plus current Phase-11 recovery foundation:
+```mermaid
+flowchart TB
+    A["Question or uncertainty"] --> B{"Contract missing?"}
+    B -->|Yes| C["Freeze decision"]
+    B -->|No| D{"Evidence-sensitive?"}
+    D -->|Yes| E["Calibrate chronologically"]
+    D -->|No| F["Choose implementation"]
+    C --> G["Update topic, decision and tests"]
+    E --> G
+    F --> G
+    G --> H["Release / operator evidence"]
+```
+
+Every row must have one of four outcomes: a frozen contract, a bounded
+research calibration, an implementation choice that preserves the contract,
+or an explicit deferral. A question is not closed merely because a class or
+configuration field exists; its authority, failure behaviour and proof
+boundary must also be documented.
+
+## Contract and proof map
+
+Deterministic core exists through Phase 10 plus Phase-11 recovery and Phase-12 runtime foundation:
 
 ```text
 1–9  production architecture foundations
@@ -28,11 +59,17 @@ Deterministic core exists through Phase 10 plus current Phase-11 recovery founda
      + reconciliation-gated takeover
      + governed startup recovery
      + read-only live MT5 recovery truth adapter
+     + explicit live startup composition and state selection
+     + persistent M5 cycle/lease heartbeat/backup lifecycle
+     + governed entry/management orchestration
+     + live dashboard DTO composition
+     + durable discovery-liveness dashboard state
+     + strict account/server/symbol-scoped session/news handoff adapter
+     + public-safe publication staging and restore operator CLIs
+     + verified-bundle walk-forward/evidence-package operator CLI
 ```
 
-Current deterministic checkpoint: **226 tests PASS**, Ruff PASS and financial-secret scan PASS.
-
-## Live MT5 recovery read gap — CLOSED at deterministic software level
+## Live MT5 recovery contract
 
 The existing `MT5Reader` now owns current open-position reads. `app/recovery_mt5.py` composes those facts into `MT5RecoveryTruth`.
 
@@ -48,9 +85,11 @@ Frozen semantics now implemented:
 - recovery price tolerance comes from verified broker `tick_size`, not a guessed XAU constant;
 - broker position facts do not independently prove bot ownership.
 
-Real connected Windows MT5 evidence remains pending.
+The connected Windows MT5 evidence boundary is described in
+`docs/60-engineering/FINAL_RELEASE_AUDIT.md`; deterministic software tests
+cannot substitute for broker-connected proof.
 
-## Startup recovery — software gap CLOSED
+## Startup recovery contract
 
 `app/recovery.py` owns:
 
@@ -68,9 +107,21 @@ persistence integrity
 
 Unknown broker truth, unresolved Intent, missing management context, ManagedTrade mismatch or any hard UNKNOWN/BLOCK prevents READY.
 
-## Backup / publication
+The live composition is defined at the software boundary as follows:
+`app/runtime.py` initializes the existing reader, derives the account/symbol
+scope, selects `EXISTING`/`INITIALIZE`/`RESTORE` state explicitly, builds live
+repositories/reconciler/controller dependencies and supplies the resulting
+authorities to the coordinator. `app/cycle.py` and `app/loop.py` then share
+fresh fact snapshots across decision/risk/execution/management, renew the lease
+every 10 seconds, create verified local backups and shut down safely. The
+default launcher remains `READINESS`; live `PRIMARY`/`STANDBY` modes stay alive
+only after READY. Session/news input is an injectable authority provider; when
+absent or invalid, the result is `UNKNOWN`, never an invented clear schedule or
+news state.
 
-Closed deterministically:
+## Backup / publication contract
+
+The local software/operator boundary includes:
 
 - portable checkpoint;
 - financial-secret blocking;
@@ -78,17 +129,20 @@ Closed deterministically:
 - configurable local backup cadence/retention;
 - hashed verified catalog;
 - latest known-good selection;
-- failure preserves previous known-good backup.
+- failure preserves previous known-good backup;
+- public-safe latest-checkpoint staging with a second secret scan;
+- explicit `scripts/stage_public_backup.py` and
+  `scripts/restore_runtime_checkpoint.py` commands.
 
-Still pending:
+The external proof boundary includes:
 
-- authenticated publication of already-verified public-safe artifacts;
+- operator/external-CI authenticated publication of already-verified public-safe artifacts;
 - external credential handling that never serializes PAT/tokens into repo/checkpoint state;
 - remote failure/retention semantics.
 
-## Controller / failover
+## Controller / failover contract
 
-Closed deterministically:
+The deterministic coordination contract includes:
 
 - transactional SQLite coordination;
 - one-winner contention;
@@ -96,7 +150,7 @@ Closed deterministically:
 - stale renew/release denial;
 - takeover blocked until governed recovery completion.
 
-Still controlled evidence pending:
+The real-machine proof boundary includes:
 
 - selected shared storage across two real machines;
 - simultaneous contention;
@@ -108,27 +162,28 @@ Still controlled evidence pending:
 
 If actual storage cannot prove SQLite semantics, replace the backend rather than weaken fencing.
 
-## Next implementation choices
+## Implementation choices to make without changing the contract
 
-- create final startup service that initializes the existing MT5Reader, builds `MT5RecoveryTruth` and invokes `StartupRecoveryCoordinator`;
-- construct `RecoveryAuthorities` from real authoritative market/risk/session/execution owners instead of test-supplied traces;
-- decide explicit runtime mode/config for restore-vs-existing-local-state startup without silently overwriting either;
-- operator DTO for backup/recovery/controller state;
-- external authenticated backup publication adapter/workflow.
+- select and operate the accepted external session/news producer through the
+  implemented provider-neutral launcher handoff;
+- run UTC rollover/restart/fault-injection certification against the intended environment;
+- execute the explicit external publication step after reviewing a staged artifact.
 
-## Controlled evidence pending
+## Controlled evidence boundary
 
 - real Windows MT5 recovery read facts;
-- real fresh-machine checkpoint restore;
+- real fresh-machine checkpoint restore using the operator CLI;
 - old backup + newer broker-truth conflict drill;
 - unresolved Intent/current deals reconciliation;
 - cross-laptop fencing/failover proof;
 - controlled DEMO write/modify/close/restart evidence.
 
-## Research calibration still pending
+## Research calibration boundary
 
-Market intelligence/scoring/timing/trailing thresholds, confluence retention, real-data periods/sample sizes, walk-forward stepping, friction distributions, promotion/Shadow/Canary thresholds, StrategyMemory/discovery thresholds and Monte Carlo/regime-aware methodology remain evidence-calibrated work.
+Market intelligence/scoring/timing/trailing thresholds, confluence retention, real-data periods/sample sizes, walk-forward stepping, friction distributions, promotion/Shadow/Canary thresholds, StrategyMemory/discovery thresholds and Monte Carlo/regime-aware methodology remain evidence-calibrated work. The walk-forward execution path is implemented; actual real-XAU bundles, historical broker-session coverage, final holdout and reviewed evidence packages remain pending.
 
-## Governance conclusion
+## Freeze conclusion
 
-No major behavioural redesign item is known. Next code work is **final startup service + authoritative recovery-authority wiring**, followed by operator visibility, external publication and controlled real-machine/DEMO evidence.
+No major behavioural redesign item is known. Remaining work is **live provider
+selection, controlled certification and evidence publication**, followed by the
+real-machine/DEMO release audit.

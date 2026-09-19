@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Dashboard and UX
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.7-implementation  
-**Authority:** Main terminal dashboard information architecture, operator visibility, reason presentation and restrained emoji usage.  
+**Status:** PROVISIONAL — OPERATOR-VISIBILITY CONTRACT
+**Version:** 0.9-implementation
+**Authority:** Main terminal dashboard information architecture, operator visibility, reason presentation and restrained emoji usage.
 **Depends on:** `../20-trading-decisions/SCORING_AND_DECISION_FUSION.md`, `../30-risk-execution/RISK_CONTRACT.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../60-engineering/SYSTEM_HEALTH_AND_DIAGNOSTICS.md`
 
 ## Purpose
@@ -18,7 +18,37 @@ The dashboard answers at a glance:
 
 The dashboard **observes authoritative state; it never defines trading behaviour or broker-write permission.**
 
-## Current implementation checkpoint — Phase 9 baseline
+## Dashboard dataflow
+
+The dashboard has a one-way presentation flow. It receives already-decided
+facts and renders them; a refresh cannot cause a second decision.
+
+```mermaid
+flowchart TB
+    AUTHORITIES["Live authorities — market + decision + risk + execution + recovery"] --> DTO["app/dashboard.py — DashboardData mapping"]
+    DURABLE["State/backup/research repositories"] --> DTO
+    DTO --> RENDER["operator/dashboard.py — pure terminal formatting"]
+    RENDER --> SCREEN["Operator screen/log — read-only visibility"]
+    SCREEN -.->|"operator action through governed workflow"| CONTROL["safe shutdown / approved reset / recovery tooling"]
+    CONTROL --> AUTHORITIES
+```
+
+The DTO mapper may summarize or label data but must not recalculate a risk
+percentage, infer a blocker, create a strategy score or invoke MT5. Stable
+reason codes stay machine-readable; human explanations make those reasons
+understandable without changing their meaning.
+
+| Panel | Source of truth | Refresh concern |
+|---|---|---|
+| Market | MarketSnapshot/IntelligenceSnapshot | show freshness and completed-candle boundary |
+| Decision | DecisionSnapshot/RuntimeCycleResult | preserve BUY/SELL, timing, coverage and exact reason |
+| Risk | RiskEvaluation + risk state | never recalculate sizing or daily P/L in UI |
+| Execution | gate, intent, controller, reconciliation | show ALLOW/BLOCK/UNKNOWN and lifecycle state |
+| Open trade | broker-verified ManagedTrade | show immutable original R and current SL/TP separately |
+| Learning/discovery | durable research registry/status | show stage/health, never imply broker authority |
+| Backup/health | persistence/health DTOs | show stale/failed state prominently |
+
+## Implementation ownership and proof boundary
 
 Implemented owner:
 
@@ -27,9 +57,13 @@ operator/dashboard.py
 operator/__init__.py
 ```
 
-The V1 renderer is pure standard-library terminal presentation. `DashboardData` receives already-authoritative facts and `render_dashboard()` only formats them.
+The V1 renderer is pure standard-library terminal presentation. `DashboardData` receives already-authoritative facts and `render_dashboard()` only formats them. `app/dashboard.py` now maps live cycle/recovery/controller/backup DTOs and durable research liveness into this presentation contract without invoking strategy, risk, gate or broker-write code.
 
-Deterministic tests prove the renderer itself has no MT5/risk/gate authority and preserves useful prior GoldScalperAI visibility. Full runtime wiring/in-place refresh remains integration work.
+Deterministic tests prove the renderer itself has no MT5/risk/gate authority
+and preserves useful prior GoldScalperAI visibility. The persistent runtime
+supplies the DTO after startup/recovery and each cycle; terminal in-place
+refresh and final Windows visual verification remain operator polish/evidence,
+not a second trading authority.
 
 ## UX principles
 
@@ -256,7 +290,7 @@ Main V1 dashboard remains mostly read-only. Do not add casual controls for chang
 
 Governed actions may include safe shutdown, permitted manual loss-reset confirmation and portable export/recovery workflows when implemented.
 
-## Current renderer contract
+## Renderer contract
 
 `DashboardData` and `OpenTradeView` are presentation DTOs. They intentionally do not depend on Risk Engine, Strategy Floor, MetaTrader5 or Execution Gate internals.
 
@@ -290,10 +324,15 @@ Dashboard must not:
 - require manual parameter tuning for normal operation;
 - introduce web/UI framework without real requirement.
 
+## Runtime wiring
+
+- persistent M5 loop refreshes the DTO after each fresh cycle;
+- Discovery Health, latest candidate/stage and suppression reason are read from durable research state when present;
+- backup failure is shown as `FAILED` and degrades system health;
+- recovery/controller/session-news reasons remain sourced from live authorities.
+
 ## Remaining integration/polish work
 
-- runtime builder from authoritative subsystem state into `DashboardData`;
-- integrated Discovery Health/candidate fields;
 - actual in-place terminal refresh loop/screen dimensions;
 - final safe-shutdown/export controls;
 - live Windows terminal visual verification.

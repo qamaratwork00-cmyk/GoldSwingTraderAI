@@ -1,8 +1,15 @@
 # GoldSwingTraderAI — Architecture
 
-**Status:** PROVISIONAL  
-**Version:** 0.5-design  
+**Status:** PROVISIONAL
+**Version:** 0.6-design
 **Authority:** High-level system architecture
+
+## Purpose
+
+This document explains the runtime topology, dataflow, parallel analytical
+lanes, ordered authority gates, persistent loop, management branch, recovery
+path and research boundary. It is the system-level map; domain documents own
+the detailed rules for each lane.
 
 ## High-level flow
 
@@ -63,6 +70,98 @@ DASHBOARD / OPERATOR VISIBILITY
 ```
 
 They support/observe the authoritative flow without creating a second trading authority.
+
+## Runtime topology and parallelism contract
+
+The system has one controlled runtime process with several logical lanes. The
+lanes share immutable facts and durable owners, but they do not share hidden
+permission or broker-write shortcuts.
+
+```mermaid
+flowchart TB
+    INPUT["Verified broker + market + provider facts"] --> SNAP["One immutable cycle snapshot"]
+    SNAP --> INTEL["Independent intelligence desks"]
+    SNAP --> STRATS["Independent strategy families"]
+    SNAP --> CONTEXT["Session/news and account context"]
+    INTEL --> FUSION["Decision fusion and timing"]
+    STRATS --> FUSION
+    CONTEXT --> FUSION
+    FUSION --> PLAN["Structural Trade Plan"]
+    PLAN --> HARD["Ordered hard authorities — risk + session/news + position + controller"]
+    HARD --> GATE["Central Execution Permission Gate"]
+    GATE --> INTENT["Durable intent"]
+    INTENT --> WRITE["One MT5 write boundary"]
+    WRITE --> RECON["Broker reconciliation + durable state"]
+```
+
+The three independent inputs to fusion are intentionally shown as separate
+lanes. They may be evaluated one after another for deterministic Python
+execution; “parallel” means that no desk is allowed to call another desk,
+silently turn absence into a veto, or mutate a shared result. A future
+concurrent implementation is valid only if it preserves the same snapshot,
+chronology, bounded outputs and deterministic final decision.
+
+| Logical lane | Owns | May influence | Cannot do |
+|---|---|---|---|
+| Market intelligence | normalized evidence about price, structure, liquidity, quant, session and news | strategy hypotheses and decision explanations | grant execution permission or write broker state |
+| Strategy/decision | family hypotheses, BUY/SELL thesis, fusion, timing and Trade Plan | entry direction/action and structural geometry | size monetary risk or bypass hard authorities |
+| Hard safety | affordability, session/news state, account/position identity, controller and execution checks | ALLOW/BLOCK/UNKNOWN | improve a score or rewrite a structural plan silently |
+| Execution/reconciliation | one-shot intent, broker request and verified outcome | durable lifecycle state | decide strategy direction or blind-retry ambiguity |
+| Operator/research | visibility and offline evidence | diagnosis, calibration and governed candidate flow | become a production write authority |
+
+## Startup and recovery topology
+
+Startup is a prerequisite graph, not a normal cycle. Every downstream owner is
+constructed from verified upstream facts.
+
+```mermaid
+flowchart TB
+    MODE["Explicit mode — READINESS / PRIMARY / STANDBY"] --> CONNECT["Initialize MT5Reader — account + symbol + DEMO"]
+    CONNECT --> BROKER["Build MT5RecoveryTruth — spec + quote + open positions"]
+    BROKER --> LOCAL["Select EXISTING / INITIALIZE / RESTORE — without destructive overwrite"]
+    LOCAL --> AUTHORITIES["Build typed repositories + RecoveryAuthorities — reconciler + controller"]
+    AUTHORITIES --> RECOVERY["StartupRecoveryService — integrity + intents + managed trades"]
+    RECOVERY --> DECISION{"READY?"}
+    DECISION -->|"no"| HOLD["RECONCILING / BLOCKED — no persistent loop"]
+    DECISION -->|"yes"| LOOP["PersistentRuntimeLoop"]
+```
+
+The read-only READINESS path can stop after verified inspection. PRIMARY and
+STANDBY may proceed only after local state selection, recovery and controller
+rules are satisfied. A newly acquired fencing epoch is not by itself READY:
+takeover still requires broker/state reconciliation.
+
+## Runtime cycle topology
+
+```mermaid
+flowchart TB
+    LOOP["PersistentRuntimeLoop"] --> TICK["M5 boundary — fresh completed candles"]
+    TICK --> ENTRY["Entry branch — intelligence → strategy → timing → plan → risk → gate"]
+    TICK --> MANAGEMENT["Management branch — fresh exposure → Trade Manager → gate"]
+    ENTRY --> WRITE["ExecutionService — intent + one governed request"]
+    MANAGEMENT --> WRITE
+    WRITE --> TRUTH["Verify broker outcome — reconcile and persist"]
+    TRUTH --> OBSERVE["Dashboard + backup + health observe authoritative DTOs"]
+```
+
+The entry and management branches use the same execution boundary. They are
+separate decisions because an open trade has different authority and lifecycle
+rules, not because management is allowed to bypass risk, controller or
+reconciliation.
+
+## Authority boundaries at a glance
+
+```mermaid
+flowchart LR
+    OPINION["Market opinion — intelligence + strategies"] --> STRUCTURE["Structural intent — timing + Trade Plan"]
+    STRUCTURE --> AFFORD["Monetary authority — risk + session/news"]
+    AFFORD --> PERMISSION["Write permission — gate + controller"]
+    PERMISSION --> BROKER["Irreversible broker boundary"]
+```
+
+No arrow may be skipped. In particular, a high score cannot create a lot size,
+a Trade Plan cannot create broker permission, and a dashboard/research result
+cannot create a broker request.
 
 ## Architectural principles
 
@@ -239,17 +338,23 @@ Initial V1 local durable storage is standard-library SQLite with typed adapters/
 Startup conceptually:
 
 ```text
-validate local state
-→ connect/verify MT5 + DEMO status
+explicit READINESS / PRIMARY / STANDBY mode
+→ select EXISTING / INITIALIZE / RESTORE state without overwrite
+→ connect/verify MT5 + DEMO status through MT5Reader
+→ build live broker recovery truth
 → reconcile broker positions/orders/deals
 → restore risk/trades
-→ rebuild market intelligence
-→ revalidate opportunities
-→ load learning/strategy registry
+→ build authoritative RecoveryAuthorities
 → acquire current controller lease/epoch
-→ reconcile execution state
-→ READY
+→ governed startup recovery
+→ READY / RECONCILING / BLOCKED
 ```
+
+The current integrated startup composition implements this sequence and hands
+the live owners to the persistent M5 cycle. The cycle shares one fresh market
+and recovery fact set across intelligence, decisions, risk, gate, management
+and dashboard. Session/news remains an injected authority provider; absent
+truth is UNKNOWN and prevents READY.
 
 ## Research / learning architecture
 
@@ -293,3 +398,16 @@ Trendline/Fibonacci/POC may participate in research as audited primitives. Resea
 System Health reports `OK/WARN/DEGRADED/BLOCKED/ERROR`, subsystem, trading impact and recovery state. Dashboard presents compact Market/Decision/Setup/Trade/Risk/Execution/Learning/Backup/Health panels with restrained emojis and stable reason codes.
 
 Optional market context such as trendline/Fibonacci/POC should remain compact and must be presented as confluence, not a hard trade permission state.
+
+## Verification and implementation trace
+
+| Architecture boundary | Source owner | Main proof |
+|---|---|---|
+| Startup, state selection and recovery composition | `app/main.py`, `app/runtime.py`, `app/recovery.py`, `app/startup.py` | `tests/test_live_startup_runtime.py`, `tests/test_startup_recovery.py` |
+| Shared fresh cycle and persistent scheduling | `app/cycle.py`, `app/loop.py` | `tests/test_runtime_loop.py`, `tests/test_live_startup_runtime.py` |
+| Broker read/write separation | `market_data/mt5_reader.py`, `execution/mt5_writer.py`, `execution/service.py` | `tests/test_market_data.py`, `tests/test_execution_safety.py` |
+| Durable state, backup and research isolation | `persistence/`, `research/` | `tests/test_persistence_recovery.py`, `tests/test_backup_catalog.py`, research suites |
+
+The architecture diagrams describe dependency and authority contracts; they do
+not substitute for connected Windows MT5, shared-storage failover or DEMO
+evidence. Those proof requirements are owned by the testing and release docs.

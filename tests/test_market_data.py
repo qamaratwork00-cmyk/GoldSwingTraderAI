@@ -17,6 +17,12 @@ _NOW_TS = int(_NOW.timestamp())
 
 class FakeMT5:
     ACCOUNT_TRADE_MODE_DEMO = 0
+    SYMBOL_FILLING_FOK = 1
+    SYMBOL_FILLING_IOC = 2
+    SYMBOL_TRADE_EXECUTION_MARKET = 2
+    ORDER_FILLING_FOK = 0
+    ORDER_FILLING_IOC = 1
+    ORDER_FILLING_RETURN = 2
     TIMEFRAME_H4 = 14_400
     TIMEFRAME_H1 = 3_600
     TIMEFRAME_M15 = 900
@@ -117,6 +123,32 @@ def test_reader_requires_initialization() -> None:
     assert exc_info.value.reason is ReasonCode.MT5_NOT_INITIALIZED
 
 
+def test_sdk_read_exception_becomes_typed_unavailable_failure() -> None:
+    fake = FakeMT5()
+
+    def failing_account_info():
+        raise RuntimeError("terminal read failed")
+
+    fake.account_info = failing_account_info
+    reader = _reader(fake)
+
+    with pytest.raises(MarketDataError) as exc_info:
+        reader.account_facts()
+
+    assert exc_info.value.reason is ReasonCode.DATA_UNAVAILABLE
+
+
+def test_malformed_mt5_numeric_constant_becomes_typed_corrupt_failure() -> None:
+    fake = FakeMT5()
+    fake.TIMEFRAME_M5 = float("inf")
+    reader = _reader(fake)
+
+    with pytest.raises(MarketDataError) as exc_info:
+        reader.completed_candles("XAUUSD", Timeframe.M5, 3)
+
+    assert exc_info.value.reason is ReasonCode.DATA_CORRUPT
+
+
 def test_account_facts_and_positive_demo_guard() -> None:
     reader = _reader(FakeMT5())
     account = reader.account_facts()
@@ -147,6 +179,24 @@ def test_symbol_alias_resolution_and_specs() -> None:
     assert spec.volume_min == 0.01
     assert spec.volume_step == 0.01
     assert quote.spread_price == pytest.approx(0.20)
+
+
+def test_symbol_filling_flags_are_normalized_to_request_enum() -> None:
+    fake = FakeMT5()
+    info = fake.symbols["XAUUSD"]
+    info.filling_mode = fake.SYMBOL_FILLING_FOK
+    info.trade_exemode = fake.SYMBOL_TRADE_EXECUTION_MARKET
+    reader = _reader(fake)
+
+    market_spec = reader.symbol_spec("XAUUSD")
+
+    assert market_spec.filling_mode == fake.ORDER_FILLING_FOK
+
+    info.filling_mode = fake.SYMBOL_FILLING_IOC
+    info.trade_exemode = 0  # non-market execution: RETURN is request-ready
+    non_market_spec = reader.symbol_spec("XAUUSD")
+
+    assert non_market_spec.filling_mode == fake.ORDER_FILLING_RETURN
 
 
 def test_completed_candles_explicitly_exclude_forming_bar() -> None:

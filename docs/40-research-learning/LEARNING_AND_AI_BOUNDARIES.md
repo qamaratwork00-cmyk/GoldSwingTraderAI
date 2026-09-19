@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Learning and AI Boundaries
 
-**Status:** PROVISIONAL — IMPLEMENTED FOUNDATION  
-**Version:** 0.2-implementation  
-**Authority:** StrategyMemory, entry/exit learning, bounded adaptive influence, ML/AI limits, evidence isolation and baseline-degradation behaviour.  
+**Status:** PROVISIONAL — LEARNING AND AI-BOUNDARY CONTRACT
+**Version:** 0.3-implementation
+**Authority:** StrategyMemory, entry/exit learning, bounded adaptive influence, ML/AI limits, evidence isolation and baseline-degradation behaviour.
 **Depends on:** `RESEARCH_AND_VALIDATION.md`, `GOVERNED_STRATEGY_DISCOVERY.md`, `GOVERNED_EXPERIMENTS_AND_PROMOTION.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
 ## Purpose
@@ -11,7 +11,37 @@ Learning should improve opportunity ranking, entry timing and trade management f
 
 > **Learning may observe, remember, research and propose. Production changes only through governed promotion.**
 
-## Current implementation checkpoint
+## Learning boundary
+
+Learning has a one-way influence path. It can summarize verified experience and
+make a bounded recommendation; it cannot replace the deterministic baseline or
+reach the broker boundary.
+
+```mermaid
+flowchart TB
+    OUTCOMES["Actual + counterfactual labelled outcomes — with system-fault attribution"] --> MEMORY["Versioned StrategyMemory — context + sample confidence"]
+    MEMORY --> INFLUENCE["Bounded ranking/timing influence — or explicit research observation"]
+    INFLUENCE --> CHALLENGER["Entry/exit/candidate Challenger — durable evidence lineage"]
+    CHALLENGER --> PROMOTION["Validation → holdout → stress → shadow → canary"]
+    PROMOTION --> APPROVAL["Explicit governed approval"]
+    APPROVAL --> BASELINE["Versioned production policy — still passes ordinary Risk + Execution"]
+    SAFETY["Hard risk/account/news/controller safety"] -.->|never learned away| BASELINE
+```
+
+The learning layer must preserve three identities: what actually happened at
+the broker, what would have happened counterfactually, and which subsystem
+caused the action to be blocked or degraded. Mixing them produces misleading
+adaptation.
+
+| Influence level | Allowed output | Production effect |
+|---|---|---|
+| observation | metrics, explanation, journal record | none |
+| research recommendation | candidate hypothesis | none |
+| validated bounded adjustment | versioned score/ranking input | only through promotion |
+| shadow/canary | isolated challenger evidence | ordinary hard safety remains |
+| approved policy | explicit versioned runtime configuration | no bypass of gate/risk |
+
+## Implementation ownership and proof boundary
 
 Implemented research owners include:
 
@@ -230,7 +260,7 @@ Stage             ...
 Adaptive Impact   BOUNDED / OFF
 ```
 
-## Tests required / current evidence
+## Tests required and evidence boundary
 
 Deterministic tests cover bounded StrategyMemory behaviour, evidence/context isolation, discovery liveness, candidate governance and persistence in the relevant research suites.
 

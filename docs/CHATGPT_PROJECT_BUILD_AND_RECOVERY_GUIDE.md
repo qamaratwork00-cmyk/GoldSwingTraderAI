@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — ChatGPT Project Build and Recovery Guide
 
-**Status:** PROVISIONAL  
-**Version:** 1.2-implementation  
+**Status:** PROVISIONAL — PROJECT NAVIGATION MANUAL
+**Version:** 1.3-implementation
 **Authority:** Whole-project implementation sequencing, phase completion, resume/recovery and build-navigation process. This file does **not** redefine trading behaviour.
 
 ## Purpose
@@ -10,9 +10,56 @@ This guide exists so ChatGPT or another implementation agent can complete GoldSw
 
 > **Recover project truth from the repository, repair the smallest broken layer, verify it, then continue from the last verified phase. Do not restart the whole project unless repository/state is genuinely unrecoverable.**
 
-## Current repository checkpoint — 2026-09-18
+## Agent operating loop
 
-Deterministic core implementation currently exists through the **Phase-10 foundation**:
+This guide is the project-navigation manual for an implementation agent. It
+explains how to use the other documents, not a new trading authority.
+
+```mermaid
+flowchart TB
+    ORIENT["Read README + docs index + system contract"] --> SCOPE["Choose one feature/phase — and its authoritative document"]
+    SCOPE --> TRACE["Trace module owner + public entry point + tests"]
+    TRACE --> INSPECT["Inspect code, state schema, existing diff and evidence"]
+    INSPECT --> IMPLEMENT["Implement one coherent boundary — clean, typed, deterministic"]
+    IMPLEMENT --> VERIFY["Focused tests → phase suite → full quality checks"]
+    VERIFY --> SYNC["Update linked docs, open questions and release evidence"]
+    SYNC --> HANDOFF["Record verified result + remaining proof — then choose next incomplete phase"]
+```
+
+Never skip from an idea directly to a broker adapter. The agent must be able
+to explain where the data originated, which authority owns the result, what
+happens when it is unknown, how restart reconstructs it and which test proves
+the boundary.
+
+## What a coherent phase packet contains
+
+| Part | Required content |
+|---|---|
+| contract | purpose, inputs/outputs, states, hard/soft boundaries |
+| architecture | dataflow/ownership diagram when relationships are non-trivial |
+| implementation | exact source owner and no duplicate authority |
+| tests | positive, negative, unknown, chronology, restart/fault cases as relevant |
+| operator view | reason/state/dashboard impact |
+| research view | replay/learning/evidence impact where relevant |
+| persistence | identity, transaction, recovery and migration behaviour |
+| release proof | command/artifact/environment evidence and limitations |
+| documentation sync | authority, module map, coder guide, testing/release/open questions |
+
+An implementation agent must not call a phase complete merely because its
+primary file exists or the unit test count increased.
+
+## Tests and evidence policy
+
+Every phase uses focused positive, negative, unknown, chronology and
+restart/fault tests as applicable, followed by the repository-wide quality
+commands. A green deterministic suite proves software behaviour only; replay,
+shared-storage recovery and connected DEMO evidence require their own
+artifacts and cannot be inferred from unit tests.
+
+## Build-order map and completion model
+
+The following phases define dependency order and exit gates; they are a build
+map, not a progress diary:
 
 ```text
 Phase 1  Foundation/config/domain/CI
@@ -25,15 +72,28 @@ Phase 7  Execution intent/gate/controller/write/reconciliation
 Phase 8  Trade Manager + management execution bridge
 Phase 9  Terminal dashboard renderer
 Phase 10 Replay/metrics/learning + durable discovery/invention/promotion foundation
+Phase 11 Portable checkpoint/restore + backup/controller fencing + integrated startup recovery
+Phase 12 Persistent M5 runtime + governed cycle + live dashboard DTO
 ```
 
 Deterministic CI is not live DEMO certification.
 
-Important current integration gap:
+The completed architecture described by these phases includes explicit live
+`READINESS` / `PRIMARY` / `STANDBY` startup composition,
+EXISTING/INITIALIZE/RESTORE state selection, `RecoveryAuthorities` wiring,
+persistent M5 orchestration, 10-second controller renewal, governed
+entry/management cycling, verified local backup cadence, live
+dashboard/research DTO composition, public-safe backup staging and fresh-DB
+restore operator CLIs, plus read-only MT5 dataset acquisition and
+verified-bundle walk-forward/evidence-package tooling.
 
-- `app/main.py` / `goldswing` remains the read-only MT5 readiness launcher;
-- final persistent runtime orchestration across the implemented subsystems is not yet complete;
-- production shared cross-laptop coordination backend, backup/fresh-machine drill and controlled Windows MT5 DEMO certification remain pending.
+External proof gates:
+
+- `app/main.py` / `goldswing` remains read-only by default;
+- accepted external session/news producer selection/operation through the
+  provider-neutral launcher handoff;
+- UTC risk-day rollover and restart/fault-injection certification;
+- production shared cross-laptop coordination backend, real fresh-machine broker drill and controlled Windows MT5 DEMO certification are release evidence gates.
 
 ## Source-of-truth order
 
@@ -56,7 +116,12 @@ If docs conflict, stop affected implementation path and resolve the contradictio
 
 ## Frozen implementation-quality rule
 
-Every phase obeys `docs/60-engineering/CODING_STANDARD.md`.
+Every phase and every maintained code area obeys
+`docs/60-engineering/CODING_STANDARD.md`: runtime, safety, persistence,
+operator/dashboard, research/discovery, scripts, configuration and tests are
+all in scope. A research or test-specific dependency exception may change the
+tooling boundary, never the requirements for chronology, determinism, explicit
+failure handling, auditability or secret safety.
 
 Target: **lightweight production-grade code** that is clear, auditable and efficient enough for the real workload without unnecessary architecture.
 

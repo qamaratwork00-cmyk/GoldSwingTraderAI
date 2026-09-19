@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import StrEnum
+from math import isfinite
 
 from goldswingtraderai.decisions.trade_plan import PlanTarget, PlanState, TradePlan
 from goldswingtraderai.domain.enums import Direction, Timeframe, TradeManagerAction
@@ -24,6 +25,8 @@ class StructuralStopReference:
     atr: float
 
     def __post_init__(self) -> None:
+        if not isfinite(self.price) or not isfinite(self.atr):
+            raise ValueError("structural stop reference values must be finite")
         if self.price <= 0 or self.atr <= 0:
             raise ValueError("structural stop reference price/ATR must be positive")
 
@@ -47,7 +50,7 @@ class ManagementEvidence:
             self.momentum_health,
             self.path_quality,
         ):
-            if not 0 <= value <= 100:
+            if not isfinite(value) or not 0 <= value <= 100:
                 raise ValueError("management evidence scores must be between 0 and 100")
 
 
@@ -85,7 +88,16 @@ class ManagedTrade:
             raise ValueError("managed trade symbol cannot be empty")
         if self.direction is Direction.NONE:
             raise ValueError("managed trade direction must be BUY or SELL")
-        if min(self.volume, self.entry_price, self.original_stop, self.original_r_price, self.current_stop) <= 0:
+        monetary_values = (
+            self.volume,
+            self.entry_price,
+            self.original_stop,
+            self.original_r_price,
+            self.current_stop,
+        )
+        if any(not isfinite(value) for value in monetary_values):
+            raise ValueError("managed-trade monetary values must be finite")
+        if min(monetary_values) <= 0:
             raise ValueError("managed-trade volume/prices must be positive")
         if self.direction is Direction.BUY:
             if self.original_stop >= self.entry_price:
@@ -97,7 +109,9 @@ class ManagedTrade:
                 raise ValueError("SELL original stop must be above entry")
             if self.current_stop > self.original_stop:
                 raise ValueError("SELL stop may not widen above original approved stop")
-        if self.broker_tp is not None and self.broker_tp <= 0:
+        if self.broker_tp is not None and (
+            not isfinite(self.broker_tp) or self.broker_tp <= 0
+        ):
             raise ValueError("broker TP must be positive when present")
         if self.objective_stage is ObjectiveStage.RUNNER and self.active_runner_target is None:
             raise ValueError("RUNNER stage requires an active runner objective")
@@ -115,6 +129,24 @@ class TradeManagementDecision:
     proposed_stop: float | None
     proposed_tp: float | None
     reason: str
+
+    def __post_init__(self) -> None:
+        values = (
+            self.current_r,
+            self.continuation_score,
+            self.reversal_score,
+            self.structure_integrity,
+            self.path_quality,
+        )
+        if not all(isfinite(value) for value in values):
+            raise ValueError("trade-management decision values must be finite")
+        if not all(0 <= value <= 100 for value in values[1:]):
+            raise ValueError("trade-management decision scores must be between 0 and 100")
+        for value in (self.proposed_stop, self.proposed_tp):
+            if value is not None and (not isfinite(value) or value <= 0):
+                raise ValueError("proposed management prices must be positive and finite")
+        if not self.reason.strip():
+            raise ValueError("trade-management decision reason cannot be empty")
 
     @property
     def requires_broker_write(self) -> bool:

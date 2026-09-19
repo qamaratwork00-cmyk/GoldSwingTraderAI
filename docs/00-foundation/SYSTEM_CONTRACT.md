@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — System Contract
 
-**Status:** PROVISIONAL  
-**Version:** 0.6-design  
+**Status:** PROVISIONAL
+**Version:** 0.6-design
 **Authority:** Highest-level behavioural contract
 
 ## Core contract
@@ -9,6 +9,40 @@
 GoldSwingTraderAI is an XAUUSD/XAUUSDm trading system built around multi-timeframe structure, parallel specialist analysis, independent BUY/SELL theses, explicit opportunity/timing separation, structural Trade Plans, hard risk/safety authority, centralized broker-write permission and governed research/learning.
 
 If another document conflicts with this contract, the contradiction must be formally resolved; implementation must not silently choose a different rule.
+
+## Contract in one execution path
+
+The contract can be read as one controlled movement from facts to action:
+
+```mermaid
+flowchart TB
+    FACTS["Verified facts — broker + candles + provider"] --> EVIDENCE["Independent bounded evidence — structure + technical + liquidity + quant + context"]
+    EVIDENCE --> THESIS["BUY/SELL theses — fusion + Red Team + timing"]
+    THESIS --> PLAN["Structural Trade Plan — entry + invalidation + targets + original R"]
+    PLAN --> AUTH["Hard authority — risk + session/news + position + account + controller"]
+    AUTH --> GATE["Central gate — ALLOW / BLOCK / UNKNOWN"]
+    GATE --> WRITE["Durable intent → one broker write → reconciliation"]
+```
+
+The arrows are not interchangeable. Evidence may be independent; authority
+must be ordered. A score cannot create risk permission, a risk result cannot
+rewrite structural invalidation, and a broker acknowledgement cannot replace
+reconciliation.
+
+## Contract ownership map
+
+| Contract area | Detailed authority | Source owner | Proof family |
+|---|---|---|---|
+| raw facts and chronology | 10-market-intelligence/MARKET_DATA_AND_HISTORY.md | market_data/mt5_reader.py, snapshot.py | market-data and snapshot tests |
+| structure and specialist evidence | 10-market-intelligence documents | intelligence/ | intelligence/technical/liquidity tests |
+| family opportunity and fusion | 20-trading-decisions documents | strategies/, decisions/ | strategy/decision tests |
+| structural trade geometry | 20-trading-decisions/TRADE_PLAN.md | decisions/trade_plan.py | trade-plan tests |
+| monetary risk and risk-day state | 30-risk-execution/RISK_CONTRACT.md | risk/engine.py, risk/state.py | risk/regression tests |
+| hard session/news permission | 30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md | risk/permissions.py | session/news tests |
+| broker-write safety | 30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md | execution/ | execution/controller tests |
+| restart and current exposure truth | 30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md | persistence/, app/recovery*.py | recovery/checkpoint tests |
+| research and promotion | 40-research-learning documents | research/ | replay/validation/promotion tests |
+| operator presentation | 50-operator documents | app/dashboard.py, operator/ | dashboard tests |
 
 ## Market-analysis contract
 
@@ -227,3 +261,14 @@ Implementation proceeds in large phases defined by `../CHATGPT_PROJECT_BUILD_AND
 A phase is complete only when code exists, required tests pass, documentation matches the implementation and no known critical contradiction remains.
 
 No release becomes VERIFIED merely because documentation/code appears complete; controlled DEMO, no-lookahead, duplicate-write, restart/reconciliation, controller/failover and recovery evidence must actually pass.
+
+## Contract reading rule
+
+When a developer changes one rule, they must follow the ownership map rather
+than search-and-replace the wording across every file:
+
+1. update the detailed authority;
+2. update the owning source module and its focused tests;
+3. update the module map and coder navigation if the path changed;
+4. update operator/research/release documents that consume the result;
+5. run the contradiction/link/test audit before calling the phase complete.

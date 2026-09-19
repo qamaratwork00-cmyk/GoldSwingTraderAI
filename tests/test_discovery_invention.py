@@ -156,3 +156,24 @@ def test_insufficient_evidence_reports_idle_not_fake_healthy_candidate(tmp_path)
     assert cycle.health is DiscoveryHealth.IDLE
     assert cycle.created == ()
     assert registry.all() == ()
+
+
+def test_candidate_restore_rejects_coercive_text_fields(tmp_path) -> None:
+    path = tmp_path / "state.db"
+    store = StateStore(path)
+    registry = CandidateRegistry(store, "XAUUSDm")
+    run_invention_cycle(tuple(_observation(index) for index in range(3)), registry)
+
+    record = store.load_record("strategy_candidate_registry", "XAUUSDm")
+    assert record is not None
+    candidates = [dict(item) for item in record.payload["candidates"]]
+    candidates[0]["hypothesis"] = 123
+    store.save_record(
+        "strategy_candidate_registry",
+        "XAUUSDm",
+        {"candidates": candidates},
+        schema_version=1,
+    )
+
+    with pytest.raises(ValueError, match="candidate hypothesis"):
+        CandidateRegistry(StateStore(path), "XAUUSDm").all()

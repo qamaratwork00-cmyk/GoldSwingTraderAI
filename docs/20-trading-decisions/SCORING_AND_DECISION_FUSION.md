@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Scoring and Decision Fusion
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.4-implementation  
-**Authority:** Analytical scoring, independent BUY/SELL thesis fusion, conflict handling and Red-Team attribution.  
+**Status:** PROVISIONAL — DECISION-FUSION CONTRACT
+**Version:** 0.4-implementation
+**Authority:** Analytical scoring, independent BUY/SELL thesis fusion, conflict handling and Red-Team attribution.
 **Depends on:** `STRATEGY_FLOOR.md`, `ENTRY_TIMING.md`, `TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Core principle
@@ -11,7 +11,38 @@ Specialist/strategy desks operate in parallel. Final analytical quality is not a
 
 > **BUY and SELL are separate theses. Strong opposition means conflict, not hidden confidence. Hard safety/risk stays outside weighted scoring.**
 
-## Current implementation checkpoint
+## Fusion pipeline
+
+Fusion is the analytical board between independent hypotheses and the timing/
+Trade Plan path. It preserves provenance instead of reducing the whole floor to
+one opaque number.
+
+```mermaid
+flowchart TB
+    FAMILIES["Six FamilyReports — BUY + SELL cases"] --> CONFLUENCE["Bounded optional Trendline/Fib/POC support"]
+    CONFLUENCE --> THESIS["Build BUY thesis and SELL thesis independently"]
+    THESIS --> REDTEAM["Red Team — opposition + coverage + correlation"]
+    REDTEAM --> BOARD["DecisionBoard — edge + conflict + opportunity + reasons"]
+    BOARD --> OPPORTUNITY["Create/update Opportunity — preserve episode identity"]
+    OPPORTUNITY --> TIMING["M5 Entry Timing — ENTER / WAIT / MISSED / INVALID"]
+    TIMING --> SNAPSHOT["DecisionSnapshot — analytical result only"]
+```
+
+The board does not convert a hard block into a low score. The downstream
+runtime carries the analytical result beside explicit risk/session/news/
+execution authority, so research can distinguish “the idea was weak” from
+“the idea was acceptable but safety prevented the write.”
+
+| Result | Meaning | Next owner |
+|---|---|---|
+| BUY/SELL thesis | directional analytical case with reasons | fusion/timing |
+| conflict | opposing thesis remains strong | Red Team and operator |
+| coverage | how much expected evidence was available | confidence/research |
+| opportunity | idea worth maintaining through timing | opportunity lifecycle |
+| timing action | current entry quality | Trade Plan if ENTER; persistence if WAIT/MISSED |
+| hard BLOCK | independent safety result | risk/session/execution gate |
+
+## Implementation ownership and proof boundary
 
 Implemented owners:
 
@@ -180,7 +211,7 @@ Hard Permission / blocker separately
 
 Optional confluence may be shown as context, not permission.
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Current deterministic suites prove, among other things:
 

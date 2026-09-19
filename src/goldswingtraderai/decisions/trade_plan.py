@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
-from math import ceil, floor
+from math import ceil, floor, isfinite
 
 from goldswingtraderai.decisions.opportunity import Opportunity
 from goldswingtraderai.domain.enums import (
@@ -67,10 +67,14 @@ class PlanTarget:
     rr: float
 
     def __post_init__(self) -> None:
+        if not isfinite(self.price) or not isfinite(self.quality) or not isfinite(self.rr):
+            raise ValueError("target price/quality/RR must be finite")
         if self.price <= 0 or self.rr <= 0:
             raise ValueError("target price/RR must be positive")
         if not 0 <= self.quality <= 100:
             raise ValueError("target quality must be between 0 and 100")
+        if not self.source.strip():
+            raise ValueError("target source cannot be empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +111,7 @@ class TradePlanConfig:
             self.strong_rr_floor,
             self.marginal_expansion_rr,
         )
-        if any(value <= 0 for value in positive):
+        if any(not isfinite(value) or value <= 0 for value in positive):
             raise ValueError("Trade Plan thresholds must be positive")
         if self.minimum_buffer_ticks <= 0:
             raise ValueError("minimum buffer ticks must be positive")
@@ -154,7 +158,12 @@ class TradePlan:
         _require_utc(self.created_at_utc)
         if self.direction is Direction.NONE:
             raise ValueError("Trade Plan direction must be BUY or SELL")
-        if self.signal_price <= 0 or self.approved_entry_reference <= 0:
+        if (
+            not isfinite(self.signal_price)
+            or not isfinite(self.approved_entry_reference)
+            or self.signal_price <= 0
+            or self.approved_entry_reference <= 0
+        ):
             raise ValueError("signal/entry prices must be positive")
         for value in (
             self.invalidation_level,
@@ -162,7 +171,7 @@ class TradePlan:
             self.stop_buffer,
             self.original_r_price,
         ):
-            if value is not None and value <= 0:
+            if value is not None and (not isfinite(value) or value <= 0):
                 raise ValueError("Trade Plan geometry must be positive when present")
         if self.state is not PlanState.INVALID and None in (
             self.invalidation_level,
@@ -173,7 +182,12 @@ class TradePlan:
             raise ValueError("non-INVALID Trade Plan requires complete stop geometry")
         if self.state is PlanState.READY and self.broker_tp_target is None:
             raise ValueError("READY Trade Plan requires a broker target")
-        if not 0 <= self.path_quality <= 100 or not 0 <= self.plan_quality <= 100:
+        if (
+            not isfinite(self.path_quality)
+            or not isfinite(self.plan_quality)
+            or not 0 <= self.path_quality <= 100
+            or not 0 <= self.plan_quality <= 100
+        ):
             raise ValueError("plan/path quality must be between 0 and 100")
 
     @property
@@ -377,7 +391,7 @@ def _find_invalidation(
         frame = intelligence.for_timeframe(timeframe)
         protected = frame.structure.protected_low if direction is Direction.BUY else frame.structure.protected_high
         if protected is not None and _level_is_beyond_entry(protected.price, entry, direction):
-            return protected.price, f"{timeframe}:PROTECTED_{wanted_side}", frame
+            return protected.price, f"{timeframe}:PROTECTED_{wanted_side.value}", frame
 
         swing = next(
             (
@@ -388,7 +402,7 @@ def _find_invalidation(
             None,
         )
         if swing is not None:
-            return swing.price, f"{timeframe}:CONFIRMED_{wanted_side}", frame
+            return swing.price, f"{timeframe}:CONFIRMED_{wanted_side.value}", frame
 
         zone = frame.technical.nearest_support if direction is Direction.BUY else frame.technical.nearest_resistance
         if zone is not None:
@@ -449,7 +463,14 @@ def _target_candidates(
                 )
 
     tolerance = max(tick * 4, atr * cfg.target_merge_atr)
-    ordered = sorted(raw, key=lambda item: item.price, reverse=direction is Direction.SELL)
+    ordered = sorted(
+        raw,
+        key=lambda item: (
+            -item.price if direction is Direction.SELL else item.price,
+            -item.quality,
+            item.source,
+        ),
+    )
     merged: list[_TargetCandidate] = []
     for candidate in ordered:
         if merged and abs(candidate.price - merged[-1].price) <= tolerance:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 
 from goldswingtraderai.decisions.fusion import DecisionBoard
@@ -16,7 +16,7 @@ from goldswingtraderai.domain.enums import (
     OpportunityStage,
     Timeframe,
 )
-from goldswingtraderai.intelligence.snapshot import IntelligenceSnapshot
+from goldswingtraderai.intelligence.snapshot import IntelligenceSnapshot, TimeframeIntelligence
 from goldswingtraderai.intelligence.technical import LocationCategory
 
 
@@ -62,6 +62,7 @@ def evaluate_entry_timing(
 ) -> EntryTimingResult:
     """Return ENTER/WAIT/MISSED/INVALID without applying hard broker safety."""
 
+    _require_utc(now_utc)
     cfg = config or EntryTimingConfig()
     if opportunity.stage in {
         OpportunityStage.TRIGGERED,
@@ -171,11 +172,11 @@ def _wait_stage(opportunity: Opportunity, now_utc: datetime) -> Opportunity:
     return transition_opportunity(opportunity, OpportunityStage.WAITING, now_utc)
 
 
-def _structure(frame, direction: Direction) -> float:
+def _structure(frame: TimeframeIntelligence, direction: Direction) -> float:
     return frame.structure.bull_evidence if direction is Direction.BUY else frame.structure.bear_evidence
 
 
-def _sequence(frame, direction: Direction) -> float:
+def _sequence(frame: TimeframeIntelligence, direction: Direction) -> float:
     state = frame.structure.sequence
     ideal = {
         Direction.BUY: {
@@ -210,7 +211,7 @@ def _sequence(frame, direction: Direction) -> float:
     return 52.0
 
 
-def _momentum(frame, direction: Direction) -> float | None:
+def _momentum(frame: TimeframeIntelligence, direction: Direction) -> float | None:
     phase = frame.quant.momentum_phase
     if phase is MomentumPhase.UNKNOWN:
         return None
@@ -228,7 +229,7 @@ def _momentum(frame, direction: Direction) -> float | None:
     return 50.0
 
 
-def _location(frame, direction: Direction) -> float | None:
+def _location(frame: TimeframeIntelligence, direction: Direction) -> float | None:
     category = frame.technical.buy_location if direction is Direction.BUY else frame.technical.sell_location
     return {
         LocationCategory.EXCELLENT: 95.0,
@@ -240,7 +241,7 @@ def _location(frame, direction: Direction) -> float | None:
     }[category]
 
 
-def _target_room(frame, direction: Direction) -> float | None:
+def _target_room(frame: TimeframeIntelligence, direction: Direction) -> float | None:
     room = frame.technical.buy_target_room if direction is Direction.BUY else frame.technical.sell_target_room
     atr = frame.quant.atr
     if room is None or atr is None or atr <= 0:
@@ -257,9 +258,16 @@ def _target_room(frame, direction: Direction) -> float | None:
     return 95.0
 
 
-def _liquidity(frame, direction: Direction) -> float:
+def _liquidity(frame: TimeframeIntelligence, direction: Direction) -> float:
     return frame.liquidity.buy_evidence if direction is Direction.BUY else frame.liquidity.sell_evidence
 
 
 def _clip(value: float) -> float:
     return min(100.0, max(0.0, value))
+
+
+def _require_utc(value: datetime) -> None:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("timing timestamp must be timezone-aware UTC")
+    if value.utcoffset() != timezone.utc.utcoffset(value):
+        raise ValueError("timing timestamp must be UTC")

@@ -57,6 +57,11 @@ def test_durable_episode_journal_feeds_discovery_after_restart(tmp_path) -> None
     assert len(cycle.created) == 1
     assert cycle.created[0].kind is CandidateKind.VARIANT
     assert len(registry.all()) == 1
+    status = registry.load_discovery_status()
+    assert status is not None
+    assert status.health == DiscoveryHealth.HEALTHY.value
+    assert status.observations_seen == 3
+    assert status.eligible_clusters == 1
 
 
 def test_episode_evidence_maps_to_multiple_approved_primitives() -> None:

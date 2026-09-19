@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import StrEnum
 
 from goldswingtraderai.research.discovery import (
@@ -103,6 +104,14 @@ def run_invention_cycle(
         health = DiscoveryHealth.HEALTHY
     else:
         health = DiscoveryHealth.DEGRADED
+
+    registry.save_discovery_status(
+        health=health.value,
+        reasons=tuple(reasons),
+        observations_seen=len(observations),
+        eligible_clusters=eligible_clusters,
+        updated_at_utc=datetime.now(timezone.utc),
+    )
 
     return InventionCycleResult(
         health=health,

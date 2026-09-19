@@ -83,6 +83,26 @@ class StartupRecoveryService:
             symbol_aliases=self.settings.symbol_aliases,
             captured_at_utc=now_utc,
         )
+        return self.recover_from_facts(
+            market=market,
+            recovery_truth=recovery_truth,
+            session_news_permission=session_news_permission,
+            now_utc=now_utc,
+            allow_verified_not_created=allow_verified_not_created,
+        )
+
+    def recover_from_facts(
+        self,
+        *,
+        market: MarketSnapshot,
+        recovery_truth: MT5RecoveryTruth,
+        session_news_permission: SessionNewsPermission,
+        now_utc: datetime,
+        allow_verified_not_created: bool = False,
+    ) -> StartupRuntimeResult:
+        """Run the same governed recovery sequence over one captured fact set."""
+
+        _require_utc(now_utc)
         authorities = build_recovery_authorities(
             settings=self.settings,
             market=market,

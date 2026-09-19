@@ -176,7 +176,21 @@ class ControllerLeaseManager:
     def _verify_current_authority(self, now_utc: datetime) -> ControllerStatus:
         _require_utc(now_utc)
         if self.lease is None:
-            return ControllerStatus(HardDecision.UNKNOWN, "CONTROLLER_OWNERSHIP_UNKNOWN", None)
+            try:
+                current = self.store.read(self.scope)
+            except Exception:
+                return ControllerStatus(
+                    HardDecision.UNKNOWN,
+                    "CONTROLLER_COORDINATION_UNAVAILABLE",
+                    None,
+                )
+            if current is not None and not current.expired(now_utc):
+                return ControllerStatus(
+                    HardDecision.BLOCK,
+                    "ANOTHER_ACTIVE_CONTROLLER",
+                    current,
+                )
+            return ControllerStatus(HardDecision.UNKNOWN, "CONTROLLER_OWNERSHIP_UNKNOWN", current)
         try:
             current = self.store.read(self.scope)
         except Exception:

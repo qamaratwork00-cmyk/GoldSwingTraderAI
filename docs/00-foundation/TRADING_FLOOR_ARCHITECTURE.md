@@ -1,12 +1,40 @@
 # GoldSwingTraderAI — Trading Floor Architecture
 
-**Status:** PROVISIONAL  
-**Version:** 0.3-design  
+**Status:** PROVISIONAL
+**Version:** 0.4-design
 **Authority:** Specialist-desk ownership model
 
 ## Purpose
 
 GoldSwingTraderAI is designed as a coordinated trading floor rather than one monolithic strategy function. Every desk has a bounded responsibility, structured output and explicit limit on authority.
+
+## Floor wiring
+
+The floor is a directed evidence network. The desks at the top can work from
+the same snapshot without waiting for one another; the boards at the bottom
+must receive their outputs in a defined order.
+
+```mermaid
+flowchart TB
+    SNAPSHOT["Verified shared snapshot"] --> MARKET["Market desks — structure + technical + liquidity + quant + context"]
+    MARKET --> FAMILIES["Strategy families — six independent hypotheses"]
+    FAMILIES --> THESIS["BUY team + SELL team — Red Team challenge"]
+    THESIS --> BOARD["Fusion + timing + Trade Plan"]
+    BOARD --> CONTROL["Risk + session/news + execution gate"]
+    CONTROL --> BROKER["One governed broker boundary"]
+    BROKER --> MANAGE["Trade Manager + persistence + research"]
+```
+
+The floor uses two different meanings of “parallel”:
+
+- market desks and family evaluators are independent evidence producers;
+- BUY and SELL thesis teams are independent opponents using the same evidence;
+- fusion, timing, planning, hard permission and execution are ordered boards;
+- management is a new decision branch after verified entry, not a second broker
+  path.
+
+No desk may obtain permission by accumulating enough soft votes. Permission is
+owned by hard-authority modules near the broker boundary.
 
 ## Core desks
 
@@ -220,6 +248,25 @@ source IDs/episode references where relevant
 
 Hard-authority desks additionally return explicit PASS/BLOCK/UNKNOWN (or equivalent state) with stable reason codes.
 
+## Source and test navigation
+
+| Floor responsibility | Source owner | Behavioural authority | Main proof |
+|---|---|---|---|
+| Market Data Desk | market_data/mt5_reader.py, snapshot.py | 10-market-intelligence/MARKET_DATA_AND_HISTORY.md | tests/test_market_data.py |
+| Structure/technical/liquidity/quant desks | intelligence/candle_structure.py, technical.py, liquidity.py, indicators.py | corresponding 10-market-intelligence documents | tests/test_intelligence_core.py, tests/test_technical_liquidity.py |
+| Confluence desk | intelligence/confluence.py | TECHNICAL_STRUCTURE_AND_LEVELS.md | tests/test_technical_confluence.py |
+| News/session facts | intelligence/news.py, app/session_news.py | FUNDAMENTAL_AND_NEWS.md and SESSION_NEWS_PROVIDER_CONTRACT.md | tests/test_session_news_provider.py |
+| Strategy families | strategies/floor.py, strategies/confluence.py | 20-trading-decisions/STRATEGY_FLOOR.md | tests/test_strategy_decisions.py |
+| Fusion/timing/Trade Plan | decisions/fusion.py, timing.py, trade_plan.py | SCORING_AND_DECISION_FUSION.md, ENTRY_TIMING.md, TRADE_PLAN.md | tests/test_strategy_decisions.py, tests/test_trade_plan_risk.py |
+| Risk and permission | risk/engine.py, state.py, permissions.py | 30-risk-execution documents | tests/test_trade_plan_risk.py, tests/test_session_news_permissions.py |
+| Execution | execution/gate.py, service.py, mt5_writer.py, reconcile.py | EXECUTION_AND_BROKER_SAFETY.md | tests/test_execution_safety.py |
+| Management | management/manager.py, execution.py | TRADE_MANAGER_AND_EXIT.md | tests/test_trade_manager.py, tests/test_management_execution.py |
+| Persistence/recovery | persistence/, app/recovery*.py, app/startup.py | PERSISTENCE_RESTART_AND_RECOVERY.md | tests/test_persistence_recovery.py, tests/test_startup_recovery.py |
+| Research/learning | research/ | 40-research-learning documents | tests/test_research_*.py, tests/test_promotion_governance.py |
+
+This map is navigation, not a second rule set. If ownership changes, update
+the detailed authority, module map and coder guide together.
+
 ## Dependency rule
 
 The trading floor is intentionally asymmetric near the broker boundary:
@@ -235,3 +282,11 @@ ONE governed broker-write path
 ```
 
 No strategy, dashboard, research or learning desk may bypass that final boundary.
+
+## Verification boundary
+
+The floor contract is checked through shared-snapshot intelligence tests,
+strategy/fusion tests, Trade Plan/Risk tests and execution-gate tests. The
+primary source/test map is the table above and the detailed feature map in
+`docs/CODER_GUIDE.md`; connected broker evidence remains a release-audit
+responsibility.

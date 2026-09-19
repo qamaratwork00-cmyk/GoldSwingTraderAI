@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import isfinite
+from typing import Any
 
 from goldswingtraderai.domain.enums import Direction, StrategyFamily
 from goldswingtraderai.persistence import StateStore
@@ -254,28 +255,71 @@ def _episode_payload(episode: ResearchEpisodeRecord) -> dict[str, object]:
 def _episode_from_payload(payload: object) -> ResearchEpisodeRecord:
     if not isinstance(payload, dict):
         raise ValueError("research episode entry must be an object")
-    observed = datetime.fromisoformat(str(payload["observed_at_utc"]))
-    _require_utc(observed)
-    family_raw = payload.get("family")
-    return ResearchEpisodeRecord(
-        source_id=str(payload["source_id"]),
-        observed_at_utc=observed,
-        direction=Direction(str(payload["direction"])),
-        family=StrategyFamily(str(family_raw)) if family_raw else None,
-        regime=str(payload["regime"]),
-        session=str(payload["session"]),
-        outcome_kind=OpportunityOutcomeKind(str(payload["outcome_kind"])),
-        strategy_evidence=tuple(str(value) for value in payload["strategy_evidence"]),
-        meaningful_move=bool(payload["meaningful_move"]),
-        realized_r=_optional_float(payload.get("realized_r")),
-        mfe_r=_optional_float(payload.get("mfe_r")),
-        capture_efficiency=_optional_float(payload.get("capture_efficiency")),
-        counterfactual_mfe_r=_optional_float(payload.get("counterfactual_mfe_r")),
-    )
+    try:
+        observed = _required_datetime(payload["observed_at_utc"])
+        family_raw = payload.get("family")
+        evidence = payload["strategy_evidence"]
+        if not isinstance(evidence, (list, tuple)):
+            raise ValueError("research episode evidence must be a sequence")
+        return ResearchEpisodeRecord(
+            source_id=_required_text(payload["source_id"], "source_id"),
+            observed_at_utc=observed,
+            direction=Direction(_required_text(payload["direction"], "direction")),
+            family=(
+                None
+                if family_raw is None
+                else StrategyFamily(_required_text(family_raw, "family"))
+            ),
+            regime=_required_text(payload["regime"], "regime"),
+            session=_required_text(payload["session"], "session"),
+            outcome_kind=OpportunityOutcomeKind(
+                _required_text(payload["outcome_kind"], "outcome_kind")
+            ),
+            strategy_evidence=tuple(
+                _required_text(value, "strategy evidence") for value in evidence
+            ),
+            meaningful_move=_required_bool(payload["meaningful_move"], "meaningful_move"),
+            realized_r=_optional_float(payload.get("realized_r")),
+            mfe_r=_optional_float(payload.get("mfe_r")),
+            capture_efficiency=_optional_float(payload.get("capture_efficiency")),
+            counterfactual_mfe_r=_optional_float(payload.get("counterfactual_mfe_r")),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("invalid persisted research episode") from exc
 
 
 def _optional_float(value: object) -> float | None:
-    return None if value is None else float(value)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("research episode numeric value must be numeric")
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise ValueError("research episode numeric value must be finite")
+    return parsed
+
+
+def _required_text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"research episode {label} must be non-empty text")
+    return value
+
+
+def _required_bool(value: Any, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"research episode {label} must be boolean")
+    return value
+
+
+def _required_datetime(value: Any) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("research episode timestamp must be an ISO-8601 string")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("research episode timestamp is invalid") from exc
+    _require_utc(parsed)
+    return parsed
 
 
 def _require_utc(value: datetime) -> None:

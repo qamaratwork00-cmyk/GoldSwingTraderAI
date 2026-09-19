@@ -1,22 +1,72 @@
 # GoldSwingTraderAI — Setup and Run Guide
 
-**Status:** DRAFT — CORE MODULES IMPLEMENTED; INTEGRATED PERSISTENT TRADING RUNTIME PENDING  
-**Version:** 0.6-implementation  
-**Authority:** Operator workflow for installation, startup, safe shutdown, migration, restore and common blocked-state handling.  
+**Status:** DRAFT — OPERATOR WORKFLOW MANUAL
+**Version:** 0.9-implementation
+**Authority:** Operator workflow for installation, startup, safe shutdown, migration, restore and common blocked-state handling.
 **Depends on:** `50-operator/DASHBOARD_AND_UX.md`, `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
 ## Purpose
 
-This guide records real commands and current runtime reality.
+This guide defines the operator commands and runtime modes from installation
+through safe shutdown, restore and release proof.
+
+## Source ownership and proof
+
+| Operator concern | Source owner | Proof owner |
+|---|---|---|
+| Settings and launcher mode | `config/settings.py`, `app/main.py` | `tests/test_settings.py`, `tests/test_app_readiness.py` |
+| MT5 initialization and broker facts | `market_data/mt5_reader.py`, `app/recovery_mt5.py` | `tests/test_market_data.py`, `tests/test_recovery_mt5.py` |
+| Startup/recovery/controller | `app/runtime.py`, `app/startup.py`, `app/recovery.py`, `execution/controller.py` | `tests/test_live_startup_runtime.py`, `tests/test_startup_recovery.py`, `tests/test_sqlite_coordination.py` |
+| Persistent cycle and shutdown | `app/cycle.py`, `app/loop.py` | `tests/test_runtime_loop.py` |
+| Restore and public-safe backup | `persistence/`, `scripts/restore_runtime_checkpoint.py`, `scripts/stage_public_backup.py` | `tests/test_runtime_checkpoint.py`, `tests/test_backup_catalog.py` |
+
+This guide describes operator actions; it does not reimplement risk,
+permission or execution policy. Follow the linked authority documents when a
+runtime state is `BLOCKED`, `UNKNOWN` or `RECONCILING`.
 
 Important distinction:
 
-- deterministic production modules now exist through the current Phase-10 foundation, including strategy/risk/execution/management/research components;
-- the current `goldswing` / `python -m goldswingtraderai` launcher still runs the **read-only MT5 readiness path**;
-- the launcher has not yet been replaced by the final persistent full-trading orchestrator;
-- controlled Windows/MT5 DEMO execution certification remains pending.
+- the production architecture is divided into strategy, risk, execution,
+  management and research boundaries, with startup/recovery composing them;
+- the default `goldswing` / `python -m goldswingtraderai` launcher runs the
+  **read-only MT5 readiness path**;
+- explicit `PRIMARY`/`STANDBY` mode enters the integrated startup/recovery and
+  persistent M5 loop; absent session/news truth fails closed before READY;
+- controlled Windows/MT5 DEMO execution is a separate release-evidence gate.
 
-Do not infer that a module is missing merely because the current launcher does not yet orchestrate it, and do not infer live trading readiness merely because component tests are green.
+Do not infer that a module is missing merely because the selected launcher mode
+does not invoke it, and do not infer live trading readiness merely because
+component tests are green.
+
+## Operator startup map
+
+Choose the mode deliberately. READINESS proves connectivity without creating
+runtime authority; PRIMARY/STANDBY build the full dependency graph and remain
+fail-closed until recovery is complete.
+
+```mermaid
+flowchart TB
+    MODE["GSTAI_RUNTIME_MODE"] --> READINESS["READINESS — one read-only snapshot → exit"]
+    MODE --> PRIMARY["PRIMARY — acquire controller → recover → run"]
+    MODE --> STANDBY["STANDBY — observe/attempt takeover → recover → run"]
+    PRIMARY --> START["MT5Reader + recovery truth + local state mode"]
+    STANDBY --> START
+    START --> AUTHORITIES["RecoveryAuthorities + controller + session/news"]
+    AUTHORITIES --> READY{"READY?"}
+    READY -->|"no"| SAFE["RECONCILING/BLOCKED — no broker cycle"]
+    READY -->|"yes"| LOOP["Persistent loop — M5 cycle + 10s heartbeat + backup"]
+    LOOP --> SHUTDOWN["Safe stop — reconcile + persist + release lease"]
+```
+
+Before PRIMARY/STANDBY can be used, the operator must understand the three
+independent requirements:
+
+1. MT5 terminal/account/symbol truth must be readable;
+2. local durable state must be selected without destructive overwrite;
+3. session/news, risk, position, execution and controller authorities must
+   produce a governed READY result.
+
+Green unit tests do not replace these environment checks.
 
 ## Prerequisites
 
@@ -52,9 +102,9 @@ python scripts/scan_financial_secrets.py .
 
 Do not place MT5 passwords, authentication/session tokens or other financial-authority secrets in the repository.
 
-## Current `.env` fields
+## `.env` fields
 
-The safe example currently exposes non-secret configuration such as:
+The safe example exposes non-secret configuration such as:
 
 ```text
 GSTAI_ENV=development
@@ -63,8 +113,17 @@ GSTAI_SYMBOL_ALIASES=XAUUSDm,XAUUSD
 GSTAI_MANUAL_RESET_ENABLED=false
 GSTAI_STATE_DIR=.state
 GSTAI_LOG_LEVEL=INFO
+GSTAI_RUNTIME_MODE=READINESS
+GSTAI_STATE_MODE=EXISTING
+GSTAI_RESTORE_CHECKPOINT=
 GSTAI_ALLOWED_ACCOUNT_LOGIN=
 GSTAI_ALLOWED_SERVER=
+GSTAI_MT5_MAGIC=
+GSTAI_MT5_DEVIATION_POINTS=
+GSTAI_MT5_COMMENT_PREFIX=GSTAI
+GSTAI_HEALTHY_SPREAD_BASELINE=
+GSTAI_SESSION_NEWS_FILE=
+GSTAI_SESSION_NEWS_TTL_SECONDS=1800
 ```
 
 `GSTAI_ALLOWED_ACCOUNT_LOGIN` and `GSTAI_ALLOWED_SERVER` are optional identity pins.
@@ -80,7 +139,7 @@ Connected MT5 account positively verified DEMO
 
 V1 does not define a separate REAL authorization workflow.
 
-## Current launcher command
+## Launcher commands
 
 With MT5 open and environment activated:
 
@@ -94,9 +153,47 @@ Equivalent console command:
 goldswing
 ```
 
-### Current launcher behaviour
+### Integrated startup/recovery modes
 
-The launcher currently performs **read-only readiness**:
+The safe default is `GSTAI_RUNTIME_MODE=READINESS`. To run the integrated
+startup composition, configure the explicit non-secret broker identifiers and
+choose one of:
+
+```text
+GSTAI_RUNTIME_MODE=PRIMARY    # acquire/write-capable controller after recovery
+GSTAI_RUNTIME_MODE=STANDBY    # wait for/attempt governed takeover after expiry
+```
+
+`GSTAI_MT5_MAGIC` and `GSTAI_MT5_DEVIATION_POINTS` are required in these modes.
+They are not credentials. The startup path uses the existing initialized
+`MT5Reader` module for reconciliation; it does not create a second MT5 client.
+`GSTAI_HEALTHY_SPREAD_BASELINE` is optional configuration but required for an
+entry/management gate PASS; leave it empty rather than guessing until the
+broker-specific healthy XAU spread is calibrated.
+
+`GSTAI_SESSION_NEWS_FILE` optionally points to the provider-neutral live
+session/news handoff described in [`SESSION_NEWS_PROVIDER_CONTRACT.md`](30-risk-execution/SESSION_NEWS_PROVIDER_CONTRACT.md).
+The producer must atomically replace a complete account/server/symbol-scoped
+JSON snapshot. `GSTAI_SESSION_NEWS_TTL_SECONDS` bounds freshness. Missing,
+malformed, mis-scoped, future-dated or stale input remains `UNKNOWN`; it never
+becomes implicit session/news clearance.
+
+Durable state selection is explicit:
+
+```text
+EXISTING   → use the current local runtime DB; missing risk state remains blocked
+INITIALIZE → create the first UTC risk-day baseline only in an otherwise empty store
+RESTORE    → verify GSTAI_RESTORE_CHECKPOINT and restore only to a new runtime DB
+```
+
+`RESTORE` refuses to overwrite an existing `runtime.db`. Checkpoint restore is
+context only; live MT5 positions/orders/deals are still authoritative.
+
+### Launcher mode behaviour
+
+`READINESS` performs **read-only readiness**. `PRIMARY`/`STANDBY` continue into
+the persistent runtime only after startup recovery is READY. The read-only
+launcher path is:
 
 ```text
 load/validate non-secret settings
@@ -113,11 +210,35 @@ load/validate non-secret settings
 → shutdown MT5 bridge
 ```
 
-The current `app/main.py` intentionally reports `broker_write_implemented=False` because the launcher itself does not yet call the integrated execution runtime.
+The default readiness mode remains read-only. In `PRIMARY`/`STANDBY`, the
+integrated path performs:
 
-This does **not** mean execution modules are absent. The repository already contains deterministic implementations for execution intent/gate/checks/controller/MT5 writer/service/reconciliation, but they are not yet wired into the normal persistent launcher.
+```text
+initialize MT5 through MT5Reader
+→ build normalized MarketSnapshot
+→ build live MT5RecoveryTruth and broker-tick tolerance
+→ select existing / initialize / verified-restored local state
+→ assemble SQLite repositories, reconciler and controller fencing
+→ construct RecoveryAuthorities from live account/market/risk/position/environment facts
+→ invoke StartupRecoveryCoordinator
+→ emit READY / RECONCILING / BLOCKED
+→ if READY, keep controller/MT5 alive for persistent M5 cycles
+→ renew controller every 10 seconds, checkpoint backups when due, safe shutdown
+```
 
-## Current default history windows
+The persistent launcher renders one read-only terminal dashboard frame after
+each fresh cycle. It displays the already-produced market/decision/risk/
+execution/recovery/controller/research/backup DTO; rendering cannot trigger a
+new decision or broker write.
+
+If no authoritative session/news provider or configured snapshot is supplied,
+that authority remains `UNKNOWN` and startup cannot become `READY`; no schedule
+or news clearance is invented. A supplied provider may return both
+`SessionNewsPermission` and optional `NewsFacts`/holiday context for the shared
+intelligence snapshot. The file handoff is a boundary adapter, not a choice of
+commercial calendar vendor.
+
+## Default history windows
 
 ```text
 H4    400 completed candles
@@ -128,7 +249,7 @@ M5   4000 completed candles
 
 MT5 bar position `0` is the forming candle. Completed history starts at position `1`.
 
-## Current deterministic subsystem checkpoint
+## Deterministic subsystem composition
 
 Implemented/tested component families include:
 
@@ -145,7 +266,7 @@ operator/
 research/
 ```
 
-Notable current behaviour:
+Notable contract behaviour:
 
 - causal Trendline/Fibonacci/broker-local POC confluence exists as optional bonus-only intelligence;
 - SMALL is any positive UTC day-start equity below `$300`; no `$100` floor;
@@ -154,26 +275,72 @@ Notable current behaviour:
 - HOLD/PROTECT/TRAIL/RUNNER/EXIT Trade Manager exists;
 - discovery/invention has durable liveness/candidate/promotion machinery.
 
-These deterministic modules still require final runtime orchestration and controlled broker integration evidence.
+These deterministic modules require an accepted external producer and
+controlled broker integration evidence. The provider-neutral handoff wiring
+defines the validation boundary, but it does not certify the producer's data
+quality.
 
-## Intended full startup after orchestration is complete
+## Offline fixed-policy research run
+
+For a verified historical dataset bundle, the repository now provides an
+operator boundary that runs chronological fixed-policy walk-forward validation
+and writes an immutable evidence package:
 
 ```text
-load + validate durable state
-→ connect MT5
-→ verify account/server/DEMO status
-→ resolve Gold symbol/specs
-→ load/validate H4/H1/M15/M5 history
-→ reconcile positions/orders/deals
-→ restore risk/open-trade/opportunity state
-→ load Strategy Registry + learning/research state
-→ verify news/session inputs
-→ acquire controller lease/epoch
-→ rebuild/revalidate market intelligence
-→ run strategies/fusion/timing/TradePlan/risk
-→ evaluate centralized Execution Permission Gate
-→ READY
+python scripts/run_walk_forward.py DATASET_BUNDLE EVIDENCE_PACKAGE \
+  --development-events 200 \
+  --validation-events 50 \
+  --step-events 50 \
+  --code-revision <reviewed-code-revision> \
+  --policy-version <policy-version>
 ```
+
+Use repeated `--minimum-bars TIMEFRAME=COUNT` options when the research run
+requires explicit history gates. Add `--without-stress` only when the omission
+is intentional and recorded in the resulting manifest. The command verifies the
+dataset bundle, binds the evidence package to its content hash, and never uses
+MT5, broker writes or final-holdout authority. It creates reproducible research
+evidence; it does not certify profitability or DEMO execution.
+
+### Controlled Windows/MT5 acquisition
+
+On the intended Windows machine, with the connected MT5 terminal already
+selected to the research account, acquire a public-safe offline bundle first:
+
+```text
+python scripts/acquire_mt5_dataset.py DATASET_BUNDLE \
+  --source-label <broker-history-source> \
+  --source-version <terminal-export-version>
+```
+
+Defaults are `H4=400`, `H1=750`, `M15=2000`, `M5=4000` completed candles. To
+declare different exact counts, repeat `--count`, for example
+`--count H4=800 --count H1=1200 --count M15=4000 --count M5=8000`.
+If positive historical M5 `spread_points` are unavailable, provide an explicit
+`--spread-price-override`; the command never silently assumes zero spread.
+The output JSON includes dataset/manifest hashes and
+`broker_write_performed=false`. Review and preserve those hashes with the
+research evidence package.
+
+## Integrated startup composition
+
+```text
+select EXISTING / INITIALIZE / RESTORE state mode
+→ load/validate durable state
+→ connect MT5 and build live recovery truth
+→ reconcile positions/orders/deals when an Intent requires it
+→ verify account/server/DEMO/symbol and hard RecoveryAuthorities
+→ acquire controller lease/epoch
+→ governed startup recovery
+→ READY / RECONCILING / BLOCKED
+```
+
+The persistent runtime slice now rebuilds intelligence on an M5 cadence,
+evaluates the centralized entry/management gate, persists one-shot lifecycle
+state, keeps the controller lease renewed and refreshes the read-only dashboard
+DTO. Durable discovery liveness/candidate state is displayed when research has
+written it to the runtime store; external producer selection/operation and
+real-environment evidence remain release work.
 
 ## Runtime roles
 
@@ -211,7 +378,7 @@ System failures such as account mismatch, unresolved broker acknowledgement, cor
 
 ## Optional confluence visibility
 
-Future integrated runtime/dashboard may show compact lines such as:
+The integrated runtime/dashboard may show compact lines such as:
 
 ```text
 Trendline   M15 support TOUCH
@@ -254,9 +421,11 @@ Hard permission logic is implemented deterministically; live schedule/provider w
 
 ## Safe shutdown target
 
-Current read-only launcher exits after one readiness snapshot and shuts down MT5 bridge in `finally`.
+READINESS exits after one readiness snapshot. PRIMARY/STANDBY keep the runtime
+alive after a READY startup until stop/interruption/controller loss, then release
+the controller lease and shut down MT5.
 
-Final persistent runtime should use:
+The persistent runtime uses:
 
 ```text
 stop new entry triggering
@@ -291,7 +460,8 @@ clone/install project
 → PRIMARY READY
 ```
 
-Production shared cross-laptop coordination backend and fresh-machine drill remain pending release work.
+Production shared cross-laptop coordination backend and fresh-machine drill are
+external release-evidence gates.
 
 ## Disaster recovery
 
@@ -313,14 +483,47 @@ python scripts/scan_financial_secrets.py .
 
 If a financial credential was committed publicly, rotate/revoke it; deletion alone is insufficient.
 
-## Verification status
+## Verified backup staging and fresh-machine restore
+
+The persistent loop creates verified local backups under `GSTAI_STATE_DIR`.
+Before any public publication, stage only the newest catalog-verified artifact:
+
+```text
+python scripts/stage_public_backup.py .state/backups public-backups/runtime-20260918 \
+  --published-at-utc 2026-09-18T20:00:00Z
+python scripts/scan_financial_secrets.py public-backups/runtime-20260918
+```
+
+Review the generated `publication_manifest.json`, then perform any Git add,
+commit and push explicitly with external GitHub credentials. The staging tool
+does not push and does not store a PAT.
+
+On a new machine, restore into a new database before configuring the live
+runtime:
+
+```text
+python scripts/restore_runtime_checkpoint.py \
+  public-backups/runtime-20260918/checkpoints/<checkpoint-name> \
+  .state-restored/runtime.db
+```
+
+The command reports `broker_reconciliation_required=true` and
+`trading_authority_granted=false`. Configure `GSTAI_STATE_MODE=RESTORE` with
+the verified checkpoint, connect the intended DEMO MT5 terminal, and allow
+governed startup recovery to compare current broker positions/orders/deals
+before any new write.
+
+## Verification and release evidence
 
 Repository CI runs Ruff, Pytest and financial-secret scan.
 
-Current deterministic green status is software evidence only. The following remain pending before honest DEMO verification:
+Deterministic green status is software evidence only. The following release
+evidence gates must pass before honest DEMO verification:
 
-- fully integrated persistent runtime;
+- accepted external session/news producer from the intended environment and
+  verification of its atomic refresh/freshness behaviour;
+- UTC risk-day rollover and restart/fault-injection certification;
 - real Windows/MT5 read/write lifecycle evidence;
 - production shared cross-laptop coordination backend/failover evidence;
-- backup/export/fresh-machine recovery drill;
+- real fresh-machine restore plus current-broker reconciliation drill;
 - full end-to-end controlled DEMO certification.
