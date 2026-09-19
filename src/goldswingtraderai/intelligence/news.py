@@ -7,7 +7,7 @@ own final NEWS_CLEAR/BLACKOUT/UNKNOWN permission.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 
 
@@ -51,6 +51,13 @@ class ScheduledEventFact:
     window_before_minutes: int
     window_after_minutes: int
 
+    def __post_init__(self) -> None:
+        _require_utc(self.scheduled_at_utc)
+        if not self.event_id.strip() or not self.title.strip() or not self.currency.strip():
+            raise ValueError("normalized event id/title/currency cannot be empty")
+        if self.window_before_minutes < 0 or self.window_after_minutes < 0:
+            raise ValueError("event windows cannot be negative")
+
     @property
     def window_start_utc(self) -> datetime:
         return self.scheduled_at_utc - timedelta(minutes=self.window_before_minutes)
@@ -67,6 +74,14 @@ class EventWindow:
     end_utc: datetime
     event_ids: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        _require_utc(self.start_utc)
+        _require_utc(self.end_utc)
+        if self.end_utc < self.start_utc:
+            raise ValueError("news window cannot end before it starts")
+        if not self.event_ids or any(not event_id.strip() for event_id in self.event_ids):
+            raise ValueError("news window requires non-empty event ids")
+
 
 @dataclass(frozen=True, slots=True)
 class NewsFacts:
@@ -77,6 +92,15 @@ class NewsFacts:
     events: tuple[ScheduledEventFact, ...]
     windows: tuple[EventWindow, ...]
     required_event_truth_available: bool
+
+    def __post_init__(self) -> None:
+        if not self.provider.strip() or not self.mapping_version.strip():
+            raise ValueError("news provider and mapping version cannot be empty")
+        if self.fetched_at_utc is not None:
+            _require_utc(self.fetched_at_utc)
+        event_ids = tuple(event.event_id for event in self.events)
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("news event ids must be unique")
 
 
 _CRITICAL_TERMS = (
@@ -121,6 +145,8 @@ def normalize_news_facts(
     _require_utc(as_of_utc)
     if fetched_at_utc is not None:
         _require_utc(fetched_at_utc)
+        if fetched_at_utc > as_of_utc:
+            raise ValueError("news fetch timestamp cannot be in the future")
     if freshness_ttl <= timedelta(0):
         raise ValueError("freshness TTL must be positive")
     if not provider.strip():
@@ -130,7 +156,7 @@ def normalize_news_facts(
     facts = tuple(
         sorted(
             (_normalize_event(event) for event in raw_events),
-            key=lambda event: event.scheduled_at_utc,
+            key=lambda event: (event.scheduled_at_utc, event.event_id),
         )
     )
     windows = _merge_windows(facts)
@@ -230,5 +256,5 @@ def _merge_windows(events: tuple[ScheduledEventFact, ...]) -> tuple[EventWindow,
 def _require_utc(value: datetime) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("news timestamps must be timezone-aware UTC")
-    if value.utcoffset().total_seconds() != 0:
+    if value.utcoffset() != timezone.utc.utcoffset(value):
         raise ValueError("news timestamps must be UTC")

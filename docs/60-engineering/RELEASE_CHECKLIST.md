@@ -1,13 +1,38 @@
 # GoldSwingTraderAI — Release Checklist
 
-**Status:** PROVISIONAL  
-**Version:** 0.5-design  
-**Authority:** DEMO release gates and sign-off checklist.  
+**Status:** PROVISIONAL
+**Version:** 0.6-design
+**Authority:** DEMO release gates and sign-off checklist.
 **Depends on:** `TESTING_AND_VERIFICATION.md`, `../90-governance/OPEN_QUESTIONS.md`, `../90-governance/DOCUMENTATION_STANDARD.md`
 
 ## Purpose
 
 A bot that runs is not automatically release-ready. This checklist defines minimum evidence before a build can be called DEMO-ready/verified.
+
+## Verification evidence
+
+Each checkbox must point to a deterministic test, command output, immutable
+research artifact, broker/operator log or explicit reviewer decision. The
+companion `TESTING_AND_VERIFICATION.md` defines what each evidence class can
+prove; this checklist decides whether the complete release gate is satisfied.
+
+## Release gate topology
+
+The checklist is a dependency graph. A later label cannot compensate for a
+failed earlier safety or evidence gate.
+
+```mermaid
+flowchart TB
+    DESIGN["Design/docs — authority + frozen/deferred decisions"] --> SOFTWARE["Software proof — tests + lint + boundaries"]
+    SOFTWARE --> REPLAY["Chronology/research — replay + validation + holdout"]
+    REPLAY --> RECOVERY["State safety — restart + restore + controller/failover"]
+    RECOVERY --> DEMO["Controlled DEMO — real MT5 create/modify/close/restart"]
+    DEMO --> SIGNOFF["Final audit — exact build + exact environment"]
+```
+
+Every checkbox should identify its evidence location: test name, command,
+artifact hash, operator log, broker record or reviewer decision. A software
+checkbox is not a substitute for a controlled-environment checkbox.
 
 ## Release stages
 
@@ -35,6 +60,7 @@ V1 release scope ends at controlled DEMO verification. It does not define a sepa
 - [ ] `FINAL_BUILD_PROMPT.md` matches current architecture and safety rules.
 - [ ] `CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` phase status matches reality.
 - [ ] Root `README.md` does not advertise an obsolete implementation phase.
+- [ ] `python scripts/verify_documentation.py .` passes for the exact audited build.
 
 ## Market data / no-lookahead gates
 
@@ -178,12 +204,12 @@ Any bypass is release-blocking.
 - [ ] Champion/Challenger/autonomous genealogy survives migration.
 - [ ] Entry/Exit Learning survives migration.
 - [ ] Promotion/rejection/rollback history survives migration.
-- [ ] Fresh-machine disaster-recovery drill completed.
+- [ ] Fresh-machine disaster-recovery drill completed on intended machine.
 - [ ] Restored state reconciles broker truth before trading.
-- [ ] Public backup contains required project intelligence.
-- [ ] Financial-secret scanner passes.
-- [ ] Public backup contains no financial-authority credentials/tokens/keys.
-- [ ] Backup/restore integrity actually tested.
+- [x] Public-safe staging contains the required portable runtime artifact.
+- [x] Financial-secret scanner passes for repository and staged artifact.
+- [x] Public-safe staged backup contains no financial-authority credentials/tokens/keys.
+- [x] Backup/restore integrity actually tested deterministically.
 - [ ] Any exposed authority-bearing credential revoked/rotated.
 
 ## Trade Manager / exit gates
@@ -231,14 +257,14 @@ Any bypass is release-blocking.
 - [ ] PRE_CLOSE/reopen/news visible.
 - [ ] WAIT not shown as system failure.
 - [ ] Critical faults show subsystem/impact/recovery.
-- [ ] Backup/learning health visible.
-- [ ] Discovery Health/candidate/suppression state visible once final runtime DTO wiring exists.
+- [x] Backup/learning health visible in the live dashboard DTO.
+- [x] Discovery Health/candidate/suppression state visible when durable research state exists; live evidence remains pending.
 - [ ] Optional Trendline/Fib/POC display does not imply mandatory gating.
 - [ ] Emoji markers have text fallback and do not affect logic.
 
 ## Controlled MT5 DEMO gate
 
-- [ ] Final persistent runtime orchestration exists.
+- [x] Deterministic persistent runtime orchestration exists; intended-environment lifecycle evidence remains pending.
 - [ ] Startup-to-close lifecycle tested on intended DEMO environment.
 - [ ] Broker fills/slippage/stop modification/close recorded.
 - [ ] Restart/reconciliation tested against real DEMO broker state.

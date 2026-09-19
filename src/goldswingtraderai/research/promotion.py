@@ -348,33 +348,66 @@ def _payload(record: PromotionRecord) -> dict[str, object]:
 def _from_payload(payload: object) -> PromotionRecord:
     if not isinstance(payload, dict):
         raise ValueError("promotion registry entry must be an object")
-    updated = datetime.fromisoformat(str(payload["updated_at_utc"]))
+    updated = _required_datetime(payload["updated_at_utc"], "updated_at_utc")
     promoted_raw = payload.get("promoted_at_utc")
-    promoted = datetime.fromisoformat(str(promoted_raw)) if promoted_raw else None
+    promoted = (
+        None
+        if promoted_raw is None
+        else _required_datetime(promoted_raw, "promoted_at_utc")
+    )
     return PromotionRecord(
-        candidate_id=EntityId.parse(str(payload["candidate_id"])),
-        stage=PromotionStage(str(payload["stage"])),
-        policy_version=str(payload["policy_version"]),
+        candidate_id=EntityId.parse(_required_text(payload["candidate_id"], "candidate_id")),
+        stage=PromotionStage(_required_text(payload["stage"], "stage")),
+        policy_version=_required_text(payload["policy_version"], "policy_version"),
         updated_at_utc=updated,
         locked_fingerprint=(
-            str(payload["locked_fingerprint"])
-            if payload.get("locked_fingerprint")
-            else None
+            None
+            if payload.get("locked_fingerprint") is None
+            else _fingerprint(_required_text(payload["locked_fingerprint"], "locked_fingerprint"))
         ),
-        holdout_id=str(payload["holdout_id"]) if payload.get("holdout_id") else None,
-        holdout_consumed=bool(payload.get("holdout_consumed", False)),
+        holdout_id=_optional_text(payload.get("holdout_id"), "holdout_id"),
+        holdout_consumed=_required_bool(payload.get("holdout_consumed", False), "holdout_consumed"),
         rejection_reason=(
-            str(payload["rejection_reason"])
-            if payload.get("rejection_reason")
-            else None
+            None
+            if payload.get("rejection_reason") is None
+            else _required_text(payload["rejection_reason"], "rejection_reason")
         ),
         rollback_target=(
-            str(payload["rollback_target"])
-            if payload.get("rollback_target")
-            else None
+            None
+            if payload.get("rollback_target") is None
+            else _required_text(payload["rollback_target"], "rollback_target")
         ),
         promoted_at_utc=promoted,
     )
+
+
+def _required_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"promotion {label} must be non-empty text")
+    return value
+
+
+def _optional_text(value: object, label: str) -> str | None:
+    if value is None:
+        return None
+    return _required_text(value, label)
+
+
+def _required_bool(value: object, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"promotion {label} must be boolean")
+    return value
+
+
+def _required_datetime(value: object, label: str) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError(f"promotion {label} must be an ISO-8601 string")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"promotion {label} is invalid") from exc
+    _require_utc(parsed)
+    return parsed
 
 
 def _require_utc(value: datetime) -> None:

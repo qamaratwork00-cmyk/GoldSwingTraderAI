@@ -6,6 +6,7 @@ execution authority and deliberately avoids a sequential filter pipeline.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from goldswingtraderai.domain.enums import (
@@ -242,7 +243,7 @@ def _compression_expansion(
 def _family(
     family: StrategyFamily,
     timing_profile: str,
-    features,
+    features: Callable[[Direction], tuple[tuple[str, float | None, float], ...]],
     target_frame: TimeframeIntelligence,
     cfg: StrategyFloorConfig,
 ) -> FamilyReport:

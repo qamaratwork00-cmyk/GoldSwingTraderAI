@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
+from math import isfinite
 from statistics import median
 
 from goldswingtraderai.domain.enums import (
@@ -38,16 +39,18 @@ class StructureConfig:
     def __post_init__(self) -> None:
         if self.atr_period <= 0 or self.sequence_lookback < 2:
             raise ValueError("periods/lookbacks must be positive")
-        for value in (
+        thresholds = (
             self.swing_reversal_atr,
             self.qualified_break_atr,
             self.followthrough_atr,
             self.expansion_range_atr,
             self.compression_range_atr,
             self.rejection_wick_body,
-        ):
-            if value <= 0:
-                raise ValueError("structure thresholds must be positive")
+        )
+        if any(not isfinite(value) for value in thresholds):
+            raise ValueError("structure thresholds must be finite")
+        if any(value <= 0 for value in thresholds):
+            raise ValueError("structure thresholds must be positive")
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,14 +1,19 @@
 # GoldSwingTraderAI — Final Build Prompt
 
-**Status:** PROVISIONAL — FINAL HANDOFF CANDIDATE  
-**Version:** 0.9-design  
+**Status:** PROVISIONAL — IMPLEMENTATION HANDOFF CONTRACT
+**Version:** 1.1-handoff
+**Authority:** Compact implementation handoff summary; it never overrides subsystem authorities.
 **Location:** `docs/` root. This is a whole-project implementation handoff, not a competing behavioural authority.
 
-## Role
+## Purpose and role
 
 Implement and complete **GoldSwingTraderAI**, a fresh XAUUSD/XAUUSDm trading system for meaningful intraday/open-session directional moves. Build the documented system; do not recreate a prior scalper or invent undocumented shortcuts.
 
 Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for large implementation phases, phase completion and recovery after interrupted work.
+Use `docs/90-governance/DOCUMENTATION_STANDARD.md` before changing any
+documentation or declaring a phase complete. A highlighted omission is a
+signal to audit the complete affected contract graph; it is not permission to
+delete useful prior design, phase gates or proof requirements.
 
 ## Authority order
 
@@ -17,12 +22,56 @@ Use `docs/CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md` for large implementation 
 3. `docs/90-governance/DESIGN_DECISIONS.md`
 4. `docs/90-governance/OPEN_QUESTIONS.md`
 5. `docs/60-engineering/CODING_STANDARD.md`
-6. `docs/60-engineering/MODULE_STRUCTURE.md`
-7. `docs/CODER_GUIDE.md`
-8. operator/testing/release supporting docs
-9. this prompt as summary/handoff only
+6. `docs/90-governance/DOCUMENTATION_STANDARD.md` for documentation change control
+7. `docs/60-engineering/MODULE_STRUCTURE.md`
+8. `docs/CODER_GUIDE.md`
+9. operator/testing/release supporting docs
+10. this prompt as summary/handoff only
 
 If authoritative documents conflict, resolve the documentation contradiction before coding the affected behaviour. Never silently guess a critical rule.
+
+## How an implementation agent must use this prompt
+
+This prompt is the compact execution brief for an AI coding agent. It is not a
+replacement for the detailed docs. The agent must use it to orient itself, then
+open the authoritative document and source/test map for the feature being
+changed.
+
+For every requested change, follow this loop:
+
+1. identify the behavioural authority and the single source owner;
+2. read the surrounding contracts that feed it and consume it;
+3. inspect the existing implementation and tests before designing a new layer;
+4. state the dataflow, failure/UNKNOWN behaviour, persistence effect and
+   broker-authority boundary;
+5. implement the smallest typed, deterministic change;
+6. add or update focused tests for positive, negative, unknown, chronology,
+   restart and boundary cases as applicable;
+7. update the authority, module map, Coder Guide, phase/recovery guide,
+   operator/research/release docs and documentation index affected by the
+   change; preserve useful prior rationale and explicitly record unaffected
+   areas;
+8. run the standard verification commands and inspect the diff for accidental
+   deletion or secret exposure, including
+   `python scripts/verify_documentation.py .`;
+9. report what is software-proven, what is environment-pending and what the
+   next safe step is.
+
+The implementation graph is:
+
+```mermaid
+flowchart TB
+    READ["Read authority + dependencies"] --> TRACE["Trace source owner + tests"]
+    TRACE --> DESIGN["Design typed boundary — inputs + outputs + failure"]
+    DESIGN --> CODE["Implement clean deterministic code"]
+    CODE --> PROVE["Tests + lint + compile + docs + secret scans"]
+    PROVE --> DOCS["Synchronize docs + release/open questions"]
+    DOCS --> HANDOFF["Evidence-backed handoff — no unverified claims"]
+```
+
+When a rule appears to belong to two documents or modules, stop and resolve
+ownership before coding. Do not solve uncertainty by adding another wrapper,
+filter or fallback.
 
 ## Architecture that must survive implementation
 
@@ -52,6 +101,27 @@ If authoritative documents conflict, resolve the documentation contradiction bef
 - Persistent risk/order/trade/opportunity/research/learning state survives restart and laptop migration.
 - Research/learning/invention cannot silently self-promote or bypass hard safety.
 
+## Feature navigation map for the agent
+
+| If the task mentions… | Read first | Then inspect |
+|---|---|---|
+| candles, swings, BOS/MSS, no-lookahead | 10-market-intelligence/CANDLE_STRUCTURE.md | intelligence/candle_structure.py and intelligence/snapshot.py |
+| EMA, RSI, ATR, volatility, extension | 10-market-intelligence/INDICATORS_AND_VOLATILITY.md | intelligence/indicators.py |
+| levels, location, Trendline, Fib, POC | 10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md | intelligence/technical.py and intelligence/confluence.py |
+| sweeps, FVG, OB, liquidity path | 10-market-intelligence/LIQUIDITY_AND_SMC.md | intelligence/liquidity.py |
+| strategy family or confluence bonus | 20-trading-decisions/STRATEGY_FLOOR.md | strategies/floor.py and strategies/confluence.py |
+| BUY/SELL score, conflict, WAIT/MISSED/INVALID | 20-trading-decisions/SCORING_AND_DECISION_FUSION.md and ENTRY_TIMING.md | decisions/fusion.py, opportunity.py, timing.py |
+| SL, targets, RR, original R | 20-trading-decisions/TRADE_PLAN.md | decisions/trade_plan.py |
+| lot size, daily lock, cooldown, exposure | 30-risk-execution/RISK_CONTRACT.md | risk/engine.py and risk/state.py |
+| session/news blackout or reopen | 30-risk-execution/SESSION_AND_RISK_STATE_MACHINE.md | risk/permissions.py and app/session_news.py |
+| order send, duplicate prevention, controller | 30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md | execution/gate.py, service.py, mt5_writer.py, controller.py |
+| restart, restore, backup, reconciliation | 30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md | persistence/ and app/recovery*.py |
+| open-trade behaviour | 20-trading-decisions/TRADE_MANAGER_AND_EXIT.md | management/ and app/cycle.py |
+| loop/startup/dashboard | 00-foundation/ARCHITECTURE.md and 60-engineering/MODULE_STRUCTURE.md | app/runtime.py, cycle.py, loop.py, dashboard.py |
+| learning, discovery, AI, promotion | 40-research-learning/ | research/ |
+
+This table is a route into the docs; the authority order above remains binding.
+
 ## Accuracy without unnecessary restriction
 
 The system objective is **better accuracy + healthy valid trade opportunity coverage**, not maximum filtering.
@@ -70,6 +140,13 @@ Implementation must preserve these principles:
 ## Frozen coding and implementation style
 
 The implementation must obey `docs/60-engineering/CODING_STANDARD.md`, which is **FROZEN FOR INITIAL IMPLEMENTATION**.
+
+This requirement is project-wide: it covers every maintained code path,
+including runtime, risk/execution, persistence/recovery, dashboard/operator
+tools, research/discovery/learning, scripts, configuration and tests. Research
+or test-specific exceptions are allowed only where the Coding Standard names
+the boundary; they never permit weaker safety, chronology, determinism or
+secret-handling rules.
 
 Primary engineering objective:
 
@@ -97,6 +174,17 @@ Mandatory engineering rules:
 - safety code stays direct and boring rather than clever/metaprogrammed.
 
 Before each phase closes, review for dead code, duplicate calculations, unnecessary abstraction, mixed responsibility, needless dependencies, silent errors and weak safety tests.
+
+An expert-level change also makes the following explicit:
+
+- which functions are pure and which classes own real lifecycle/resources;
+- which inputs are immutable/shared and which reads must be fresh;
+- the expected complexity and bounded history/memory behaviour;
+- deterministic ordering/tie-breaks and UTC chronology;
+- the comment/docstring explaining the non-obvious safety or market invariant;
+- the exception/result taxonomy for unavailable, corrupt and ambiguous truth;
+- the transaction/idempotency/fencing identity for durable or broker actions;
+- the exact test proving the new boundary cannot bypass hard authority.
 
 ## Positive DEMO guard — V1
 
@@ -296,6 +384,25 @@ Persist/recover as applicable:
 - schema/integrity/backup metadata.
 
 Restart never means blank financial/order state. Reconcile broker truth before new writes.
+
+The integrated startup composition now makes state selection explicit:
+
+```text
+READINESS  → read-only MT5 snapshot; render the readiness monitor; wait/poll on stale data without trading
+PRIMARY    → controller-gated persistent startup/recovery/runtime loop
+STANDBY    → governed lease/takeover attempt and recovery
+EXISTING   → use local runtime DB; missing risk state blocks
+INITIALIZE → create first risk-day baseline only in an otherwise empty store
+RESTORE    → verify checkpoint and restore only to a new runtime DB
+```
+
+Absent authoritative session/news input remains UNKNOWN. The persistent M5
+runtime loop and provider-neutral snapshot handoff now exist. Retryable stale,
+insufficient or sparse market data keeps the read-only launcher alive and keeps
+PRIMARY/STANDBY in a heartbeat-only pre-READY wait; no strategy cycle or broker
+write is allowed until fresh data and all other authorities pass. The launcher
+cannot be called live-ready until an accepted external producer and real broker
+evidence are supplied.
 
 ## Public backup / financial-secret policy
 

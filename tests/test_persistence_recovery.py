@@ -183,3 +183,23 @@ def test_clear_active_records_does_not_delete_risk_history(tmp_path) -> None:
     assert bundle.risk_day is not None
     assert bundle.active_opportunity is None
     assert bundle.trade_plan is None
+
+
+def test_runtime_state_rejects_coercive_persisted_values(tmp_path) -> None:
+    store = StateStore(tmp_path / "runtime.db")
+    store.save_record(
+        "risk_day",
+        "scope",
+        {
+            "utc_day": "2026-09-18",
+            "day_start_equity": "80.0",
+            "net_non_trading_cash_flow": 0.0,
+            "cycle_reference_equity": 80.0,
+            "cycle_start_safety_pl": 0.0,
+            "manual_reset_enabled": "false",
+            "manual_reset_count": 0,
+        },
+    )
+
+    with pytest.raises(StateIntegrityError, match="persisted .* numeric|persisted .* boolean"):
+        RuntimeStateRepository(store, "scope").load_risk_day()

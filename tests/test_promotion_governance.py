@@ -146,3 +146,25 @@ def test_failed_holdout_terminates_candidate_and_records_reason(tmp_path) -> Non
             PromotionStage.STRESS_PASSED,
             NOW + timedelta(minutes=5),
         )
+
+
+def test_promotion_restore_rejects_coercive_boolean_fields(tmp_path) -> None:
+    path = tmp_path / "state.db"
+    store = StateStore(path)
+    registry = PromotionRegistry(store, "XAUUSDm")
+    candidate_id = new_id("CAND")
+    registry.create(candidate_id, "GSW-0.1", NOW)
+
+    record = store.load_record("candidate_promotion_registry", "XAUUSDm")
+    assert record is not None
+    rows = [dict(item) for item in record.payload["records"]]
+    rows[0]["holdout_consumed"] = 0
+    store.save_record(
+        "candidate_promotion_registry",
+        "XAUUSDm",
+        {"records": rows},
+        schema_version=1,
+    )
+
+    with pytest.raises(ValueError, match="holdout_consumed must be boolean"):
+        PromotionRegistry(StateStore(path), "XAUUSDm").all()

@@ -70,6 +70,15 @@ class LearningConfig:
     efficiency_center: float = 0.55
 
     def __post_init__(self) -> None:
+        if any(
+            not isfinite(value)
+            for value in (
+                self.maximum_score_adjustment,
+                self.r_scale,
+                self.efficiency_center,
+            )
+        ):
+            raise ValueError("learning configuration values must be finite")
         if self.confidence_samples <= 0:
             raise ValueError("confidence sample requirement must be positive")
         if not 0 < self.maximum_score_adjustment <= 10:

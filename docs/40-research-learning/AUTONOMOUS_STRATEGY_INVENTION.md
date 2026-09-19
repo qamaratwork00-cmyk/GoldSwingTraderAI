@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Autonomous Strategy Invention
 
-**Status:** PROVISIONAL  
-**Version:** 0.3-implementation  
-**Authority:** Safe automatic creation of declarative strategy hypotheses/candidates from audited research evidence.  
+**Status:** PROVISIONAL
+**Version:** 0.4-implementation
+**Authority:** Safe automatic creation of declarative strategy hypotheses/candidates from audited research evidence.
 **Depends on:** `GOVERNED_STRATEGY_DISCOVERY.md`, `RESEARCH_AND_VALIDATION.md`, `LEARNING_AND_AI_BOUNDARIES.md`
 
 ## Purpose
@@ -10,6 +10,24 @@
 Autonomous invention turns recurring research evidence into bounded declarative candidates. It does not self-write executable trading code, change production strategy or acquire broker authority.
 
 > **Autonomy may invent hypotheses, not unrestricted authority.**
+
+## Invention boundary
+
+Invention is the automatic proposal stage inside the research lab. It turns
+recurring evidence into a bounded candidate and then stops at governance.
+
+```mermaid
+flowchart TB
+    EVIDENCE["Recurring research evidence — journal + approved primitives"] --> HYPOTHESIS["Build declarative hypothesis — variant or new-family classification"]
+    HYPOTHESIS --> VALIDATE["Candidate validation — chronology + complexity + similarity"]
+    VALIDATE --> REGISTRY["Persist proposed candidate or suppression reason"]
+    REGISTRY --> PROMOTION["Governed promotion stages — holdout → stress → shadow → canary"]
+    PROMOTION --> RUNTIME["Explicit approval only — ordinary production safety remains"]
+```
+
+The invention module can choose among audited values, but it cannot invent a
+new kind of authority. Hard safety is outside the search space, and a candidate
+does not become executable code merely because its recipe is plausible.
 
 ## Working-path requirement
 
@@ -97,7 +115,7 @@ Invention creates `PROPOSED` research candidates only. It cannot call itself pro
 
 The governed lifecycle requires validation, locking, one-shot final holdout, stress, Shadow, DEMO Canary and `PROMOTION_READY` before explicit promotion approval. A locked candidate whose fingerprint changes must restart as a new candidate/version.
 
-## Current implementation checkpoint — 2026-09-18
+## Implementation ownership and proof boundary
 
 Implemented:
 

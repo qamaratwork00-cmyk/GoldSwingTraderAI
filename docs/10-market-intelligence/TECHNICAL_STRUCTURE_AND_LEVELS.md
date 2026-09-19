@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Technical Structure and Levels
 
-**Status:** PROVISIONAL  
-**Version:** 0.3-implementation-baseline  
-**Authority:** Support/resistance zones, structural level lifecycle, range geometry, location quality, target-room context, causal trendlines, Fibonacci geometry and broker-local volume-profile POC.  
+**Status:** PROVISIONAL
+**Version:** 0.4-implementation-baseline
+**Authority:** Support/resistance zones, structural level lifecycle, range geometry, location quality, target-room context, causal trendlines, Fibonacci geometry and broker-local volume-profile POC.
 **Depends on:** `CANDLE_STRUCTURE.md`, `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
@@ -13,7 +13,39 @@ This document defines how confirmed market structure is converted into usable te
 
 > **Trendline, Fibonacci and POC are accuracy/confluence tools only. They are never universal entry requirements, never hard safety blockers, and missing/opposing confluence must not automatically invalidate an otherwise valid setup.**
 
-## Implementation checkpoint
+## From structure to location and confluence
+
+This desk consumes confirmed structure and describes where price is relative to
+meaningful geometry. It deliberately has two outputs: generic location/target
+room and optional confluence. They are related, but neither is a broker
+permission result.
+
+```mermaid
+flowchart TB
+    STRUCTURE["StructureReport — confirmed/protected swings + ATR"] --> ZONES["Adaptive zones — merge compatible support/resistance"]
+    ZONES --> LOCATION["BUY/SELL location — target room + conflict"]
+    STRUCTURE --> LINES["Causal trendlines — touch / break / reclaim"]
+    STRUCTURE --> FIB["Confirmed impulse anchors — retracement / extension"]
+    CANDLES["Bounded completed candles + volume"] --> POC["Broker-local POC — real or tick-volume labelled"]
+    LOCATION --> REPORT["TechnicalReport + ConfluenceReport"]
+    LINES --> REPORT
+    FIB --> REPORT
+    POC --> REPORT
+    REPORT --> STRATEGY["Strategy/Trade Plan evidence — bounded soft influence"]
+```
+
+| Output family | Question answered | Downstream use | Hard permission? |
+|---|---|---|---|
+| zones/location | where is price relative to structural support/resistance? | family-specific opportunity and target room | no |
+| trendline | is price touching, breaking or reclaiming causal geometry? | bounded confluence context | no |
+| Fibonacci | is price near a confirmed impulse retracement/extension? | bounded confluence context | no |
+| POC | where is broker-local recent volume concentrated? | neutral context and path quality | no |
+
+The implementation must preserve source provenance and coverage. A missing
+trendline, Fib level or POC is not negative directional evidence, and a POC
+cannot become directional merely because it is close to price.
+
+## Implementation ownership and proof boundary
 
 Implemented in:
 
@@ -227,7 +259,7 @@ Target Path     OPEN
 Conflict        LOW
 ```
 
-## Tests required / current evidence
+## Tests required and evidence boundary
 
 Required:
 - adaptive zone construction;

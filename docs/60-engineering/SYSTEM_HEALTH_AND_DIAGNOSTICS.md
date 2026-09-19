@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — System Health and Diagnostics
 
-**Status:** PROVISIONAL  
-**Version:** 0.2-design  
-**Authority:** Cross-subsystem health aggregation, fault severity, trading impact, recovery state and operator diagnostics.  
+**Status:** PROVISIONAL
+**Version:** 0.3-design
+**Authority:** Cross-subsystem health aggregation, fault severity, trading impact, recovery state and operator diagnostics.
 **Depends on:** `../00-foundation/SYSTEM_CONTRACT.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`, `../20-trading-decisions/SCORING_AND_DECISION_FUSION.md`
 
 ## Purpose
@@ -12,6 +12,37 @@ This document defines how the bot reports its own health. It does **not** redefi
 > **Every material system fault must identify its source, severity, trading impact and recovery state.**
 
 This is separate from normal market decisions such as `WAIT`, `MISSED` or `OPPORTUNITY_WEAK`.
+
+## Fault-to-operator flow
+
+Health aggregates the result of owning authorities; it does not invent a new
+trading rule.
+
+```mermaid
+flowchart TB
+    SOURCE["Subsystem result — reason + state + timestamp"] --> NORMALIZE["Health record — severity + trading impact + recovery state"]
+    NORMALIZE --> AGGREGATE["Primary/secondary aggregation — preserve all active faults"]
+    AGGREGATE --> ACTION{"Trading impact?"}
+    ACTION -->|"none/optional"| WARN["OK / WARN / DEGRADED — baseline may continue"]
+    ACTION -->|"new writes unsafe"| BLOCK["BLOCKED — fail closed and reconcile"]
+    ACTION -->|"component exception"| ERROR["ERROR — recovery/operator action"]
+    WARN --> DASH["Dashboard + logs + journal"]
+    BLOCK --> DASH
+    ERROR --> DASH
+```
+
+The operator must be able to answer four questions from the health record:
+what failed, how serious it is, whether new writes are affected, and what
+recovery action is safe. A colourful marker without those facts is not health
+diagnostics.
+
+| Health field | Example | Why it matters |
+|---|---|---|
+| subsystem/reason | EXECUTION / ORDER_ACK_UNKNOWN | locates the owning authority |
+| severity/state | BLOCKED / RECOVERING | distinguishes normal decision from fault |
+| trading impact | new entries paused; management continues | prevents unsafe operator assumption |
+| first/last/count | timestamps and recurrence | supports reconstruction |
+| recovery state | ACTIVE / ACTION_REQUIRED / RECOVERED | tells operator what to do next |
 
 ## Health states
 

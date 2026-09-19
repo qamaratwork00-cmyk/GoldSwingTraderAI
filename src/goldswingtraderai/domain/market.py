@@ -60,6 +60,8 @@ class SymbolSpec:
     volume_step: float
     stops_level_points: int
     freeze_level_points: int
+    # Request-ready ORDER_FILLING_* value; never the raw SYMBOL_FILLING_MODE bitmask.
+    filling_mode: int | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -88,6 +90,8 @@ class SymbolSpec:
             raise ValueError("maximum volume cannot be below minimum volume")
         if self.stops_level_points < 0 or self.freeze_level_points < 0:
             raise ValueError("broker stop/freeze levels cannot be negative")
+        if self.filling_mode is not None and self.filling_mode < 0:
+            raise ValueError("broker filling mode cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +213,8 @@ class MarketSnapshot:
         actual = tuple(item.timeframe for item in self.series)
         if actual != self.meta.timeframes:
             raise ValueError("snapshot timeframe metadata must match series order")
+        if len(actual) != len(set(actual)):
+            raise ValueError("snapshot cannot contain duplicate timeframes")
 
     def candles(self, timeframe: Timeframe) -> tuple[Candle, ...]:
         for item in self.series:

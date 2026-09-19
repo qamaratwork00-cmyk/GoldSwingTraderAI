@@ -28,6 +28,13 @@ from goldswingtraderai.persistence.runtime_state import (
     RecoveryBundle,
     RuntimeStateRepository,
 )
+from goldswingtraderai.persistence.publication import (
+    PUBLICATION_MANIFEST_FILENAME,
+    PUBLICATION_SCHEMA_VERSION,
+    PublicBackupPublication,
+    PublicationError,
+    stage_verified_public_backup,
+)
 from goldswingtraderai.persistence.store import (
     DATABASE_SCHEMA_VERSION,
     StateIntegrityError,
@@ -50,6 +57,8 @@ __all__ = [
     "BackupPolicy",
     "BackupRunResult",
     "BackupRunStatus",
+    "PUBLICATION_MANIFEST_FILENAME",
+    "PUBLICATION_SCHEMA_VERSION",
     "ExportedRuntimeCheckpoint",
     "ImportedRuntimeCheckpoint",
     "RecoveryBundle",
@@ -70,4 +79,7 @@ __all__ = [
     "latest_verified_checkpoint",
     "load_backup_catalog",
     "restore_runtime_checkpoint",
+    "PublicBackupPublication",
+    "PublicationError",
+    "stage_verified_public_backup",
 ]

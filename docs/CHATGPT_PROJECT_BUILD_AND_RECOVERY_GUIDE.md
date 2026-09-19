@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — ChatGPT Project Build and Recovery Guide
 
-**Status:** PROVISIONAL  
-**Version:** 1.2-implementation  
+**Status:** PROVISIONAL — PROJECT NAVIGATION MANUAL
+**Version:** 1.5-implementation
 **Authority:** Whole-project implementation sequencing, phase completion, resume/recovery and build-navigation process. This file does **not** redefine trading behaviour.
 
 ## Purpose
@@ -10,9 +10,99 @@ This guide exists so ChatGPT or another implementation agent can complete GoldSw
 
 > **Recover project truth from the repository, repair the smallest broken layer, verify it, then continue from the last verified phase. Do not restart the whole project unless repository/state is genuinely unrecoverable.**
 
-## Current repository checkpoint — 2026-09-18
+## Agent operating loop
 
-Deterministic core implementation currently exists through the **Phase-10 foundation**:
+This guide is the project-navigation manual for an implementation agent. It
+explains how to use the other documents, not a new trading authority.
+
+```mermaid
+flowchart TB
+    ORIENT["Read README + docs index + system contract"] --> SCOPE["Choose one feature/phase — and its authoritative document"]
+    SCOPE --> TRACE["Trace module owner + public entry point + tests"]
+    TRACE --> INSPECT["Inspect code, state schema, existing diff and evidence"]
+    INSPECT --> IMPLEMENT["Implement one coherent boundary — clean, typed, deterministic"]
+    IMPLEMENT --> VERIFY["Focused tests → phase suite → full quality checks"]
+    VERIFY --> SYNC["Update linked docs, open questions and release evidence"]
+    SYNC --> HANDOFF["Record verified result + remaining proof — then choose next incomplete phase"]
+```
+
+Never skip from an idea directly to a broker adapter. The agent must be able
+to explain where the data originated, which authority owns the result, what
+happens when it is unknown, how restart reconstructs it and which test proves
+the boundary.
+
+## What a coherent phase packet contains
+
+| Part | Required content |
+|---|---|
+| contract | purpose, inputs/outputs, states, hard/soft boundaries |
+| architecture | dataflow/ownership diagram when relationships are non-trivial |
+| implementation | exact source owner and no duplicate authority |
+| tests | positive, negative, unknown, chronology, restart/fault cases as relevant |
+| operator view | reason/state/dashboard impact |
+| research view | replay/learning/evidence impact where relevant |
+| persistence | identity, transaction, recovery and migration behaviour |
+| release proof | command/artifact/environment evidence and limitations |
+| documentation sync | authority, module map, coder guide, testing/release/open questions |
+
+An implementation agent must not call a phase complete merely because its
+primary file exists or the unit test count increased.
+
+## Frozen documentation-completeness protocol
+
+This project is documentation-first. A request that names one missing row,
+phase or diagram is an example of a wider consistency risk; it is never the
+whole scope of the review. Before coding or calling a phase complete, the
+agent must inspect the complete affected chain:
+
+~~~text
+requirement / user constraint
+→ authoritative contract and decision ledger
+→ phase ownership and freeze status
+→ architecture/dataflow and parallel/ordered boundaries
+→ exact source modules, entry points and configuration
+→ typed models, persistence and restart behaviour
+→ positive/negative/unknown/chronology/fault tests
+→ dashboard/operator/research impact
+→ setup/manual/prompt/Coder Guide/module-map propagation
+→ testing/release evidence and remaining live proof
+~~~
+
+The agent must not update only the highlighted document. It must audit every
+affected document, preserve useful prior rationale and phase gates, repair
+contradictions, add diagrams/tables where ownership is hard to follow, and
+record why a seemingly related document is unaffected. In particular, the
+foundation **Phase 1–9** group, research **Phase 10**, recovery/backup
+**Phase 11** and integration/certification **Phase 12** must remain separate
+concepts in every phase summary.
+
+Before handoff, the agent must verify:
+
+- every material feature has a purpose, authoritative document, source owner,
+  public entry point, test owner and operator/evidence boundary;
+- DEMO Guard, fail-closed/UNKNOWN states, no-lookahead and the raw broker-write
+  boundary are explicitly mapped wherever applicable;
+- no useful old section, table, prompt instruction or unresolved proof gate was
+  silently deleted;
+- code, docs, tests and evidence describe the same current behaviour;
+- current software proof is not labelled as live MT5/DEMO certification;
+- links, command examples, headings, status labels and phase gates are checked.
+
+This protocol is frozen project process. Any exception requires an explicit
+governance decision; normal feature work must follow it.
+
+## Tests and evidence policy
+
+Every phase uses focused positive, negative, unknown, chronology and
+restart/fault tests as applicable, followed by the repository-wide quality
+commands. A green deterministic suite proves software behaviour only; replay,
+shared-storage recovery and connected DEMO evidence require their own
+artifacts and cannot be inferred from unit tests.
+
+## Build-order map and completion model
+
+The following phases define dependency order and exit gates; they are a build
+map, not a progress diary:
 
 ```text
 Phase 1  Foundation/config/domain/CI
@@ -25,15 +115,32 @@ Phase 7  Execution intent/gate/controller/write/reconciliation
 Phase 8  Trade Manager + management execution bridge
 Phase 9  Terminal dashboard renderer
 Phase 10 Replay/metrics/learning + durable discovery/invention/promotion foundation
+Phase 11 Portable checkpoint/restore + backup/controller fencing + integrated startup recovery
+Phase 12 Persistent M5 runtime + governed cycle + live dashboard DTO
 ```
+
+The documentation gate is part of every phase exit, not a final cleanup task:
+run `python scripts/verify_documentation.py .` after synchronized docs are
+updated, then review its result together with the focused and full test suites.
 
 Deterministic CI is not live DEMO certification.
 
-Important current integration gap:
+The completed architecture described by these phases includes explicit live
+`READINESS` / `PRIMARY` / `STANDBY` startup composition,
+EXISTING/INITIALIZE/RESTORE state selection, `RecoveryAuthorities` wiring,
+persistent M5 orchestration, 10-second controller renewal, governed
+entry/management cycling, verified local backup cadence, live
+dashboard/research DTO composition, public-safe backup staging and fresh-DB
+restore operator CLIs, plus read-only MT5 dataset acquisition and
+verified-bundle walk-forward/evidence-package tooling.
 
-- `app/main.py` / `goldswing` remains the read-only MT5 readiness launcher;
-- final persistent runtime orchestration across the implemented subsystems is not yet complete;
-- production shared cross-laptop coordination backend, backup/fresh-machine drill and controlled Windows MT5 DEMO certification remain pending.
+External proof gates:
+
+- `app/main.py` / `goldswing` remains read-only by default;
+- accepted external session/news producer selection/operation through the
+  provider-neutral launcher handoff;
+- UTC risk-day rollover and restart/fault-injection certification;
+- production shared cross-laptop coordination backend, real fresh-machine broker drill and controlled Windows MT5 DEMO certification are release evidence gates.
 
 ## Source-of-truth order
 
@@ -41,22 +148,28 @@ When starting, resuming or recovering work, read in this order:
 
 1. `README.md`
 2. `docs/README.md`
-3. `docs/00-foundation/SYSTEM_CONTRACT.md`
-4. relevant authoritative topic document
-5. `docs/90-governance/DESIGN_DECISIONS.md`
-6. `docs/90-governance/OPEN_QUESTIONS.md`
-7. `docs/60-engineering/CODING_STANDARD.md`
-8. `docs/60-engineering/MODULE_STRUCTURE.md`
-9. `docs/CODER_GUIDE.md`
-10. `docs/FINAL_BUILD_PROMPT.md`
-11. this guide
-12. current code, tests, state schema, latest commits and executable evidence
+3. `docs/90-governance/DOCUMENTATION_STANDARD.md`
+4. `docs/00-foundation/SYSTEM_CONTRACT.md`
+5. relevant authoritative topic document
+6. `docs/90-governance/DESIGN_DECISIONS.md`
+7. `docs/90-governance/OPEN_QUESTIONS.md`
+8. `docs/60-engineering/CODING_STANDARD.md`
+9. `docs/60-engineering/MODULE_STRUCTURE.md`
+10. `docs/CODER_GUIDE.md`
+11. `docs/FINAL_BUILD_PROMPT.md`
+12. this guide
+13. current code, tests, state schema, latest commits and executable evidence
 
 If docs conflict, stop affected implementation path and resolve the contradiction in authoritative docs first. Do not silently pick whichever rule is easiest to code.
 
 ## Frozen implementation-quality rule
 
-Every phase obeys `docs/60-engineering/CODING_STANDARD.md`.
+Every phase and every maintained code area obeys
+`docs/60-engineering/CODING_STANDARD.md`: runtime, safety, persistence,
+operator/dashboard, research/discovery, scripts, configuration and tests are
+all in scope. A research or test-specific dependency exception may change the
+tooling boundary, never the requirements for chronology, determinism, explicit
+failure handling, auditability or secret safety.
 
 Target: **lightweight production-grade code** that is clear, auditable and efficient enough for the real workload without unnecessary architecture.
 
@@ -140,11 +253,11 @@ Exit: small profit alone does not force breakeven/exit; runner needs fresh conti
 
 ### PHASE 9 — Dashboard and operator workflows
 
-Implement compact read-only dashboard preserving useful GoldScalperAI facts plus Decision/Execution/Learning/Discovery/Backup/Health.
+Implement compact read-only dashboard preserving useful GoldScalperAI facts plus Decision/Execution/Learning/Discovery/Backup/Health. Also render a separate READINESS monitor frame after every normalized snapshot, including stale-data waits, with an explicit strategy/write lock.
 
 Optional Trendline/Fibonacci/POC should be shown only as compact confluence/context. Dashboard must not turn them into permission gates.
 
-Exit: operator can see exactly why WAIT/ENTER/BLOCKED and whether discovery is IDLE/HEALTHY/DEGRADED.
+Exit: operator can see exactly why WAIT/ENTER/BLOCKED and whether discovery is IDLE/HEALTHY/DEGRADED. During pre-cycle READINESS, the operator can see data freshness, exact issues, DEMO/identity facts and the next poll without any invented decision authority.
 
 ### PHASE 10 — Replay, research, learning and governed invention
 

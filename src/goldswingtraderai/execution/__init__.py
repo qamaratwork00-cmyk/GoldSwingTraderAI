@@ -3,6 +3,7 @@
 from goldswingtraderai.execution.checks import (
     ExecutionCheckConfig,
     ExecutionCheckResult,
+    evaluate_management_execution_checks,
     evaluate_execution_checks,
 )
 from goldswingtraderai.execution.controller import (
@@ -80,6 +81,7 @@ __all__ = [
     "SQLiteCoordinationStore",
     "approve_intent",
     "evaluate_execution_checks",
+    "evaluate_management_execution_checks",
     "evaluate_execution_permission",
     "mark_accepted_unknown",
     "mark_accepted_verified",

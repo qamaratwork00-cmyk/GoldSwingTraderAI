@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Governed Experiments and Promotion
 
-**Status:** PROVISIONAL  
-**Version:** 0.2-implementation  
-**Authority:** Champion/challenger lifecycle, final-holdout use, stress, shadow, DEMO canary, promotion, rollback and production-policy versioning.  
+**Status:** PROVISIONAL
+**Version:** 0.3-implementation
+**Authority:** Champion/challenger lifecycle, final-holdout use, stress, shadow, DEMO canary, promotion, rollback and production-policy versioning.
 **Depends on:** `RESEARCH_AND_VALIDATION.md`, `GOVERNED_STRATEGY_DISCOVERY.md`, `AUTONOMOUS_STRATEGY_INVENTION.md`
 
 ## Purpose
@@ -10,6 +10,44 @@
 Research may discover promising changes, but production policy changes require staged evidence and a reversible governance path.
 
 > **A candidate can recommend itself. It cannot promote itself.**
+
+## Promotion state machine
+
+Promotion is a sequence of evidence gates with durable state, not a single
+“approved” boolean.
+
+```mermaid
+stateDiagram-v2
+    [*] --> PROPOSED
+    PROPOSED --> RESEARCHING
+    RESEARCHING --> VALIDATED
+    VALIDATED --> LOCKED
+    LOCKED --> HOLDOUT_PASSED
+    HOLDOUT_PASSED --> STRESS_PASSED
+    STRESS_PASSED --> SHADOW
+    SHADOW --> DEMO_CANARY
+    DEMO_CANARY --> PROMOTION_READY
+    PROMOTION_READY --> PROMOTED: explicit approval + rollback target
+    RESEARCHING --> REJECTED
+    VALIDATED --> HOLDOUT_FAILED
+    HOLDOUT_PASSED --> STRESS_FAILED
+    PROMOTED --> ROLLED_BACK
+    PROMOTED --> DISABLED
+```
+
+Each transition records candidate identity, policy semantics, evidence and
+reason. LOCKED freezes the semantic fingerprint; HOLDOUT is one-shot; SHADOW
+has zero broker authority; DEMO_CANARY uses the normal DEMO/Risk/Execution
+path; PROMOTION_READY still cannot self-approve.
+
+| Stage | Evidence question | Broker authority |
+|---|---|---|
+| research/validation | does the idea improve the declared objective without leakage? | none |
+| locked holdout | does the unchanged candidate survive untouched data? | none |
+| stress | is it robust to declared friction/latency/regime/missing optional facts? | none |
+| shadow | does live timing look plausible without real orders? | none |
+| DEMO canary | does actual terminal lifecycle behave safely? | ordinary governed DEMO path only |
+| promoted | has a human/governed approval accepted it with rollback? | still ordinary hard gate |
 
 ## Champion and Challenger
 
@@ -104,7 +142,7 @@ Counterfactual Shadow P/L never becomes actual broker P/L.
 
 Candidate promotion stage, locked fingerprint, consumed holdout identity/status, rejection reason, rollback target and promotion timestamp are durable in the SQLite research registry and survive restart.
 
-## Current implementation checkpoint — 2026-09-18
+## Implementation ownership and proof boundary
 
 Owner:
 

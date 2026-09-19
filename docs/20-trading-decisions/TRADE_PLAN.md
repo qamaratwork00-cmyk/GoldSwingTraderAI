@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Trade Plan
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.4-implementation  
-**Authority:** Pre-entry structural entry reference, invalidation, initial SL geometry, target hierarchy, original R, RR and plan quality.  
+**Status:** PROVISIONAL — TRADE-PLAN CONTRACT
+**Version:** 0.5-implementation
+**Authority:** Pre-entry structural entry reference, invalidation, initial SL geometry, target hierarchy, original R, RR and plan quality.
 **Depends on:** `STRATEGY_FLOOR.md`, `ENTRY_TIMING.md`, `../10-market-intelligence/CANDLE_STRUCTURE.md`, `../10-market-intelligence/TECHNICAL_STRUCTURE_AND_LEVELS.md`, `../10-market-intelligence/LIQUIDITY_AND_SMC.md`
 
 ## Purpose
@@ -11,7 +11,36 @@ The Trade Plan converts a valid market opportunity into an executable market-str
 
 > **Strategy decides whether the idea is worth pursuing. Trade Plan defines how that idea would be entered, invalidated and targeted. Risk then decides whether the account can safely afford it.**
 
-## Current implementation checkpoint
+## Plan construction pipeline
+
+Trade Plan is the boundary between analytical opportunity and monetary
+affordability. It fixes market geometry before the account is allowed to
+influence sizing.
+
+```mermaid
+flowchart TB
+    OPPORTUNITY["ENTER-ready opportunity — direction + family + timing"] --> REFERENCE["Approved Entry Reference — signal/zone identity preserved"]
+    REFERENCE --> INVALIDATION["Structural invalidation — family-aware swing/break/reclaim"]
+    INVALIDATION --> STOP["Initial SL — ATR/noise buffer + broker tick normalization"]
+    STOP --> TARGETS["Objective hierarchy — obstacle → primary → expansion → runner"]
+    TARGETS --> QUALITY["Stop/target/path quality — RR + freshness + conflict"]
+    QUALITY --> RESULT["TradePlan — READY / DEGRADED / INVALID"]
+    RESULT --> RISK["Risk Engine — affordability only after geometry"]
+```
+
+The plan keeps four price identities separate: signal price, approved entry
+reference, fresh executable quote and actual fill. This prevents slippage or
+price drift from rewriting the reason the plan existed.
+
+| Plan field | Why it exists | Who may change it |
+|---|---|---|
+| signal/reference | attribution and drift measurement | decisions/trade_plan.py at creation |
+| invalidation/initial SL | structural thesis failure and original risk basis | Trade Plan before execution |
+| objectives | objective path and management checkpoints | Trade Plan; manager only with fresh earned objective |
+| original R | immutable lifecycle/research denominator | established once; never redefined |
+| executable quote/fill | actual broker outcome | execution/reconciliation, not planning |
+
+## Implementation ownership and proof boundary
 
 Implemented in:
 
@@ -301,7 +330,7 @@ Plan creation, degradation, objective progression and invalidation must remain c
 
 Calibration must optimize Net R/drawdown/capture/opportunity recall together rather than improving headline win rate by eliminating too many valid trades.
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic coverage includes:
 

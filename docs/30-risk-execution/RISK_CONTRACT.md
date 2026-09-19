@@ -1,9 +1,17 @@
 # GoldSwingTraderAI — Risk Contract
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 1.0-implementation  
-**Authority:** Monetary risk, account-size risk profiles, dynamic/hybrid lot sizing, exposure, daily-loss/manual-reset semantics and risk-policy invariants.  
+**Status:** PROVISIONAL — MONETARY-RISK CONTRACT
+**Version:** 1.2-implementation
+**Authority:** Monetary risk, account-size risk profiles, dynamic/hybrid lot sizing, exposure, daily-loss/manual-reset semantics and risk-policy invariants.
 **Depends on:** `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
+
+## Purpose and scope
+
+This document owns the monetary affordability decision after a structural
+Trade Plan exists. It defines account profiles, executable volume, exposure,
+margin, UTC risk-day accounting, loss locks, reset and cooldown semantics. It
+does not decide market direction, move the structural stop to fit size or send
+an MT5 request.
 
 ## Core principle
 
@@ -20,6 +28,34 @@ UNKNOWN
 ```
 
 Unknown financial/exposure truth fails closed for new entries.
+
+## Risk evaluation pipeline
+
+Risk is evaluated after the structural plan exists and before the execution
+gate. It does not create a new market thesis and it does not edit the plan to
+fit the account.
+
+```mermaid
+flowchart TB
+    PLAN["Structural TradePlan — entry + original SL + original R"] --> CONTEXT["RiskContext — DayStartEquity + account + quote + SymbolSpec"]
+    CONTEXT --> PROFILE["Resolve fixed UTC-day profile — SMALL / MEDIUM / NORMAL"]
+    PLAN --> EXPOSURE["Exposure + capacity + ownership — current broker truth"]
+    PROFILE --> SIZE["Broker-aware all-in risk — volume step + min lot + friction"]
+    EXPOSURE --> SIZE
+    SIZE --> STATE["Daily P/L + loss lock — cooldown + episode re-entry"]
+    STATE --> RESULT["RiskEvaluation — PASS / BLOCK / UNKNOWN + reasons"]
+    RESULT --> GATE["Execution Gate — risk is one hard authority among many"]
+```
+
+| Risk input/result | Risk question | Unsafe shortcut |
+|---|---|---|
+| structural stop distance | what is the plan's original monetary geometry? | moving SL to make size fit |
+| profile and DayStartEquity | which band and ceiling apply today? | switching profile with floating P/L |
+| broker min/step and costs | what volume is actually executable? | rejecting only theoretical raw lot |
+| account safety P/L | is the UTC day locked? | ignoring floating loss or cash-flow adjustments |
+| exposure/ownership | can this account/symbol carry another independent position? | treating foreign/manual exposure as bot-owned |
+| margin truth | can the broker afford the request? | making heuristic margin a hard pass |
+| final evaluation | may the gate consider risk passed? | allowing score to override BLOCK/UNKNOWN |
 
 ## Account-size risk profiles — frozen V1 policy
 
@@ -187,7 +223,7 @@ Research may later propose a governed drawdown-aware preference inside already a
 
 A higher Opportunity/Final Trade Score does not automatically multiply monetary risk. Strategy quality decides whether an opportunity is worth pursuing; Risk independently decides affordable size.
 
-## Original versus current open risk
+## Original versus live open risk
 
 Keep separate:
 
@@ -221,6 +257,11 @@ When exact broker-required margin is available it is authoritative. The implemen
 ## Daily P/L and daily loss-lock accounting — frozen V1 policy
 
 The daily risk day begins at `00:00 UTC`.
+
+At a verified UTC day boundary, startup may create the new day baseline from
+current verified equity only after unresolved Intent and bot-managed position
+checks are clear. An active/ambiguous lifecycle is reconciled first; it is never
+hidden by silently resetting the risk clock.
 
 ### Account Safety P/L
 
@@ -348,7 +389,7 @@ Every evaluation should expose as applicable:
 - using manual reset to bypass non-loss hard blocks;
 - using a broker-inaccurate generic margin estimate as a hard blocker.
 
-## Current implementation checkpoint
+## Implementation ownership and proof boundary
 
 Implemented owners include:
 
@@ -406,7 +447,7 @@ Position         0/1
 Decision         PASS / BLOCK / UNKNOWN
 ```
 
-## Tests required / current evidence
+## Tests required and evidence boundary
 
 Deterministic coverage includes:
 

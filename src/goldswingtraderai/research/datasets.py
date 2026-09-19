@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
 import json
+from math import isfinite
 from pathlib import Path
 import shutil
 import tempfile
@@ -148,7 +149,7 @@ def import_replay_dataset_bundle(source: str | Path) -> ImportedDatasetBundle:
     if not isinstance(raw_manifest, dict):
         raise DatasetBundleIntegrityError("dataset manifest must be a JSON object")
 
-    schema_version = raw_manifest.get("schema_version")
+    schema_version = _required_int(raw_manifest.get("schema_version"), "schema_version")
     if schema_version != DATASET_BUNDLE_SCHEMA_VERSION:
         raise DatasetBundleVersionError(
             f"unsupported dataset bundle schema: {schema_version!r}"
@@ -344,17 +345,23 @@ def _symbol_spec_payload(spec: SymbolSpec) -> dict[str, Any]:
 def _symbol_spec_from_payload(payload: dict[str, Any]) -> SymbolSpec:
     try:
         return SymbolSpec(
-            symbol=str(payload["symbol"]),
-            digits=int(payload["digits"]),
-            point=float(payload["point"]),
-            tick_size=float(payload["tick_size"]),
-            tick_value=float(payload["tick_value"]),
-            contract_size=float(payload["contract_size"]),
-            volume_min=float(payload["volume_min"]),
-            volume_max=float(payload["volume_max"]),
-            volume_step=float(payload["volume_step"]),
-            stops_level_points=int(payload["stops_level_points"]),
-            freeze_level_points=int(payload["freeze_level_points"]),
+            symbol=_required_text(payload["symbol"], "symbol_spec.symbol"),
+            digits=_required_int(payload["digits"], "symbol_spec.digits"),
+            point=_required_float(payload["point"], "symbol_spec.point"),
+            tick_size=_required_float(payload["tick_size"], "symbol_spec.tick_size"),
+            tick_value=_required_float(payload["tick_value"], "symbol_spec.tick_value"),
+            contract_size=_required_float(
+                payload["contract_size"], "symbol_spec.contract_size"
+            ),
+            volume_min=_required_float(payload["volume_min"], "symbol_spec.volume_min"),
+            volume_max=_required_float(payload["volume_max"], "symbol_spec.volume_max"),
+            volume_step=_required_float(payload["volume_step"], "symbol_spec.volume_step"),
+            stops_level_points=_required_int(
+                payload["stops_level_points"], "symbol_spec.stops_level_points"
+            ),
+            freeze_level_points=_required_int(
+                payload["freeze_level_points"], "symbol_spec.freeze_level_points"
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise DatasetBundleIntegrityError("invalid symbol specification") from exc
@@ -378,13 +385,15 @@ def _account_from_payload(payload: dict[str, Any]) -> AccountFacts:
             # Neutral offline endpoint; dataset identity deliberately excludes these.
             login=1,
             server="RESEARCH_DATASET",
-            currency=str(payload["currency"]),
-            mode=AccountMode(str(payload["mode"])),
-            balance=float(payload["balance"]),
-            equity=float(payload["equity"]),
-            margin=float(payload["margin"]),
-            margin_free=float(payload["margin_free"]),
-            leverage=int(payload["leverage"]),
+            currency=_required_text(payload["currency"], "account_context.currency"),
+            mode=AccountMode(_required_text(payload["mode"], "account_context.mode")),
+            balance=_required_float(payload["balance"], "account_context.balance"),
+            equity=_required_float(payload["equity"], "account_context.equity"),
+            margin=_required_float(payload["margin"], "account_context.margin"),
+            margin_free=_required_float(
+                payload["margin_free"], "account_context.margin_free"
+            ),
+            leverage=_required_int(payload["leverage"], "account_context.leverage"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise DatasetBundleIntegrityError("invalid account research context") from exc
@@ -411,13 +420,28 @@ def _required_sha256(value: Any, name: str) -> str:
 
 
 def _required_nonnegative_float(value: Any, name: str) -> float:
-    try:
-        result = float(value)
-    except (TypeError, ValueError) as exc:
-        raise DatasetBundleIntegrityError(f"manifest field must be numeric: {name}") from exc
+    result = _required_float(value, name)
     if result < 0:
         raise DatasetBundleIntegrityError(f"manifest field cannot be negative: {name}")
     return result
+
+
+def _required_float(value: Any, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise DatasetBundleIntegrityError(f"manifest field must be numeric: {name}")
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise DatasetBundleIntegrityError(f"manifest field must be numeric: {name}") from exc
+    if not isfinite(result):
+        raise DatasetBundleIntegrityError(f"manifest field must be finite: {name}")
+    return result
+
+
+def _required_int(value: Any, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise DatasetBundleIntegrityError(f"manifest field must be an integer: {name}")
+    return value
 
 
 def _file_sha256(path: Path) -> str:

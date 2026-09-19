@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from math import isfinite
 
 from goldswingtraderai.decisions.fusion import DecisionBoard
 from goldswingtraderai.domain.enums import Direction, OpportunityStage, StrategyFamily
@@ -75,7 +76,12 @@ class Opportunity:
         _require_utc(self.updated_at_utc)
         if self.direction is Direction.NONE:
             raise ValueError("opportunity direction must be BUY or SELL")
-        if not 0 <= self.opportunity_score <= 100 or not 0 <= self.thesis_score <= 100:
+        if (
+            not isfinite(self.opportunity_score)
+            or not isfinite(self.thesis_score)
+            or not 0 <= self.opportunity_score <= 100
+            or not 0 <= self.thesis_score <= 100
+        ):
             raise ValueError("opportunity/thesis scores must be between 0 and 100")
         if not self.source_families:
             raise ValueError("opportunity requires at least one source family")
@@ -91,6 +97,14 @@ class OpportunityConfig:
     minimum_directional_edge: float = 6.0
 
     def __post_init__(self) -> None:
+        thresholds = (
+            self.maintain_score,
+            self.discover_score,
+            self.arm_score,
+            self.minimum_directional_edge,
+        )
+        if any(not isfinite(value) for value in thresholds):
+            raise ValueError("opportunity thresholds must be finite")
         if not 0 <= self.maintain_score <= self.discover_score <= self.arm_score <= 100:
             raise ValueError("opportunity score thresholds are invalid")
         if not 0 <= self.minimum_directional_edge <= 100:
@@ -107,6 +121,8 @@ def update_opportunity(
 
     _require_utc(now_utc)
     cfg = config or OpportunityConfig()
+    if previous is not None and now_utc < previous.updated_at_utc:
+        raise ValueError("opportunity update cannot move backwards in time")
     direction = board.leading_direction
     thesis = board.buy if direction is Direction.BUY else board.sell
 
@@ -171,6 +187,8 @@ def transition_opportunity(
     """Apply one explicit lifecycle transition while preserving identity."""
 
     _require_utc(now_utc)
+    if now_utc < opportunity.updated_at_utc:
+        raise ValueError("opportunity transition cannot move backwards in time")
     if stage is opportunity.stage:
         return replace(opportunity, updated_at_utc=now_utc)
     allowed = _ALLOWED_TRANSITIONS[opportunity.stage]

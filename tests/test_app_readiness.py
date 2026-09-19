@@ -9,6 +9,7 @@ from goldswingtraderai.diagnostics.reasons import ReasonCode
 from goldswingtraderai.domain.enums import AccountMode, HardDecision, Timeframe
 from goldswingtraderai.domain.market import AccountFacts, Candle, CandleSeries, Quote, SymbolSpec
 from goldswingtraderai.domain.models import DemoGuardResult, Reason
+from goldswingtraderai.operator import ReadinessDashboardData
 
 
 class StubReader:
@@ -99,6 +100,67 @@ class StubReader:
         return CandleSeries(timeframe=timeframe, candles=candles)
 
 
+class StaleThenFreshReader(StubReader):
+    """Return one closed-market-like stale quote, then a fresh quote."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.snapshot_count = 0
+
+    def quote(self, symbol: str) -> Quote:
+        self.snapshot_count += 1
+        quote_time = (
+            NOW - timedelta(hours=1)
+            if self.snapshot_count == 1
+            else NOW + timedelta(seconds=30)
+        )
+        return Quote(
+            symbol=symbol,
+            bid=3650.10,
+            ask=3650.30,
+            time_utc=quote_time,
+        )
+
+    def completed_candles(self, symbol: str, timeframe: Timeframe, count: int) -> CandleSeries:
+        period_seconds = {
+            Timeframe.H4: 14_400,
+            Timeframe.H1: 3_600,
+            Timeframe.M15: 900,
+            Timeframe.M5: 300,
+        }[timeframe]
+        base = (
+            NOW - timedelta(hours=1)
+            if self.snapshot_count == 1
+            else NOW + timedelta(seconds=30)
+        )
+        candles = tuple(
+            Candle(
+                time_utc=base - timedelta(seconds=period_seconds * index),
+                open=3650.0,
+                high=3652.0,
+                low=3648.0,
+                close=3651.0,
+                tick_volume=100,
+                spread_points=20,
+            )
+            for index in range(count, 0, -1)
+        )
+        return CandleSeries(timeframe=timeframe, candles=candles)
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.current = NOW
+        self.sleeps: list[float] = []
+
+    def now(self) -> datetime:
+        return self.current
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.current += timedelta(seconds=seconds)
+
+
 def _settings(*, allowed_account_login: int | None = None) -> Settings:
     return Settings(
         environment="test",
@@ -110,6 +172,9 @@ def _settings(*, allowed_account_login: int | None = None) -> Settings:
         allowed_account_login=allowed_account_login,
         allowed_server=None,
     )
+
+
+NOW = datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc)
 
 
 def test_readiness_passes_for_verified_demo_snapshot() -> None:
@@ -131,3 +196,29 @@ def test_readiness_does_not_grant_permission_without_positive_demo() -> None:
 
     assert run_readiness(_settings(), reader) == 4
     assert reader.shutdown_called is True
+
+
+def test_readiness_monitor_waits_for_fresh_data_without_entering_runtime() -> None:
+    reader = StaleThenFreshReader()
+    clock = FakeClock()
+    frames: list[ReadinessDashboardData] = []
+
+    assert run_readiness(
+        _settings(),
+        reader,
+        keep_alive=True,
+        sleep=clock.sleep,
+        utc_now=clock.now,
+        dashboard_sink=frames.append,
+    ) == 0
+
+    assert reader.snapshot_count == 2
+    assert clock.sleeps == [30.0]
+    assert reader.shutdown_called is True
+    assert len(frames) == 2
+    assert frames[0].data_quality == "STALE"
+    assert frames[0].waiting_for_fresh_data is True
+    assert frames[0].demo_guard == "PASS"
+    assert frames[0].identity_state == "PASS"
+    assert frames[1].data_quality == "HEALTHY"
+    assert frames[1].waiting_for_fresh_data is False

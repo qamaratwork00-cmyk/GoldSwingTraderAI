@@ -8,8 +8,9 @@ added here.
 from __future__ import annotations
 
 import importlib
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
+from math import isfinite
 from types import ModuleType
 from typing import Any
 
@@ -44,11 +45,19 @@ def _field(row: Any, name: str, default: Any = None) -> Any:
 
 
 def _utc_from_epoch(seconds: float | int) -> datetime:
-    return datetime.fromtimestamp(float(seconds), tz=timezone.utc)
+    value = float(seconds)
+    if not isfinite(value):
+        raise ValueError("MT5 epoch timestamp must be finite")
+    try:
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    except (OSError, OverflowError, ValueError) as exc:
+        raise ValueError("MT5 epoch timestamp is outside the supported range") from exc
 
 
 def _optional_positive_price(value: Any) -> float | None:
-    number = float(value or 0.0)
+    number = 0.0 if value is None else float(value)
+    if not isfinite(number):
+        raise ValueError("optional broker price must be finite")
     return None if number <= 0 else number
 
 
@@ -77,8 +86,18 @@ class MT5Reader:
 
     def initialize(self) -> None:
         mt5 = self._module()
-        if not bool(mt5.initialize()):
-            last_error = mt5.last_error() if hasattr(mt5, "last_error") else None
+        try:
+            initialized = bool(mt5.initialize())
+        except Exception as exc:
+            raise MarketDataError(
+                ReasonCode.MT5_NOT_INITIALIZED,
+                "MT5 initialize call failed",
+            ) from exc
+        if not initialized:
+            try:
+                last_error = mt5.last_error() if hasattr(mt5, "last_error") else None
+            except Exception:
+                last_error = None
             raise MarketDataError(
                 ReasonCode.MT5_NOT_INITIALIZED,
                 f"MT5 initialize failed: {last_error!r}",
@@ -95,22 +114,35 @@ class MT5Reader:
             raise MarketDataError(ReasonCode.MT5_NOT_INITIALIZED, "MT5 reader is not initialized")
         return self._module()
 
+    def broker_module(self) -> Any:
+        """Return the already-loaded MT5 module for governed execution adapters.
+
+        The application passes this same initialized module to reconciliation and
+        the narrow writer boundary. It is not a second broker client and does not
+        grant permission to send orders; controller/gate checks remain mandatory.
+        """
+
+        return self._require_ready()
+
     def account_facts(self) -> AccountFacts:
         mt5 = self._require_ready()
-        info = mt5.account_info()
+        info = _broker_read(
+            mt5.account_info,
+            ReasonCode.DATA_UNAVAILABLE,
+            "MT5 account_info read failed",
+        )
         if info is None:
             raise MarketDataError(ReasonCode.DATA_UNAVAILABLE, "MT5 account_info returned no data")
 
-        trade_mode = int(getattr(info, "trade_mode", -1))
-        demo_value = int(getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0))
-        if trade_mode == demo_value:
-            mode = AccountMode.DEMO
-        elif trade_mode < 0:
-            mode = AccountMode.UNKNOWN
-        else:
-            mode = AccountMode.OTHER
-
         try:
+            trade_mode = int(getattr(info, "trade_mode", -1))
+            demo_value = int(getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0))
+            if trade_mode == demo_value:
+                mode = AccountMode.DEMO
+            elif trade_mode < 0:
+                mode = AccountMode.UNKNOWN
+            else:
+                mode = AccountMode.OTHER
             return AccountFacts(
                 login=int(info.login),
                 server=str(info.server),
@@ -122,7 +154,7 @@ class MT5Reader:
                 margin_free=float(info.margin_free),
                 leverage=int(info.leverage),
             )
-        except (AttributeError, TypeError, ValueError) as exc:
+        except (AttributeError, TypeError, ValueError, OverflowError) as exc:
             raise MarketDataError(ReasonCode.DATA_CORRUPT, "invalid MT5 account facts") from exc
 
     def demo_guard(self, account: AccountFacts | None = None) -> DemoGuardResult:
@@ -144,11 +176,20 @@ class MT5Reader:
         mt5 = self._require_ready()
         candidates = tuple(dict.fromkeys((preferred, *aliases)))
         for symbol in candidates:
-            info = mt5.symbol_info(symbol)
+            info = _broker_read(
+                lambda symbol=symbol: mt5.symbol_info(symbol),
+                ReasonCode.DATA_UNAVAILABLE,
+                f"MT5 symbol_info read failed for {symbol}",
+            )
             if info is None:
                 continue
             if not bool(getattr(info, "visible", True)) and hasattr(mt5, "symbol_select"):
-                if not bool(mt5.symbol_select(symbol, True)):
+                selected = _broker_read(
+                    lambda symbol=symbol: mt5.symbol_select(symbol, True),
+                    ReasonCode.DATA_UNAVAILABLE,
+                    f"MT5 symbol_select failed for {symbol}",
+                )
+                if not bool(selected):
                     continue
             return symbol
         raise MarketDataError(
@@ -158,7 +199,11 @@ class MT5Reader:
 
     def symbol_spec(self, symbol: str) -> SymbolSpec:
         mt5 = self._require_ready()
-        info = mt5.symbol_info(symbol)
+        info = _broker_read(
+            lambda: mt5.symbol_info(symbol),
+            ReasonCode.DATA_UNAVAILABLE,
+            f"MT5 symbol_info read failed for {symbol}",
+        )
         if info is None:
             raise MarketDataError(ReasonCode.SYMBOL_NOT_FOUND, f"symbol not available: {symbol}")
 
@@ -170,6 +215,7 @@ class MT5Reader:
                 or getattr(info, "trade_tick_value_loss", 0.0)
                 or 0.0
             )
+            filling_mode = _request_filling_mode(info, mt5)
             return SymbolSpec(
                 symbol=symbol,
                 digits=int(info.digits),
@@ -182,13 +228,18 @@ class MT5Reader:
                 volume_step=float(info.volume_step),
                 stops_level_points=int(getattr(info, "trade_stops_level", 0)),
                 freeze_level_points=int(getattr(info, "trade_freeze_level", 0)),
+                filling_mode=filling_mode,
             )
-        except (AttributeError, TypeError, ValueError) as exc:
+        except (AttributeError, TypeError, ValueError, OverflowError) as exc:
             raise MarketDataError(ReasonCode.DATA_CORRUPT, f"invalid symbol specification: {symbol}") from exc
 
     def quote(self, symbol: str) -> Quote:
         mt5 = self._require_ready()
-        tick = mt5.symbol_info_tick(symbol)
+        tick = _broker_read(
+            lambda: mt5.symbol_info_tick(symbol),
+            ReasonCode.DATA_UNAVAILABLE,
+            f"MT5 symbol_info_tick read failed for {symbol}",
+        )
         if tick is None:
             raise MarketDataError(ReasonCode.DATA_UNAVAILABLE, f"no live quote for {symbol}")
 
@@ -201,7 +252,7 @@ class MT5Reader:
                 ask=float(tick.ask),
                 time_utc=_utc_from_epoch(epoch),
             )
-        except (AttributeError, TypeError, ValueError, OSError) as exc:
+        except (AttributeError, TypeError, ValueError, OSError, OverflowError) as exc:
             raise MarketDataError(ReasonCode.DATA_CORRUPT, f"invalid quote for {symbol}") from exc
 
     def open_positions(self, symbol: str) -> tuple[OpenPositionFacts, ...]:
@@ -218,15 +269,25 @@ class MT5Reader:
                 ReasonCode.DATA_UNAVAILABLE,
                 "MT5 positions_get is unavailable in this runtime",
             )
-        rows = getter(symbol=symbol)
+        rows = _broker_read(
+            lambda: getter(symbol=symbol),
+            ReasonCode.DATA_UNAVAILABLE,
+            f"MT5 positions_get read failed for {symbol}",
+        )
         if rows is None:
             raise MarketDataError(
                 ReasonCode.DATA_UNAVAILABLE,
                 f"MT5 positions_get returned unknown truth for {symbol}",
             )
 
-        buy_type = int(getattr(mt5, "POSITION_TYPE_BUY", 0))
-        sell_type = int(getattr(mt5, "POSITION_TYPE_SELL", 1))
+        try:
+            buy_type = int(getattr(mt5, "POSITION_TYPE_BUY", 0))
+            sell_type = int(getattr(mt5, "POSITION_TYPE_SELL", 1))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise MarketDataError(
+                ReasonCode.DATA_CORRUPT,
+                "invalid MT5 position direction constants",
+            ) from exc
         positions: list[OpenPositionFacts] = []
         try:
             for row in rows:
@@ -256,7 +317,7 @@ class MT5Reader:
                         comment=None if comment_raw is None else str(comment_raw),
                     )
                 )
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, OverflowError) as exc:
             raise MarketDataError(
                 ReasonCode.DATA_CORRUPT,
                 f"invalid open-position payload for {symbol}",
@@ -278,7 +339,11 @@ class MT5Reader:
 
         mt5 = self._require_ready()
         mt5_timeframe = self._timeframe_constant(mt5, timeframe)
-        rates = mt5.copy_rates_from_pos(symbol, mt5_timeframe, 1, count)
+        rates = _broker_read(
+            lambda: mt5.copy_rates_from_pos(symbol, mt5_timeframe, 1, count),
+            ReasonCode.DATA_UNAVAILABLE,
+            f"MT5 candle read failed for {symbol}/{timeframe}",
+        )
         if rates is None:
             raise MarketDataError(
                 ReasonCode.DATA_UNAVAILABLE,
@@ -300,7 +365,7 @@ class MT5Reader:
                         real_volume=int(_field(row, "real_volume", 0)),
                     )
                 )
-        except (TypeError, ValueError, OSError) as exc:
+        except (TypeError, ValueError, OSError, OverflowError) as exc:
             raise MarketDataError(
                 ReasonCode.DATA_CORRUPT,
                 f"invalid {timeframe} candle payload for {symbol}",
@@ -327,4 +392,63 @@ class MT5Reader:
         value = getattr(mt5, name, None)
         if value is None:
             raise MarketDataError(ReasonCode.DATA_UNAVAILABLE, f"MT5 constant missing: {name}")
-        return int(value)
+        try:
+            return int(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise MarketDataError(
+                ReasonCode.DATA_CORRUPT,
+                f"MT5 timeframe constant is invalid: {name}",
+            ) from exc
+
+
+def _broker_read(
+    operation: Callable[[], Any],
+    reason: ReasonCode,
+    message: str,
+) -> Any:
+    """Convert an SDK read exception into an explicit typed boundary failure."""
+
+    try:
+        return operation()
+    except MarketDataError:
+        raise
+    except Exception as exc:
+        raise MarketDataError(reason, message) from exc
+
+
+def _request_filling_mode(info: Any, mt5: Any) -> int | None:
+    """Translate broker filling-policy flags into a request-ready enum.
+
+    MT5 exposes ``SYMBOL_FILLING_MODE`` as a bitmask of allowed policies, while
+    ``MqlTradeRequest.type_filling`` expects an ``ORDER_FILLING_*`` enum. Passing
+    the bitmask through unchanged can select the wrong policy or be rejected by
+    the broker, so an incomplete mapping remains unknown and fails closed.
+    """
+
+    allowed_raw = getattr(info, "filling_mode", None)
+    execution_raw = getattr(info, "trade_exemode", None)
+    if allowed_raw is None or execution_raw is None:
+        return None
+    try:
+        allowed = int(allowed_raw)
+        execution = int(execution_raw)
+        symbol_fok = int(getattr(mt5, "SYMBOL_FILLING_FOK"))
+        symbol_ioc = int(getattr(mt5, "SYMBOL_FILLING_IOC"))
+        market_execution = int(getattr(mt5, "SYMBOL_TRADE_EXECUTION_MARKET"))
+        order_fok = int(getattr(mt5, "ORDER_FILLING_FOK"))
+        order_ioc = int(getattr(mt5, "ORDER_FILLING_IOC"))
+        order_return = int(getattr(mt5, "ORDER_FILLING_RETURN"))
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return None
+
+    if allowed < 0 or execution < 0:
+        return None
+    if execution != market_execution:
+        # RETURN is enabled for non-market execution modes according to the MT5
+        # contract; using the request enum avoids treating flags as enum values.
+        return order_return
+    if allowed & symbol_fok:
+        return order_fok
+    if allowed & symbol_ioc:
+        return order_ioc
+    return None

@@ -7,10 +7,15 @@ trade vetoes. Frozen hard limits remain explicit and auditable.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
+from typing import TYPE_CHECKING
 
 from goldswingtraderai.decisions.trade_plan import PlanState, TradePlan
 from goldswingtraderai.domain.enums import Direction, HardDecision
 from goldswingtraderai.domain.market import Quote
+
+if TYPE_CHECKING:
+    from goldswingtraderai.management.models import ManagedTrade
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +38,15 @@ class ExecutionCheckConfig:
     max_adverse_drift_ratio: float = 0.20
 
     def __post_init__(self) -> None:
+        thresholds = (
+            self.normal_spread_ratio,
+            self.max_spread_ratio,
+            self.max_spread_to_stop_ratio,
+            self.normal_adverse_drift_ratio,
+            self.max_adverse_drift_ratio,
+        )
+        if any(not isfinite(value) for value in thresholds):
+            raise ValueError("execution check thresholds must be finite")
         if not 1.0 <= self.normal_spread_ratio < self.max_spread_ratio:
             raise ValueError("spread ratio thresholds are invalid")
         if not 0 < self.max_spread_to_stop_ratio < 1:
@@ -59,7 +73,11 @@ def evaluate_execution_checks(
         return _result(HardDecision.UNKNOWN, "DATA_STALE")
     if plan.original_r_price is None or plan.original_r_price <= 0:
         return _result(HardDecision.UNKNOWN, "RISK_GEOMETRY_TOO_LARGE")
-    if healthy_spread_baseline is None or healthy_spread_baseline <= 0:
+    if (
+        healthy_spread_baseline is None
+        or not isfinite(healthy_spread_baseline)
+        or healthy_spread_baseline <= 0
+    ):
         return _result(HardDecision.UNKNOWN, "SPREAD_CONTEXT_UNKNOWN")
 
     executable_price = quote.ask if plan.direction is Direction.BUY else quote.bid
@@ -116,6 +134,63 @@ def evaluate_execution_checks(
         spread_to_stop_ratio=spread_to_stop,
         adverse_drift_ratio=adverse_drift_ratio,
         elevated=elevated_spread or elevated_drift,
+    )
+
+
+def evaluate_management_execution_checks(
+    trade: "ManagedTrade",
+    quote: Quote,
+    *,
+    healthy_spread_baseline: float | None,
+    quote_fresh: bool,
+    config: ExecutionCheckConfig | None = None,
+) -> ExecutionCheckResult:
+    """Apply fresh quote/spread checks to an existing managed position.
+
+    Management does not chase a new entry, so adverse entry drift is not a
+    meaningful veto. It still requires a fresh quote, a known healthy-spread
+    baseline and a spread that is not excessive relative to the current stop
+    geometry. The broker writer remains the final action-specific authority.
+    """
+
+    cfg = config or ExecutionCheckConfig()
+    if not quote_fresh:
+        return _result(HardDecision.UNKNOWN, "DATA_STALE")
+    if (
+        healthy_spread_baseline is None
+        or not isfinite(healthy_spread_baseline)
+        or healthy_spread_baseline <= 0
+    ):
+        return _result(HardDecision.UNKNOWN, "SPREAD_CONTEXT_UNKNOWN")
+
+    if quote.symbol != trade.symbol:
+        return _result(HardDecision.BLOCK, "MANAGEMENT_SYMBOL_MISMATCH")
+    executable_price = quote.bid if trade.direction is Direction.BUY else quote.ask
+    current_stop_distance = abs(executable_price - trade.current_stop)
+    if current_stop_distance <= 0:
+        return _result(HardDecision.UNKNOWN, "MANAGEMENT_STOP_GEOMETRY_UNKNOWN")
+
+    spread_ratio = quote.spread_price / healthy_spread_baseline
+    spread_to_stop = quote.spread_price / current_stop_distance
+    if spread_ratio > cfg.max_spread_ratio or spread_to_stop > cfg.max_spread_to_stop_ratio:
+        return ExecutionCheckResult(
+            decision=HardDecision.BLOCK,
+            reason="SPREAD_TOO_HIGH",
+            executable_price=executable_price,
+            spread_ratio=spread_ratio,
+            spread_to_stop_ratio=spread_to_stop,
+            adverse_drift_ratio=0.0,
+            elevated=False,
+        )
+    elevated = spread_ratio > cfg.normal_spread_ratio
+    return ExecutionCheckResult(
+        decision=HardDecision.PASS,
+        reason="MANAGEMENT_SPREAD_ELEVATED" if elevated else "MANAGEMENT_EXECUTION_CHECKS_PASS",
+        executable_price=executable_price,
+        spread_ratio=spread_ratio,
+        spread_to_stop_ratio=spread_to_stop,
+        adverse_drift_ratio=0.0,
+        elevated=elevated,
     )
 
 

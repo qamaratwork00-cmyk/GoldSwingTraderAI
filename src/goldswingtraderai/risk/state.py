@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from enum import StrEnum
+from math import isfinite
 
 from goldswingtraderai.domain.ids import EntityId
 
@@ -35,6 +36,16 @@ class RiskDayState:
     manual_reset_count: int = 0
 
     def __post_init__(self) -> None:
+        if not all(
+            isfinite(value)
+            for value in (
+                self.day_start_equity,
+                self.net_non_trading_cash_flow,
+                self.cycle_reference_equity,
+                self.cycle_start_safety_pl,
+            )
+        ):
+            raise ValueError("risk-day monetary values must be finite")
         if self.day_start_equity <= 0 or self.cycle_reference_equity <= 0:
             raise ValueError("risk-day equity references must be positive")
         if self.manual_reset_count not in {0, 1}:
@@ -69,6 +80,8 @@ class CooldownState:
             and self.cooldown_until_utc < self.triggered_at_utc
         ):
             raise ValueError("cooldown cannot end before trigger")
+        if (self.triggered_at_utc is None) != (self.cooldown_until_utc is None):
+            raise ValueError("cooldown trigger and expiry must be present together")
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +107,8 @@ def new_risk_day(
     manual_reset_enabled: bool = False,
 ) -> RiskDayState:
     _require_utc(now_utc)
+    if not isfinite(equity):
+        raise ValueError("day-start equity must be finite")
     if equity <= 0:
         raise ValueError("day-start equity must be positive")
     return RiskDayState(
@@ -109,6 +124,8 @@ def new_risk_day(
 def record_non_trading_cash_flow(state: RiskDayState, amount: float) -> RiskDayState:
     """Record deposits/withdrawals/known non-trading balance adjustments."""
 
+    if not isfinite(amount):
+        raise ValueError("cash-flow amount must be finite")
     return replace(
         state,
         net_non_trading_cash_flow=state.net_non_trading_cash_flow + amount,
@@ -120,8 +137,12 @@ def risk_day_metrics(
     current_equity: float,
     daily_lock_pct: float,
 ) -> RiskDayMetrics:
+    if not isfinite(current_equity):
+        raise ValueError("current equity must be finite")
     if current_equity <= 0:
         raise ValueError("current equity must be positive")
+    if not isfinite(daily_lock_pct):
+        raise ValueError("daily lock percentage must be finite")
     if daily_lock_pct <= 0:
         raise ValueError("daily lock percentage must be positive")
 

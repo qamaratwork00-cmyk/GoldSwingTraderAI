@@ -8,6 +8,59 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from math import isfinite
+
+
+@dataclass(frozen=True, slots=True)
+class ReadinessDashboardData:
+    """Read-only facts shown before a governed runtime cycle exists.
+
+    The readiness monitor intentionally has no decision, risk or execution
+    fields.  It can therefore remain visible while quote/candle freshness is
+    retryable without creating a second authority or implying that a trade was
+    evaluated.
+    """
+
+    project: str
+    symbol: str
+    account_mode: str
+    demo_guard: str
+    identity_state: str
+    runtime_role: str
+    utc_time: datetime
+    bid: float | None
+    ask: float | None
+    spread_price: float | None
+    quote_age_seconds: float | None
+    data_quality: str
+    timeframe_bars: tuple[tuple[str, int], ...]
+    issues: tuple[str, ...]
+    poll_seconds: float
+    waiting_for_fresh_data: bool
+
+    def __post_init__(self) -> None:
+        if self.utc_time.tzinfo is None or self.utc_time.utcoffset() is None:
+            raise ValueError("readiness dashboard UTC time must be timezone-aware")
+        if self.utc_time.utcoffset() != timezone.utc.utcoffset(self.utc_time):
+            raise ValueError("readiness dashboard time must be UTC")
+        for name, value in (
+            ("bid", self.bid),
+            ("ask", self.ask),
+            ("spread_price", self.spread_price),
+            ("quote_age_seconds", self.quote_age_seconds),
+        ):
+            if value is not None and not isfinite(value):
+                raise ValueError(f"readiness dashboard {name} must be finite")
+        if self.quote_age_seconds is not None and self.quote_age_seconds < 0:
+            raise ValueError("readiness dashboard quote age cannot be negative")
+        if not self.timeframe_bars:
+            raise ValueError("readiness dashboard requires timeframe bar facts")
+        if len({timeframe for timeframe, _ in self.timeframe_bars}) != len(self.timeframe_bars):
+            raise ValueError("readiness dashboard timeframes must be unique")
+        if any(count < 0 for _, count in self.timeframe_bars):
+            raise ValueError("readiness dashboard bar counts cannot be negative")
+        if not isfinite(self.poll_seconds) or self.poll_seconds <= 0:
+            raise ValueError("readiness dashboard poll interval must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +110,10 @@ class DashboardData:
     learning_state: str = "PENDING"
     backup_state: str = "PENDING"
     system_health: str = "HEALTHY"
+    discovery_state: str = "PENDING"
+    candidate: str | None = None
+    candidate_stage: str | None = None
+    suppression_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.utc_time.tzinfo is None or self.utc_time.utcoffset() is None:
@@ -87,6 +144,69 @@ class OpenTradeView:
     current_r: float | None
     manager_action: str
     manager_reason: str
+
+
+def render_readiness_dashboard(
+    data: ReadinessDashboardData,
+    *,
+    emoji: bool = True,
+    width: int = 78,
+) -> str:
+    """Render the read-only monitor frame used before a runtime cycle exists.
+
+    This is deliberately a separate frame from the full cycle dashboard.  A
+    stale snapshot has no authoritative strategy, risk or execution result to
+    display, so the renderer reports only the broker/readiness facts that are
+    actually available and makes the write lock explicit.
+    """
+
+    width = max(64, width)
+    divider = "─" * width
+    title = f" {data.project} — READINESS MONITOR ".center(width, "═")
+    marker = _markers(emoji)
+    guard = _state_marker(data.demo_guard, marker)
+    identity = _state_marker(data.identity_state, marker)
+    status = "WAIT — FRESH DATA REQUIRED" if data.waiting_for_fresh_data else "SNAPSHOT RESULT"
+    why = (
+        "Stale/insufficient market data; strategy and broker writes remain disabled."
+        if data.waiting_for_fresh_data
+        else "Readiness is read-only; no strategy or broker-write authority is created."
+    )
+    bars = " | ".join(f"{timeframe} {count}" for timeframe, count in data.timeframe_bars)
+    lines = [
+        title,
+        _fit(
+            f"{data.symbol} | {data.account_mode} {guard} | Identity {identity} | "
+            f"{data.runtime_role} | {data.utc_time:%H:%M:%S} UTC",
+            width,
+        ),
+        _fit(
+            f"Bid {_num(data.bid)} | Ask {_num(data.ask)} | Spread {_num(data.spread_price)} | "
+            f"Quote Age {_seconds(data.quote_age_seconds)} | Data {data.data_quality}",
+            width,
+        ),
+        divider,
+        f"{marker['market']} MARKET      {marker['wait']} {status}",
+        _fit(f"Completed bars  {bars}", width),
+        f"{marker['execution']} EXECUTION   {marker['block']} BROKER WRITES DISABLED | "
+        "STRATEGY NOT RUN",
+        _fit(f"{marker['message']} WHY          {why}", width),
+    ]
+    if data.issues:
+        lines.append(_fit("Issues:", width))
+        lines.extend(_fit(f"• {issue}", width) for issue in data.issues)
+    lines.extend(
+        [
+            divider,
+            _fit(
+                f"{marker['wait']} NEXT        Fresh-data poll in {data.poll_seconds:.0f}s | "
+                "Ctrl+C to stop",
+                width,
+            ),
+            "═" * width,
+        ]
+    )
+    return "\n".join(lines)
 
 
 def render_dashboard(data: DashboardData, *, emoji: bool = True, width: int = 78) -> str:
@@ -170,7 +290,13 @@ def render_dashboard(data: DashboardData, *, emoji: bool = True, width: int = 78
             divider,
             _fit(
                 f"{marker['learning']} Learning {data.learning_state} | "
+                f"Discovery {data.discovery_state} | Candidate {data.candidate or '—'} "
+                f"({data.candidate_stage or '—'})",
+                width,
+            ),
+            _fit(
                 f"{marker['state']} Backup {data.backup_state} | "
+                f"Suppression {data.suppression_reason or '—'} | "
                 f"{marker['health']} Health {data.system_health}",
                 width,
             ),
@@ -264,6 +390,10 @@ def _countdown(seconds: int | None) -> str:
         return "—"
     minutes, remainder = divmod(seconds, 60)
     return f"{minutes:02d}:{remainder:02d}"
+
+
+def _seconds(value: float | None) -> str:
+    return "—" if value is None else f"{value:.1f}s"
 
 
 def _fit(text: str, width: int) -> str:

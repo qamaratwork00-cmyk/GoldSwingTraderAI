@@ -143,16 +143,17 @@ def import_research_evidence_package(
         raise EvidencePackageIntegrityError("evidence package files are missing or unsafe")
 
     package = _read_json_object(package_path, "package manifest")
-    if package.get("schema_version") != EVIDENCE_PACKAGE_SCHEMA_VERSION:
+    schema_version = _required_int(package.get("schema_version"), "schema_version")
+    if schema_version != EVIDENCE_PACKAGE_SCHEMA_VERSION:
         raise EvidencePackageVersionError(
-            f"unsupported evidence package schema: {package.get('schema_version')!r}"
+            f"unsupported evidence package schema: {schema_version!r}"
         )
     claimed_package_hash = _required_sha256(package.get("package_sha256"), "package_sha256")
     package_payload = dict(package)
     package_payload.pop("package_sha256", None)
     if _payload_sha256(package_payload) != claimed_package_hash:
         raise EvidencePackageIntegrityError("evidence package manifest checksum mismatch")
-    if package.get("evidence_file") != _EVIDENCE_MANIFEST:
+    if _required_text(package.get("evidence_file"), "evidence_file") != _EVIDENCE_MANIFEST:
         raise EvidencePackageIntegrityError("evidence package filename is not canonical")
     claimed_evidence_file_hash = _required_sha256(
         package.get("evidence_file_sha256"),
@@ -163,6 +164,15 @@ def import_research_evidence_package(
 
     evidence = _read_json_object(evidence_path, "evidence manifest")
     _verify_evidence_payload(evidence, package)
+    evidence_manifest_hash = _required_sha256(
+        package.get("evidence_manifest_sha256"),
+        "evidence_manifest_sha256",
+    )
+    input_fingerprint_hash = _required_sha256(
+        package.get("input_fingerprint_sha256"),
+        "input_fingerprint_sha256",
+    )
+    dataset_hash = _required_sha256(package.get("dataset_sha256"), "dataset_sha256")
 
     package_bundle_hash = package.get("dataset_bundle_manifest_sha256")
     if package_bundle_hash is not None:
@@ -172,7 +182,7 @@ def import_research_evidence_package(
         )
     if dataset_bundle is not None:
         verified = import_replay_dataset_bundle(dataset_bundle)
-        if verified.dataset_sha256 != package["dataset_sha256"]:
+        if verified.dataset_sha256 != dataset_hash:
             raise EvidencePackageIntegrityError(
                 "supplied dataset bundle does not match evidence package dataset"
             )
@@ -188,9 +198,9 @@ def import_research_evidence_package(
         path=root,
         package_sha256=claimed_package_hash,
         evidence_payload=evidence,
-        evidence_manifest_sha256=str(package["evidence_manifest_sha256"]),
-        input_fingerprint_sha256=str(package["input_fingerprint_sha256"]),
-        dataset_sha256=str(package["dataset_sha256"]),
+        evidence_manifest_sha256=evidence_manifest_hash,
+        input_fingerprint_sha256=input_fingerprint_hash,
+        dataset_sha256=dataset_hash,
         dataset_bundle_manifest_sha256=package_bundle_hash,
     )
 
@@ -277,4 +287,16 @@ def _required_sha256(value: Any, name: str) -> str:
         raise EvidencePackageIntegrityError(f"missing SHA-256 field: {name}")
     if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
         raise EvidencePackageIntegrityError(f"invalid SHA-256 field: {name}")
+    return value
+
+
+def _required_text(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise EvidencePackageIntegrityError(f"missing text field: {name}")
+    return value
+
+
+def _required_int(value: Any, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise EvidencePackageIntegrityError(f"missing integer field: {name}")
     return value

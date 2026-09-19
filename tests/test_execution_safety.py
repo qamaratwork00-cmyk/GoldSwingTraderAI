@@ -475,6 +475,40 @@ def test_complete_broker_truth_can_prove_unknown_open_not_created(tmp_path) -> N
     assert resolved.submit_attempts == 1
 
 
+def test_ambiguous_open_reconciliation_does_not_choose_one_position(tmp_path) -> None:
+    clock = [NOW]
+    _, controller, controller_id, epoch = _controller(clock)
+    fake = FakeMT5()
+    fake.send_result = None
+    repository, writer, reconciler, service = _service(tmp_path, fake, controller)
+    intent = _intent(controller_id, epoch)
+    unknown = service.execute(intent, _all_pass_permission(), _quote(), NOW)
+    comment = writer.intent_comment(intent)
+    fake.positions = (
+        SimpleNamespace(
+            ticket=555,
+            symbol=SYMBOL,
+            magic=WRITE_CONFIG.magic,
+            comment=comment,
+            volume=0.01,
+            type=fake.POSITION_TYPE_BUY,
+        ),
+        SimpleNamespace(
+            ticket=556,
+            symbol=SYMBOL,
+            magic=WRITE_CONFIG.magic,
+            comment=comment,
+            volume=0.01,
+            type=fake.POSITION_TYPE_BUY,
+        ),
+    )
+
+    evidence = reconciler.reconcile(unknown, NOW + timedelta(minutes=1))
+
+    assert evidence.status is ReconciliationStatus.UNRESOLVED
+    assert evidence.reason == "NO_MATCH_YET_NOT_PROVEN_ABSENT"
+
+
 def test_modify_reconciliation_uses_actual_position_levels(tmp_path) -> None:
     controller_id = new_controller_id()
     intent = replace(

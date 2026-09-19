@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Execution and Broker Safety
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE + DURABLE COORDINATION + RECOVERY GATE  
-**Version:** 0.9-implementation  
-**Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, controller ownership/fencing, takeover reconciliation and broker reconciliation.  
+**Status:** PROVISIONAL — EXECUTION AND BROKER-SAFETY CONTRACT
+**Version:** 1.0-implementation
+**Authority:** MT5 account/symbol verification, execution readiness, broker request validation, one-shot irreversible submission, controller ownership/fencing, takeover reconciliation and broker reconciliation.
 **Depends on:** `RISK_CONTRACT.md`, `SESSION_AND_RISK_STATE_MACHINE.md`, `PERSISTENCE_RESTART_AND_RECOVERY.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
@@ -11,7 +11,39 @@ This document owns the irreversible broker-write boundary.
 
 > **Analysis may be wrong and lose a trade. Execution safety must not create duplicate, wrong-account, wrong-volume or uncontrolled exposure.**
 
-## Current implementation checkpoint
+## The only broker-write path
+
+Execution is a stateful safety boundary. The path is intentionally narrow and
+the acknowledgement branch is not considered complete until broker truth is
+verified.
+
+```mermaid
+flowchart TB
+    APPROVED["Approved TradePlan or management action"] --> AUTHORITIES["Hard authorities — DEMO + account + risk + session/news + ownership + controller"]
+    AUTHORITIES --> GATE{"Central gate ALLOW?"}
+    GATE -->|"no / unknown"| BLOCK["Persist decision and reason — no broker call"]
+    GATE -->|"yes"| INTENT["Persist APPROVED intent — one-send identity"]
+    INTENT --> PRECHECK["Fresh broker pre-check — quote + symbol + volume + margin + epoch"]
+    PRECHECK --> SUBMIT["Persist SUBMITTING — consume send allowance"]
+    SUBMIT --> SEND["One MT5 order_send"]
+    SEND --> ACK{"acknowledgement"}
+    ACK -->|"verified"| VERIFY["Reconcile positions/orders/deals"]
+    ACK -->|"ambiguous"| RECONCILE["Reconciliation-only state — never blind retry"]
+    ACK -->|"rejected"| FAILED["FAILED with broker reason"]
+    VERIFY --> DURABLE["Persist verified lifecycle result"]
+    RECONCILE --> DURABLE
+```
+
+| Boundary | Owner | Required invariant |
+|---|---|---|
+| analytical approval | decisions/management | a structural plan/action exists |
+| hard permission | risk + session/news + execution gate | BLOCK/UNKNOWN cannot pass |
+| intent | execution intent store | one Intent ID has at most one send |
+| raw call | execution/mt5_writer.py | only this module reaches order_send |
+| current exposure truth | execution/reconcile.py + market_data reader | acknowledgement is not final truth |
+| controller | execution/controller.py | holder and fencing epoch are fresh at write time |
+
+## Implementation ownership and proof boundary
 
 Implemented owners:
 
@@ -174,7 +206,7 @@ old lease expires
 → CONTROLLER_PRIMARY
 ```
 
-## Startup recovery integration — implemented deterministic foundation
+## Startup recovery integration
 
 `app/recovery.py` is now the governed software owner of the valid call sequence for takeover completion.
 
@@ -212,7 +244,7 @@ Runtime may be `READY`, `DEGRADED`, `RECONCILING`, or `BLOCKED`. Uncertainty pre
 
 Expose account/symbol/DEMO guard, quote/spread/drift, volume/margin/stop validation, Intent ID/state/send count, reconciliation result, ownership/capacity, controller ID/epoch/lease, takeover-recovery state and exact gate/recovery reason.
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic coverage includes:
 
@@ -232,7 +264,9 @@ Deterministic coverage includes:
 - hard-authority UNKNOWN prevents READY;
 - startup coordinator is the governed successful takeover-completion path.
 
-Current repository checkpoint: **219 tests PASS**, Ruff PASS and financial-secret scan PASS.
+The deterministic test, lint and secret-scan commands are owned by
+`60-engineering/TESTING_AND_VERIFICATION.md`; live broker/controller evidence
+belongs to the release audit.
 
 ## Explicit non-goals
 
@@ -240,9 +274,15 @@ Execution must not decide strategy direction, increase risk, redesign structural
 
 ## Remaining work
 
-- read-only live MT5 recovery-snapshot adapter through the existing MT5 read boundary;
-- final runtime wiring so live startup supplies all recovery authorities from authoritative owners;
+- accepted external session/news producer selection/operation through the implemented handoff;
+- UTC risk-day rollover and restart/fault-injection certification;
 - controlled shared-storage/cross-laptop failover proof;
 - real MT5 DEMO account/symbol/filling/modify/close/takeover fault evidence;
 - healthy-spread baseline persistence/calibration;
 - broker-specific magic/comment and safe read retry configuration.
+
+The MT5 read boundary now translates `SYMBOL_FILLING_MODE` policy flags plus
+`trade_exemode` into the request-ready `ORDER_FILLING_*` enum. It prefers FOK
+then IOC for Market Execution when the corresponding broker flag is allowed and
+uses RETURN for non-Market Execution; missing/invalid mapping remains unknown,
+so the writer fails closed instead of forwarding a bitmask as `type_filling`.

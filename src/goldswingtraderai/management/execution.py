@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from math import isclose
 
 from goldswingtraderai.domain.ids import EntityId, new_execution_intent_id
 from goldswingtraderai.execution import ExecutionAction, ExecutionIntent, IntentState
@@ -81,6 +82,8 @@ def apply_verified_management_result(
     if intent.state is not IntentState.ACCEPTED_VERIFIED:
         raise PermissionError("management state cannot update before broker verification")
 
+    _validate_verified_management_identity(trade, decision, intent, verified_at_utc)
+
     if decision.action is TradeManagerAction.EXIT:
         repository.clear_verified_closed()
         return None
@@ -88,3 +91,56 @@ def apply_verified_management_result(
     updated = apply_management_decision(trade, decision, verified_at_utc)
     repository.save(updated, event_type=f"MANAGED_TRADE_{decision.action.value}_VERIFIED")
     return updated
+
+
+def _validate_verified_management_identity(
+    trade: ManagedTrade,
+    decision: TradeManagementDecision,
+    intent: ExecutionIntent,
+    verified_at_utc: datetime,
+) -> None:
+    """Reject a verified result that does not belong to this trade/action."""
+
+    if verified_at_utc < intent.created_at_utc:
+        raise ValueError("management verification cannot precede intent creation")
+    if decision.action is TradeManagerAction.HOLD:
+        raise ValueError("HOLD decision cannot have a broker-write intent")
+    expected_action = (
+        ExecutionAction.CLOSE
+        if decision.action is TradeManagerAction.EXIT
+        else ExecutionAction.MODIFY
+    )
+    if intent.action is not expected_action:
+        raise ValueError("management intent action does not match decision")
+    if (
+        intent.symbol != trade.symbol
+        or intent.direction is not trade.direction
+        or intent.position_ticket != trade.position_ticket
+        or not isclose(intent.volume, trade.volume, rel_tol=0.0, abs_tol=1e-12)
+        or intent.trade_plan_id != trade.plan_id
+        or intent.opportunity_id != trade.opportunity_id
+        or intent.episode_id != trade.episode_id
+    ):
+        raise ValueError("management intent identity does not match managed trade")
+
+    if decision.action is TradeManagerAction.EXIT:
+        return
+
+    expected_stop = decision.proposed_stop if decision.proposed_stop is not None else trade.current_stop
+    expected_tp = decision.proposed_tp if decision.action is TradeManagerAction.RUNNER else trade.broker_tp
+    if intent.stop_loss is None or not isclose(
+        intent.stop_loss,
+        expected_stop,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise ValueError("management intent stop does not match decision")
+    if (intent.take_profit is None) != (expected_tp is None):
+        raise ValueError("management intent target does not match decision")
+    if expected_tp is not None and not isclose(
+        intent.take_profit or 0.0,
+        expected_tp,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise ValueError("management intent target does not match decision")

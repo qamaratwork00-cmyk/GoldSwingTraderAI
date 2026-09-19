@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from math import isfinite
 
 from goldswingtraderai.decisions.timing import TimingAction
 from goldswingtraderai.decisions.trade_plan import PlanState, TradePlan, TradePlanConfig
@@ -63,6 +64,8 @@ class ManagementReplayAssumptions:
     reject_every_nth_modify: int | None = None
 
     def __post_init__(self) -> None:
+        if not isfinite(self.adverse_entry_slippage_r) or not isfinite(self.barrier_spread_price):
+            raise ValueError("management replay assumptions must be finite")
         if not 0.0 <= self.adverse_entry_slippage_r < 1.0:
             raise ValueError("adverse entry slippage must be in [0, 1) original R")
         if self.barrier_spread_price < 0:

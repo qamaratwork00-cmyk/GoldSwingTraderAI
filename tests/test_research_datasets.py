@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 import json
 
 import pytest
@@ -181,3 +182,30 @@ def test_dataset_bundle_export_never_overwrites_existing_destination(tmp_path) -
             source_label="fixture-xau",
             source_version="v2",
         )
+
+
+def test_dataset_manifest_rejects_coercive_numeric_fields(tmp_path) -> None:
+    target = tmp_path / "bundle"
+    export_replay_dataset_bundle(
+        _dataset(),
+        target,
+        source_label="fixture-xau",
+        source_version="v1",
+    )
+
+    manifest_path = target / "dataset_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["spread_price"] = "0.20"
+    payload = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+    manifest["manifest_sha256"] = sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DatasetBundleIntegrityError, match="must be numeric"):
+        import_replay_dataset_bundle(target)

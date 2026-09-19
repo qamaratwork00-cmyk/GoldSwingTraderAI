@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from math import isfinite
 
 from goldswingtraderai.domain.enums import BreakState, Direction, SwingRole, SwingSide, Timeframe
 from goldswingtraderai.domain.market import Candle
@@ -71,6 +72,13 @@ class LiquidityConfig:
     path_horizon_atr: float = 2.0
 
     def __post_init__(self) -> None:
+        fractions = (
+            self.cluster_atr_fraction,
+            self.approach_atr_fraction,
+            self.path_horizon_atr,
+        )
+        if any(not isfinite(value) for value in fractions):
+            raise ValueError("liquidity thresholds must be finite")
         if self.cluster_atr_fraction <= 0 or self.approach_atr_fraction <= 0:
             raise ValueError("liquidity normalization must be positive")
         if self.min_cluster_ticks <= 0 or self.max_source_swings <= 0:

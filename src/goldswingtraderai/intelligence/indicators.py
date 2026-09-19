@@ -8,6 +8,7 @@ magic values inside strategy code.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from statistics import median
 
 from goldswingtraderai.domain.enums import (
@@ -138,9 +139,13 @@ class QuantConfig:
             self.extreme_ratio,
             self.dislocated_ratio,
         )
+        if any(not isfinite(value) for value in ratios):
+            raise ValueError("volatility ratios must be finite")
         if tuple(sorted(ratios)) != ratios or ratios[0] <= 0:
             raise ValueError("volatility ratios must be positive and increasing")
         extensions = (self.fresh_extension_atr, self.extended_atr, self.severe_extension_atr)
+        if any(not isfinite(value) for value in extensions):
+            raise ValueError("extension thresholds must be finite")
         if tuple(sorted(extensions)) != extensions or extensions[0] < 0:
             raise ValueError("extension thresholds must be non-negative and increasing")
 

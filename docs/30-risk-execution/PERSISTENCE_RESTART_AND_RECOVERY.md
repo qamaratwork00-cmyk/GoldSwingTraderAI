@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Persistence, Restart and Recovery
 
-**Status:** PROVISIONAL — IMPLEMENTED FOUNDATION + LOCAL BACKUP + LIVE-READ RECOVERY  
-**Version:** 0.7-implementation  
-**Authority:** Durable lifecycle state, crash recovery, startup reconciliation, portable runtime checkpoints, automatic local backup cadence/retention, machine migration and backup/restore integrity.  
+**Status:** PROVISIONAL — PERSISTENCE AND RECOVERY CONTRACT
+**Version:** 0.9-implementation
+**Authority:** Durable lifecycle state, crash recovery, startup reconciliation, portable runtime checkpoints, automatic local backup cadence/retention, machine migration and backup/restore integrity.
 **Depends on:** `EXECUTION_AND_BROKER_SAFETY.md`, `RISK_CONTRACT.md`, `../10-market-intelligence/MARKET_DATA_AND_HISTORY.md`, `../20-trading-decisions/TRADE_PLAN.md`, `../40-research-learning/LEARNING_AND_AI_BOUNDARIES.md`
 
 ## Purpose
@@ -11,13 +11,43 @@ The bot must survive process restart, laptop loss/change and controlled migratio
 
 > **Restart is not a fresh trading day unless actual rules say so. Restored state is context, never broker truth. Unknown broker exposure is never zero exposure.**
 
-## Current owners
+## Truth layers and recovery flow
+
+Persistence stores what the runtime knows and intends. Broker reads establish
+what the account currently exposes. Recovery joins the two and refuses to
+invent the missing side.
+
+```mermaid
+flowchart TB
+    DURABLE["SQLite StateStore — records + events + checksums"] --> LOAD["Load/validate runtime bundle — risk + intents + managed trades + lineage"]
+    CHECKPOINT["Verified portable checkpoint — restore to a new DB"] --> LOAD
+    BROKER["Fresh MT5Reader facts — account + symbol + positions"] --> RECON["Reconcile broker truth with durable intent/context"]
+    LOAD --> RECON
+    RECON --> AUTHORITIES["RecoveryAuthorities — identity + data + risk + session/news + position + execution"]
+    AUTHORITIES --> CONTROLLER["Controller holder + fencing epoch — fresh verification"]
+    CONTROLLER --> RESULT{"READY?"}
+    RESULT -->|"no"| BLOCK["RECONCILING / BLOCKED — preserve unresolved state"]
+    RESULT -->|"yes"| RUNTIME["Persistent runtime may start"]
+```
+
+| Truth layer | Examples | Authority |
+|---|---|---|
+| durable intent/context | ExecutionIntent, ManagedTrade, Opportunity, risk-day, journal | local lifecycle/history |
+| portable recovery artifact | checkpoint records/events and manifest | transportable context only |
+| broker truth | current account, symbol, positions, orders/deals, actual SL/TP | current exposure/execution outcome |
+| recovery decision | authority traces and READY/BLOCKED state | may permit runtime continuation |
+
+Restore never means “resume writing.” It means “load context, obtain fresh
+broker truth, reconcile, then re-establish every hard authority.”
+
+## Source and storage ownership
 
 ```text
 persistence/store.py
 persistence/runtime_state.py
 persistence/checkpoint.py
 persistence/backup.py
+persistence/publication.py
 app/recovery.py
 app/recovery_mt5.py
 market_data/mt5_reader.py
@@ -29,6 +59,14 @@ security/financial_secrets.py
 Standard-library SQLite stores canonical current records + append-only events with checksums, schema versions, WAL, `synchronous=FULL`, transactional writes and integrity verification. Corruption fails closed.
 
 `RuntimeStateRepository` validates risk/cooldown/Episode/Opportunity/TradePlan lineage. Execution Intent and Managed Trade repositories use the same StateStore.
+
+Restore parsers are deliberately non-coercive. JSON booleans and integers must
+remain those types; numeric values must be finite; optional `null` remains
+absent; UTC timestamps and entity identities are explicit. This applies to
+`persistence/runtime_state.py`, `execution/intent_store.py`,
+`management/store.py`, the research episode journal and discovery status. A
+malformed record raises an integrity error and stops recovery; it is never
+converted into a convenient zero, `False`, empty exposure or passing state.
 
 ## Portable checkpoint + local backup
 
@@ -50,6 +88,13 @@ checkpoints/runtime-YYYYMMDDTHHMMSSZ-<sha12>/...
 ```
 
 Initial configurable baseline is 15-minute cadence / keep 96. New state is staged + verified before catalog replacement and retention prune. Failed backup preserves previous known-good state.
+
+`persistence/publication.py` stages only the newest catalog-verified checkpoint
+into a new destination, verifies the checkpoint identity, writes a canonical
+publication manifest and scans every staged text artifact for financial
+secrets. The staging command never authenticates, commits or pushes to GitHub.
+The final external publication remains an explicit operator/CI action using
+credentials that never enter runtime state.
 
 ## Governed startup recovery
 
@@ -83,7 +128,7 @@ It performs no broker write.
 
 Restored ManagedTrade must match exactly one current broker position by ticket/symbol/direction/volume. Current SL/TP must match within an explicit broker-derived price tolerance. Missing/mismatched state prevents READY.
 
-## Live MT5 recovery truth — implemented deterministic foundation
+## Live MT5 recovery truth
 
 `app/recovery_mt5.py` now builds the current recovery snapshot through the **existing `MT5Reader` only**:
 
@@ -141,7 +186,17 @@ Software pieces for checkpoint restore + live position snapshot + governed recov
 
 ## Remote publication boundary
 
-Local backup code does not contain GitHub/cloud auth. Publication credentials stay external; only verified public-safe artifacts may be published.
+Local backup code does not contain GitHub/cloud auth. Use the operator boundary:
+
+```text
+python scripts/stage_public_backup.py <backup-root> <new-public-destination>
+python scripts/scan_financial_secrets.py <new-public-destination>
+review → explicit git add/commit/push using external credentials
+```
+
+`scripts/restore_runtime_checkpoint.py <checkpoint> <new-db>` performs a
+verified new-DB restore and reports `broker_reconciliation_required=true`;
+restoration never grants trading authority.
 
 ## Multi-machine safety
 
@@ -162,22 +217,51 @@ Managed Trade         NONE / MATCHED / RECONCILING / BLOCKED
 Controller            PRIMARY / OBSERVER / TAKEOVER_RECONCILING / UNKNOWN
 ```
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic coverage includes persistence/checkpoint/catalog integrity, secret blocking, controller takeover fencing, startup recovery, live account/symbol/spec/open-position normalization, positive empty exposure, unknown read fail-closed, invalid/duplicate position rejection and broker-tick-derived recovery tolerance.
 
-Current deterministic checkpoint: **226 tests PASS**, Ruff PASS and financial-secret scan PASS.
+The deterministic test, lint and secret-scan commands are owned by
+`60-engineering/TESTING_AND_VERIFICATION.md`; live broker/recovery evidence
+belongs to the release audit.
+
+The live startup owner now performs a UTC risk-day rollover when the prior
+record is stale and broker equity is positive, but only when there is no
+bot-managed open trade and no unresolved Execution Intent. The previous record
+and transition remain in StateStore event history. Ambiguous lifecycle state
+continues to block rollover/recovery rather than receiving a new baseline.
 
 ## Explicit non-goals
 
 Recovery must not treat backup as broker truth, convert unknown exposure into zero, create a duplicate MetaTrader5 client, invent a Gold price tolerance, blind-resend an uncertain Intent, invent missing ManagedTrade context, clear takeover before reconciliation, or embed publication credentials.
 
+## Integrated startup composition
+
+`app/runtime.py` now composes the live startup boundary and exposes fresh live
+cycle facts:
+
+```text
+explicit EXISTING / INITIALIZE / RESTORE mode
+→ MT5Reader initialization and MarketSnapshot
+→ live MT5RecoveryTruth
+→ account/symbol-scoped StateStore repositories
+→ SQLite controller coordination + MT5 reconciler
+→ live RecoveryAuthorities
+→ StartupRecoveryCoordinator
+→ app/cycle governed analysis/management/execution
+→ app/loop M5 cadence, lease heartbeat and verified backup cadence
+```
+
+`RESTORE` verifies a portable checkpoint and refuses to overwrite an existing
+runtime database. `INITIALIZE` creates a first UTC risk-day baseline only when
+the local runtime store has no other lifecycle state. Missing session/news truth
+remains UNKNOWN and prevents READY. Checkpoint state is never broker truth.
+
 ## Remaining work
 
-- wire live runtime startup so `MT5RecoveryTruth` feeds `StartupRecoveryCoordinator` automatically;
-- supply `RecoveryAuthorities` from authoritative risk/session/data/execution owners;
-- real fresh-machine + Windows MT5 broker reconciliation drill;
+- real fresh-machine + Windows MT5 broker reconciliation drill using the staged/restore tooling;
 - controlled cross-laptop coordination/failover proof;
-- authenticated public backup publication;
-- final persistent runtime loop + shutdown/restart certification;
+- external authenticated public backup publication;
+- UTC risk-day rollover + restart/fault-injection certification;
+- final shutdown/restart certification on the intended Windows environment;
 - schema migration transforms when v2 exists.

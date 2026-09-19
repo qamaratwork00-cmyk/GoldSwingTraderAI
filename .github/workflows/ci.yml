@@ -26,8 +26,19 @@ jobs:
       - name: Ruff
         run: ruff check .
 
+      - name: Source annotation contract
+        run: ruff check --select ANN001,ANN003,ANN201,ANN202,ANN204 src scripts
+
+      - name: Compile Python sources
+        run: python -m compileall -q src tests scripts
+
+      - name: Documentation contract
+        run: python scripts/verify_documentation.py .
+
       - name: Pytest
-        run: pytest --junitxml=pytest-report.xml
+        env:
+          PYTHONPATH: src:.
+        run: pytest --cov=src/goldswingtraderai --cov-report=term-missing --cov-report=xml --junitxml=pytest-report.xml
 
       - name: Upload pytest report
         if: always()
@@ -35,6 +46,14 @@ jobs:
         with:
           name: pytest-report
           path: pytest-report.xml
+          if-no-files-found: warn
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
           if-no-files-found: warn
 
       - name: Financial-secret scan

@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Liquidity and SMC
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.3-implementation  
-**Authority:** Liquidity pools, equal-high/low clustering, sweeps, reclaim/acceptance, FVG, qualified Order Blocks, premium/discount and liquidity-path evidence.  
+**Status:** PROVISIONAL — LIQUIDITY EVIDENCE CONTRACT
+**Version:** 0.4-implementation
+**Authority:** Liquidity pools, equal-high/low clustering, sweeps, reclaim/acceptance, FVG, qualified Order Blocks, premium/discount and liquidity-path evidence.
 **Depends on:** `CANDLE_STRUCTURE.md`, `TECHNICAL_STRUCTURE_AND_LEVELS.md`, `MARKET_DATA_AND_HISTORY.md`
 
 ## Purpose
@@ -11,7 +11,36 @@ This document defines auditable liquidity/SMC-style market evidence. SMC termino
 
 > **Liquidity/SMC is evidence, not a universal trade gate. Post-liquidity behaviour matters more than the label itself.**
 
-## Current implementation checkpoint
+## Liquidity event pipeline
+
+The purpose of this desk is to describe what price did around previously
+observable pools. The order of the pipeline matters: a sweep cannot exist
+before the pool, and a qualified Order Block cannot exist without the
+structural consequence that qualifies it.
+
+```mermaid
+flowchart TB
+    STRUCTURE["Confirmed/protected swings — plus completed candles"] --> POOLS["Clustered pools — buy-side / sell-side + scope"]
+    POOLS --> EVENTS["Probe / sweep / accepted-break — with existence and timestamps"]
+    EVENTS --> FVG["Three-candle FVG — fresh → partial → mitigated"]
+    EVENTS --> OB["Qualified OB — break-tied origin zone"]
+    EVENTS --> PATH["Liquidity path — open / mixed / crowded / unknown"]
+    FVG --> REPORT["LiquidityReport — bounded direction + coverage"]
+    OB --> REPORT
+    PATH --> REPORT
+    REPORT --> STRATEGY["Strategy/fusion/Trade Manager — context, not permission"]
+```
+
+| Primitive | Minimum causal requirement | Typical use |
+|---|---|---|
+| pool | clustered observable highs/lows before the event | objective, magnet or reversal reference |
+| sweep | existing pool plus penetration and failed acceptance/reclaim | reversal evidence |
+| accepted break | existing pool plus completed acceptance beyond | continuation/breakout evidence |
+| FVG | deterministic three-candle imbalance | location/continuation context |
+| OB | origin candle tied to meaningful structural break | location/context, not automatic entry |
+| path | nearest liquidity and density in the direction | target-room and crowding context |
+
+## Implementation ownership and proof boundary
 
 Implemented in:
 
@@ -177,7 +206,7 @@ Sweep State        SSL SWEPT + RECLAIMED
 Path               OPEN UPSIDE
 ```
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic coverage includes:
 

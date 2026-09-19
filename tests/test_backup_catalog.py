@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 import json
 
 import pytest
@@ -14,6 +15,7 @@ from goldswingtraderai.persistence import (
     create_backup_if_due,
     latest_verified_checkpoint,
     load_backup_catalog,
+    stage_verified_public_backup,
 )
 
 
@@ -111,6 +113,29 @@ def test_backup_catalog_tamper_is_detected(tmp_path) -> None:
         load_backup_catalog(root)
 
 
+def test_backup_catalog_rejects_coercive_numeric_fields_even_with_valid_hash(tmp_path) -> None:
+    store = _store(tmp_path / "runtime.db")
+    root = tmp_path / "backups"
+    _create(store, root, NOW, BackupPolicy(interval_minutes=15, keep_latest=4))
+
+    catalog_path = root / "backup_catalog.json"
+    payload = json.loads(catalog_path.read_text(encoding="utf-8"))
+    payload["entries"][0]["records_count"] = "1"
+    base = {key: value for key, value in payload.items() if key != "catalog_sha256"}
+    payload["catalog_sha256"] = sha256(
+        json.dumps(base, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    catalog_path.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(BackupCatalogError, match="record count must be an integer"):
+        load_backup_catalog(root)
+
+
 def test_tampered_catalogued_checkpoint_fails_verification(tmp_path) -> None:
     store = _store(tmp_path / "runtime.db")
     root = tmp_path / "backups"
@@ -159,3 +184,41 @@ def test_backup_policy_rejects_nonpositive_values() -> None:
         BackupPolicy(interval_minutes=0)
     with pytest.raises(ValueError):
         BackupPolicy(keep_latest=0)
+
+
+def test_public_backup_staging_copies_only_latest_verified_artifact(tmp_path) -> None:
+    store = _store(tmp_path / "runtime.db")
+    root = tmp_path / "backups"
+    first = _create(store, root, NOW, BackupPolicy(interval_minutes=5, keep_latest=3))
+    second = _create(
+        store,
+        root,
+        NOW + timedelta(minutes=5),
+        BackupPolicy(interval_minutes=5, keep_latest=3),
+    )
+
+    destination = tmp_path / "public" / "runtime-backup"
+    publication = stage_verified_public_backup(root, destination, published_at_utc=NOW)
+
+    assert second.entry is not None
+    assert publication.checkpoint_name == second.entry.name
+    assert (destination / "backup_catalog.json").is_file()
+    assert (destination / "publication_manifest.json").is_file()
+    assert (
+        destination / "checkpoints" / second.entry.name / "checkpoint_manifest.json"
+    ).is_file()
+    assert first.entry is not None
+    assert not (destination / "checkpoints" / first.entry.name).exists()
+
+
+def test_public_backup_staging_refuses_overwrite(tmp_path) -> None:
+    store = _store(tmp_path / "runtime.db")
+    root = tmp_path / "backups"
+    _create(store, root, NOW, BackupPolicy())
+    destination = tmp_path / "public"
+    stage_verified_public_backup(root, destination, published_at_utc=NOW)
+
+    from goldswingtraderai.persistence import PublicationError
+
+    with pytest.raises(PublicationError, match="already exists"):
+        stage_verified_public_backup(root, destination, published_at_utc=NOW)

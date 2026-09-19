@@ -1,8 +1,17 @@
 # GoldSwingTraderAI — Market Data and History
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE + RECOVERY POSITION READS; LIVE MT5 DEMO EVIDENCE PENDING  
-**Version:** 0.4-implementation  
+**Status:** PROVISIONAL — MARKET FACT AND RECOVERY-READ CONTRACT
+**Version:** 0.6-implementation
 **Authority:** Runtime market history, normalized broker read facts, current position facts and candle-data handling
+
+## Purpose and scope
+
+This document is the single read-fact contract for the MT5 terminal. It
+explains how raw account, symbol, quote, candle and open-position data becomes
+typed evidence for analysis and recovery, which timestamps are authoritative,
+how stale/unknown/corrupt data behaves and where fresh reads are still
+required. It does not define strategy quality, monetary permission or broker
+writes.
 
 ## Core principle
 
@@ -10,7 +19,34 @@ Historical candles are necessary for context, structure, timing and research, bu
 
 > **One narrow verified MT5 read boundary owns account, symbol, quote, completed candles and current open-position facts. Completed candles own structural chronology; unknown broker exposure is never converted into zero exposure.**
 
-## Current implementation
+## Data flow and authority boundary
+
+The read layer turns an external MT5 terminal into typed facts. It does not
+decide whether a trade is good and it does not write an order.
+
+```mermaid
+flowchart TB
+    MT5["MetaTrader5 terminal — raw account/symbol/rates/positions"] --> READER["MT5Reader — one normalized read boundary"]
+    READER --> FACTS["AccountFacts + SymbolSpec + Quote — CandleSeries + OpenPositionFacts"]
+    FACTS --> SNAPSHOT["MarketSnapshotBuilder — quality + H4/H1/M15/M5 snapshot"]
+    FACTS --> RECOVERY["app/recovery_mt5.py — MT5RecoveryTruth"]
+    SNAPSHOT --> INTELLIGENCE["intelligence + decisions — read-only evidence consumers"]
+    RECOVERY --> STARTUP["startup recovery — fresh exposure reconciliation"]
+```
+
+There are two legitimate consumers of the facts:
+
+| Consumer | What it needs | Freshness rule |
+|---|---|---|
+| analysis cycle | quote plus completed H4/H1/M15/M5 history | one shared snapshot per cycle |
+| startup/recovery | account identity, symbol spec and complete open-position truth | built from the initialized reader before READY |
+| execution pre-check | broker-native quote/spec/permission fields | fresh read when the execution contract requires it |
+| research/replay | portable chronological candles and declared provider/session facts | dataset timestamp and no-lookahead rules |
+
+This split prevents a dashboard or intelligence desk from opening a second raw
+MT5 client while preserving the fresh-read requirement at irreversible points.
+
+## Runtime implementation
 
 ```text
 src/goldswingtraderai/domain/market.py
@@ -23,7 +59,7 @@ src/goldswingtraderai/app/main.py
 Key contracts:
 
 - `AccountFacts` — login/server/currency/account mode and monetary facts;
-- `SymbolSpec` — digits, point, tick size/value, contract size, volume limits and broker stop/freeze levels;
+- `SymbolSpec` — digits, point, tick size/value, contract size, volume limits, broker stop/freeze levels and a request-ready filling mode when the broker exposes a complete mapping;
 - `OpenPositionFacts` — normalized read-only current broker position facts;
 - `Quote` — Bid/Ask/timestamp and spread;
 - `Candle` / `CandleSeries` — UTC chronological completed OHLC;
@@ -48,7 +84,7 @@ preferred symbol
 
 Default configuration prefers `XAUUSDm` and falls back to `XAUUSD`.
 
-## Current open-position truth — implemented
+## Open-position truth
 
 `MT5Reader.open_positions(symbol)` calls the official read-only `positions_get(symbol=...)` through the existing boundary and normalizes each row to `OpenPositionFacts`:
 
@@ -154,16 +190,19 @@ DATA_SPARSE
 DATA_CORRUPT
 ```
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic CI covers account/DEMO normalization, symbol alias/spec/quote facts, completed-candle chronology, snapshot quality, read-only boundary confinement, BUY/SELL open-position normalization, zero SL/TP → None, positive empty exposure, unknown position read fail-closed, invalid direction rejection, duplicate ticket rejection and live recovery snapshot/tick-tolerance construction.
 
-Current repository checkpoint after live recovery read integration: **226 tests PASS**, Ruff PASS and financial-secret scan PASS.
+The deterministic proof boundary covers live startup/recovery composition,
+persistent-cycle orchestration, provider-neutral session/news handoff and
+verified-bundle research composition. Exact test and lint evidence belongs to
+`60-engineering/TESTING_AND_VERIFICATION.md` and the release audit.
 
 ## Verification status
 
-**Deterministic implementation tests:** PASS.  
-**Actual connected Windows MT5 DEMO account/symbol/quote/history/open-position evidence:** PENDING.  
+**Deterministic implementation tests:** PASS.
+**Actual connected Windows MT5 DEMO account/symbol/quote/history/open-position evidence:** PENDING.
 **Controlled broker-write/reconciliation evidence:** PENDING.
 
 Do not mark this document VERIFIED until intended MT5 DEMO environment supplies real read evidence and integration checks pass.

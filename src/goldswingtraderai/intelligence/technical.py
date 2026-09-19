@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isfinite
 
 from goldswingtraderai.domain.enums import SwingRole, SwingSide, Timeframe
 from goldswingtraderai.intelligence.candle_structure import StructureReport, SwingPoint
@@ -49,6 +50,15 @@ class TechnicalConfig:
     dangerous_target_room_atr: float = 0.25
 
     def __post_init__(self) -> None:
+        thresholds = (
+            self.zone_atr_fraction,
+            self.merge_tolerance_atr,
+            self.excellent_distance_atr,
+            self.good_distance_atr,
+            self.dangerous_target_room_atr,
+        )
+        if any(not isfinite(value) for value in thresholds):
+            raise ValueError("technical thresholds must be finite")
         if self.zone_atr_fraction <= 0 or self.merge_tolerance_atr < 0:
             raise ValueError("zone normalization must be positive")
         if self.min_zone_ticks <= 0 or self.max_source_swings <= 0:

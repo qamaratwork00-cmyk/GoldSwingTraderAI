@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from math import isfinite
 
 from goldswingtraderai.decisions.trade_plan import TradePlanConfig
 from goldswingtraderai.domain.enums import Timeframe
@@ -42,6 +43,8 @@ class ExecutionStressScenario:
     reject_every_nth_modify: int | None = None
 
     def __post_init__(self) -> None:
+        if not isfinite(self.spread_multiplier) or not isfinite(self.adverse_entry_slippage_r):
+            raise ValueError("stress values must be finite")
         if self.spread_multiplier <= 0:
             raise ValueError("stress spread multiplier must be positive")
         if not 0.0 <= self.adverse_entry_slippage_r < 1.0:

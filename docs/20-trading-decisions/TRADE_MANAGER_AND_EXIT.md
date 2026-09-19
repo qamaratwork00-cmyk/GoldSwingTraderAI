@@ -1,8 +1,16 @@
 # GoldSwingTraderAI — Trade Manager and Exit
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.4-implementation  
+**Status:** PROVISIONAL — TRADE-MANAGEMENT CONTRACT
+**Version:** 0.6-implementation
 **Authority:** Post-entry position-management behaviour
+
+## Purpose and scope
+
+This document defines the post-entry decision floor for a bot-owned Gold
+position. It explains how fresh structure, continuation, reversal, target and
+session evidence produces HOLD/PROTECT/TRAIL/RUNNER/EXIT, how broker
+verification controls durable state changes and why management uses the same
+hard execution boundary as entry. It does not create new entry authority.
 
 ## Core principle
 
@@ -10,7 +18,36 @@ Open positions are managed by a second parallel decision floor. The system shoul
 
 V1 intentionally avoids carrying bot-managed Gold positions through a known scheduled XAU market closure. Large-move capture is therefore intraday/open-session capture, not scheduled-gap exposure.
 
-## Current implementation checkpoint — Phase 8
+## Management decision pipeline
+
+The manager observes a verified managed trade and produces a decision. It does
+not mutate local state until the corresponding broker operation is verified.
+
+```mermaid
+flowchart TB
+    TRADE["Broker-owned position + durable ManagedTrade — original R and objectives"] --> FACTS["Fresh market/intelligence/session facts"]
+    FACTS --> SCORES["Continuation + reversal + structure + candle + momentum + path"]
+    SCORES --> ACTION["HOLD / PROTECT / TRAIL / RUNNER / EXIT"]
+    ACTION --> PRECHECK["Management checks — ownership + controller + fresh quote + pre-close"]
+    PRECHECK --> INTENT["Durable MODIFY/CLOSE intent"]
+    INTENT --> BROKER["One governed broker request"]
+    BROKER --> VERIFY["Reconcile positions/orders/deals"]
+    VERIFY --> STATE["Persist new trade state only if verified"]
+```
+
+The manager has two independent concerns: preserve a healthy move and obey
+hard session/execution safety. PRE_CLOSE flatten, exposure mismatch, controller
+loss and ambiguous broker outcomes outrank a normal HOLD/RUNNER preference.
+
+| Action | Purpose | Minimum evidence | Durable effect |
+|---|---|---|---|
+| HOLD | let a healthy thesis continue | no earned protective/exit reason | observation only |
+| PROTECT | reduce open risk without suffocating move | progress plus confirmed structural reference | modify intent |
+| TRAIL | follow earned structure | valid tighter structural reference | modify intent |
+| RUNNER | extend objective | acceptance/continuation plus new objective | modify objective/TP |
+| EXIT | close failed/exhausted/unsafe trade | meaningful reversal/collapse/mandatory safety | close intent |
+
+## Implementation ownership and proof boundary
 
 Implemented owners:
 

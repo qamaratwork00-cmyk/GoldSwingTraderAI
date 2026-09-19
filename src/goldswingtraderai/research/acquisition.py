@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isfinite
 from pathlib import Path
 from statistics import median
 from typing import Mapping
@@ -58,7 +59,9 @@ class HistoricalAcquisitionRequest:
                 raise TypeError("historical acquisition count keys must be Timeframe")
             if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
                 raise ValueError(f"historical count must be positive: {timeframe.value}")
-        if self.spread_price_override is not None and self.spread_price_override < 0:
+        if self.spread_price_override is not None and (
+            not isfinite(self.spread_price_override) or self.spread_price_override < 0
+        ):
             raise ValueError("historical spread override cannot be negative")
 
 

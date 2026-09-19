@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from math import isfinite
 from typing import Any
 
 from goldswingtraderai.domain.enums import Direction, HardDecision
@@ -104,28 +106,35 @@ def _intent_to_payload(intent: ExecutionIntent) -> dict[str, Any]:
 
 
 def _intent_from_payload(payload: dict[str, Any]) -> ExecutionIntent:
-    from datetime import datetime
-
     try:
         return ExecutionIntent(
-            intent_id=EntityId.parse(str(payload["intent_id"])),
-            action=ExecutionAction(str(payload["action"])),
-            account_login=int(payload["account_login"]),
-            account_server=str(payload["account_server"]),
-            symbol=str(payload["symbol"]),
-            direction=Direction(str(payload["direction"])),
-            volume=float(payload["volume"]),
-            approved_entry_reference=float(payload["approved_entry_reference"]),
+            intent_id=EntityId.parse(_required_text(payload["intent_id"], "intent_id")),
+            action=ExecutionAction(_required_text(payload["action"], "action")),
+            account_login=_required_int(payload["account_login"], "account_login"),
+            account_server=_required_text(payload["account_server"], "account_server"),
+            symbol=_required_text(payload["symbol"], "symbol"),
+            direction=Direction(_required_text(payload["direction"], "direction")),
+            volume=_required_float(payload["volume"], "volume"),
+            approved_entry_reference=_required_float(
+                payload["approved_entry_reference"],
+                "approved_entry_reference",
+            ),
             stop_loss=_optional_float(payload.get("stop_loss")),
             take_profit=_optional_float(payload.get("take_profit")),
-            opportunity_id=EntityId.parse(str(payload["opportunity_id"])),
-            episode_id=EntityId.parse(str(payload["episode_id"])),
-            trade_plan_id=EntityId.parse(str(payload["trade_plan_id"])),
-            controller_id=EntityId.parse(str(payload["controller_id"])),
-            fencing_epoch=int(payload["fencing_epoch"]),
-            created_at_utc=datetime.fromisoformat(str(payload["created_at_utc"])),
-            state=IntentState(str(payload["state"])),
-            submit_attempts=int(payload["submit_attempts"]),
+            opportunity_id=EntityId.parse(
+                _required_text(payload["opportunity_id"], "opportunity_id")
+            ),
+            episode_id=EntityId.parse(_required_text(payload["episode_id"], "episode_id")),
+            trade_plan_id=EntityId.parse(
+                _required_text(payload["trade_plan_id"], "trade_plan_id")
+            ),
+            controller_id=EntityId.parse(
+                _required_text(payload["controller_id"], "controller_id")
+            ),
+            fencing_epoch=_required_int(payload["fencing_epoch"], "fencing_epoch"),
+            created_at_utc=_required_datetime(payload["created_at_utc"]),
+            state=IntentState(_required_text(payload["state"], "state")),
+            submit_attempts=_required_int(payload["submit_attempts"], "submit_attempts"),
             broker_ticket=_optional_int(payload.get("broker_ticket")),
             broker_retcode=_optional_int(payload.get("broker_retcode")),
             result_message=_optional_text(payload.get("result_message")),
@@ -137,12 +146,44 @@ def _intent_from_payload(payload: dict[str, Any]) -> ExecutionIntent:
 
 
 def _optional_float(value: Any) -> float | None:
-    return None if value is None else float(value)
+    return None if value is None else _required_float(value, "optional float")
 
 
 def _optional_int(value: Any) -> int | None:
-    return None if value is None else int(value)
+    return None if value is None else _required_int(value, "optional integer")
 
 
 def _optional_text(value: Any) -> str | None:
-    return None if value is None else str(value)
+    if value is not None and not isinstance(value, str):
+        raise StateIntegrityError("persisted optional text must be text")
+    return value
+
+
+def _required_text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise StateIntegrityError(f"persisted {label} must be non-empty text")
+    return value
+
+
+def _required_int(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise StateIntegrityError(f"persisted {label} must be an integer")
+    return value
+
+
+def _required_float(value: Any, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise StateIntegrityError(f"persisted {label} must be numeric")
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise StateIntegrityError(f"persisted {label} must be finite")
+    return parsed
+
+
+def _required_datetime(value: Any) -> datetime:
+    if not isinstance(value, str):
+        raise StateIntegrityError("persisted intent timestamp must be an ISO-8601 string")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise StateIntegrityError("invalid persisted intent timestamp") from exc

@@ -4,7 +4,13 @@ from dataclasses import replace
 from datetime import datetime, timezone
 import inspect
 
-from goldswingtraderai.operator import DashboardData, OpenTradeView, render_dashboard
+from goldswingtraderai.operator import (
+    DashboardData,
+    OpenTradeView,
+    ReadinessDashboardData,
+    render_dashboard,
+    render_readiness_dashboard,
+)
 import goldswingtraderai.operator.dashboard as dashboard_module
 
 
@@ -135,9 +141,68 @@ def test_plain_text_fallback_keeps_meaning() -> None:
     assert "[EXEC]" in rendered
 
 
+def test_dashboard_shows_research_liveness_without_granting_authority() -> None:
+    rendered = render_dashboard(
+        replace(
+            _data(),
+            learning_state="ACTIVE",
+            discovery_state="HEALTHY",
+            candidate="CAND_123",
+            candidate_stage="PROPOSED",
+            suppression_reason="—",
+        ),
+        width=180,
+    )
+    assert "Learning ACTIVE" in rendered
+    assert "Discovery HEALTHY" in rendered
+    assert "CAND_123" in rendered
+    assert "PROPOSED" in rendered
+
+
 def test_dashboard_is_read_only_presentation_module() -> None:
     source = inspect.getsource(dashboard_module)
     assert "order_send(" not in source
     assert "MetaTrader5" not in source
     assert "evaluate_risk(" not in source
     assert "evaluate_execution_permission(" not in source
+
+
+def test_readiness_dashboard_makes_stale_wait_and_write_lock_visible() -> None:
+    data = ReadinessDashboardData(
+        project="GoldSwingTraderAI",
+        symbol="XAUUSDm",
+        account_mode="DEMO",
+        demo_guard="PASS",
+        identity_state="PASS",
+        runtime_role="READINESS",
+        utc_time=NOW,
+        bid=4378.062,
+        ask=4378.322,
+        spread_price=0.260,
+        quote_age_seconds=50818.8,
+        data_quality="STALE",
+        timeframe_bars=(("H4", 400), ("H1", 750), ("M15", 2000), ("M5", 4000)),
+        issues=("quote age 50818.8s exceeds 10.0s", "latest H4 completed candle is stale"),
+        poll_seconds=30.0,
+        waiting_for_fresh_data=True,
+    )
+
+    rendered = render_readiness_dashboard(data, width=180)
+
+    for expected in (
+        "READINESS MONITOR",
+        "XAUUSDm",
+        "DEMO",
+        "Identity",
+        "Bid 4378.062",
+        "Ask 4378.322",
+        "Data STALE",
+        "H4 400",
+        "M5 4000",
+        "WAIT — FRESH DATA REQUIRED",
+        "BROKER WRITES DISABLED",
+        "STRATEGY",
+        "quote age 50818.8s exceeds 10.0s",
+        "Fresh-data poll in 30s",
+    ):
+        assert expected in rendered

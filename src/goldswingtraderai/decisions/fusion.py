@@ -6,6 +6,7 @@ evidence and keeps strong opposing evidence visible as conflict.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from goldswingtraderai.domain.enums import Direction, ExtensionState, StrategyFamily, Timeframe
@@ -193,7 +194,7 @@ def _red_team(
     return tuple(objections)
 
 
-def _unique(items) -> tuple[str, ...]:
+def _unique(items: Iterable[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(items))
 
 

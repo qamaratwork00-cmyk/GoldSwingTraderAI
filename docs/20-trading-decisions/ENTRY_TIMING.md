@@ -1,8 +1,15 @@
 # GoldSwingTraderAI — Entry Timing
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.3-implementation  
+**Status:** PROVISIONAL — ENTRY-TIMING CONTRACT
+**Version:** 0.4-implementation
 **Authority:** Pre-entry timing behaviour and Opportunity timing lifecycle
+
+## Purpose
+
+This document defines how a valid directional opportunity becomes a timely
+entry candidate without destroying the underlying thesis when the present M5
+location is late, extended or unconfirmed. It also defines persistence,
+re-arm and replay boundaries.
 
 ## Core rule
 
@@ -13,7 +20,43 @@ M15 → opportunity / location / target context
 M5  → executable timing / fine structure
 ```
 
-## Current implementation checkpoint
+## Opportunity-to-entry state machine
+
+Timing answers whether an existing idea should be acted on now. It never
+rebuilds the thesis merely because a candle is late.
+
+```mermaid
+stateDiagram-v2
+    [*] --> DISCOVERED
+    DISCOVERED --> ARMED: opportunity survives threshold
+    ARMED --> WAITING: timing weak / extended / not triggered
+    WAITING --> READY: fresh M5 evidence and plan quality
+    ARMED --> READY: executable timing arrives
+    READY --> TRIGGERED: governed execution verified
+    READY --> MISSED: executable window expires
+    MISSED --> ARMED: fresh structural/timing event only
+    ARMED --> INVALIDATED: thesis/structure fails
+    WAITING --> STALE: age/conditions exceed lifecycle
+    INVALIDATED --> [*]
+    STALE --> [*]
+    TRIGGERED --> [*]
+```
+
+The lifecycle is separate from hard permission. READY means analytically
+executable; it does not mean the risk, session/news, controller and broker
+checks have passed.
+
+| State/action | What it preserves | What it must not do |
+|---|---|---|
+| DISCOVERED | first valid episode evidence | send an order |
+| ARMED | opportunity identity and thesis | assume immediate entry |
+| WAITING | valid thesis while timing improves | delete the setup because one candle is poor |
+| READY | current analytical trigger | bypass Trade Plan or hard gate |
+| MISSED | evidence that the window passed | blind re-entry |
+| INVALIDATED | audit trail of why thesis failed | call the failure a temporary wait |
+| TRIGGERED | link to verified execution outcome | claim success before reconciliation |
+
+## Implementation ownership and proof boundary
 
 Implemented in:
 
@@ -166,13 +209,13 @@ Risk sizing and broker execution are deliberately outside this analytical path.
 
 `RuntimeStateRepository` persists the active Opportunity and validates Opportunity/Market-Episode/TradePlan lineage during recovery. A restored Opportunity is context, not automatic permission: fresh market intelligence and timing must revalidate it after downtime.
 
-## Research requirements and current foundation
+## Research requirements and implementation boundary
 
 Phase-10 research infrastructure distinguishes taken/waited/missed/invalidated/blocked outcomes and keeps actual P/L separate from counterfactual missed-move outcomes. This allows research to test whether timing avoids bad entries or merely misses large Gold moves.
 
 Replay remains chronological and bar-close realistic unless a future intrabar dataset explicitly supports more detailed parity.
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic tests prove:
 

@@ -1,8 +1,8 @@
 # GoldSwingTraderAI — Indicators and Volatility
 
-**Status:** PROVISIONAL — IMPLEMENTED BASELINE  
-**Version:** 0.3-implementation  
-**Authority:** EMA/RSI/ATR evidence, volatility normalization, momentum phase, compression/expansion quantification, extension/chase and exhaustion metrics.  
+**Status:** PROVISIONAL — QUANTITATIVE EVIDENCE CONTRACT
+**Version:** 0.4-implementation
+**Authority:** EMA/RSI/ATR evidence, volatility normalization, momentum phase, compression/expansion quantification, extension/chase and exhaustion metrics.
 **Depends on:** `CANDLE_STRUCTURE.md`, `MARKET_DATA_AND_HISTORY.md`, `../00-foundation/SYSTEM_CONTRACT.md`
 
 ## Purpose
@@ -11,7 +11,37 @@ Indicators support and normalize price behaviour; they do not replace structure 
 
 > **Indicators explain and quantify market behaviour. Structure remains primary market language.**
 
-## Current implementation checkpoint
+## Quant evidence pipeline
+
+Quant is a shared normalization service. It calculates each series once from
+completed candles, labels insufficient history explicitly and publishes facts
+that other desks can consume without re-querying MT5.
+
+```mermaid
+flowchart TB
+    CANDLES["Completed CandleSeries"] --> SERIES["EMA20/EMA50 + RSI14 + ATR14 — chronological series"]
+    SERIES --> NORMALIZE["ATR-normalized facts — range, momentum, volatility, extension"]
+    NORMALIZE --> REPORT["QuantReport — state + ratio + coverage"]
+    REPORT --> STRUCTURE["Candle Structure — shared ATR, no duplicate calculation"]
+    REPORT --> LOCATION["Technical/Liquidity/Confluence"]
+    REPORT --> DECISION["Strategy / timing / Trade Manager"]
+    REPORT --> EXECUTION["Execution checks — spread/drift facts remain hard-authority owned"]
+```
+
+The result is descriptive, not executable. EMA order can support a thesis,
+RSI can describe pressure, ATR can normalize geometry and extension can warn
+about chasing; none of them individually grants entry, changes structural SL
+or closes a trade.
+
+| Fact | Meaning | Missing-data behaviour |
+|---|---|---|
+| EMA flow | relative directional support and distance | None/UNKNOWN until enough completed history |
+| RSI pressure | momentum context, not reversal command | UNKNOWN, never forced to 50 or score zero |
+| ATR/ratio | volatility normalization across Gold regimes | UNKNOWN/insufficient, never fixed-pip substitution |
+| momentum phase | building, expanding, mature, exhausting or reversing context | bounded evidence only |
+| extension state | freshness/chase context relative to EMA20 and ATR | timing may WAIT; it does not erase an opportunity |
+
+## Implementation ownership and proof boundary
 
 Implemented in:
 
@@ -195,7 +225,7 @@ Momentum        BUILDING
 Extension       NORMAL
 ```
 
-## Tests / current evidence
+## Tests and evidence boundary
 
 Deterministic coverage includes:
 
@@ -207,7 +237,10 @@ Deterministic coverage includes:
 - no duplicate MT5 reads from indicator code;
 - chronological replay prefix behaviour.
 
-Relevant suites include `tests/test_indicators_structure.py` and `tests/test_intelligence_snapshot.py`, with Phase-10 replay exercising shared production semantics.
+Relevant suites include `tests/test_intelligence_core.py`,
+`tests/test_intelligence_snapshot.py`, `tests/test_strategy_decisions.py` and
+`tests/test_trade_plan_risk.py`, with replay exercising shared production
+semantics.
 
 ## Explicit non-goals
 
