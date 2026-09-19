@@ -11,7 +11,8 @@ This manual explains how to operate and interpret GoldSwingTraderAI. It does not
 
 Runtime-mode distinction:
 
-- `READINESS` performs a read-only MT5 readiness snapshot and exits;
+- `READINESS` performs a read-only MT5 readiness snapshot; if the feed is
+  stale/warming up it remains alive and waits for fresh data without trading;
 - `PRIMARY`/`STANDBY` compose startup recovery, controller ownership and the
   persistent M5 cycle only after the documented authorities pass;
 - absent or invalid session/news truth remains `UNKNOWN` and fail-closed;
@@ -30,6 +31,23 @@ Runtime-mode distinction:
 ```
 
 Normal use should not require editing code or manually tuning scores.
+
+### When the market is closed
+
+The bot must remain observable when XAU is closed or the broker feed is not
+advancing. `STALE`, `INSUFFICIENT` and `SPARSE` are wait states, not a reason to
+invent a signal or send an order:
+
+```text
+MT5 snapshot → data not fresh → WAIT / no strategy cycle / no broker write
+             → bounded re-poll → fresh data → normal governed path
+```
+
+`READINESS` uses `GSTAI_READINESS_KEEP_ALIVE` and
+`GSTAI_READINESS_POLL_SECONDS`. `PRIMARY`/`STANDBY` renew the controller while
+waiting before `READY`, then resume the normal M5 loop only after recovery
+authorities pass. `CORRUPT`, identity, DEMO, persistence and unknown
+session/news states remain fail-closed and are not disguised as market closure.
 
 ## What happens during a normal cycle
 

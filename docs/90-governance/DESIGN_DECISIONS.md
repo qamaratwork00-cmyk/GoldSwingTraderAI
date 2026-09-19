@@ -401,6 +401,12 @@ broker, provider or research dataset has been exercised.
 **Status:** FROZEN FOR INITIAL IMPLEMENTATION
 **Reason:** Prevent recurrence of a nominal discovery feature that exists in code/docs but is operationally inert.
 
+## DEC-068 — Closed-market data keeps the process alive but never grants trading permission
+
+**Decision:** `READINESS` remains read-only and, by default, continues polling while normalized market quality is `STALE`, `INSUFFICIENT` or `SPARSE`; `GSTAI_READINESS_KEEP_ALIVE=false` is an explicit one-shot diagnostic override. `PRIMARY`/`STANDBY` retain the controller heartbeat and re-capture broker facts during the same narrow pre-`READY` data-wait states. No strategy cycle, risk sizing, intent creation or broker write may run until fresh data and all other recovery authorities pass. `CORRUPT`, identity, DEMO, persistence, controller and unknown session/news failures remain fail-closed/terminal under their existing contracts. A stale feed is not interpreted as proof of a calendar closure; the exact quality/recovery reason remains visible.
+**Status:** FROZEN FOR INITIAL IMPLEMENTATION
+**Reason:** The process must remain operationally observable across weekend/closed-market periods without weakening freshness or broker-write safety.
+
 ## Change rule
 
 A decision may be superseded only by an explicit later decision entry identifying

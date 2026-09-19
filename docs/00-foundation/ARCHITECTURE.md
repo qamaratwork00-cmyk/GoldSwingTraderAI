@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Architecture
 
 **Status:** PROVISIONAL
-**Version:** 0.6-design
+**Version:** 0.7-implementation
 **Authority:** High-level system architecture
 
 ## Purpose
@@ -126,10 +126,36 @@ flowchart TB
     DECISION -->|"yes"| LOOP["PersistentRuntimeLoop"]
 ```
 
-The read-only READINESS path can stop after verified inspection. PRIMARY and
-STANDBY may proceed only after local state selection, recovery and controller
-rules are satisfied. A newly acquired fencing epoch is not by itself READY:
-takeover still requires broker/state reconciliation.
+The read-only READINESS path can stop after verified inspection when the result
+is healthy or a non-retryable failure. If required quote/candle data is
+`STALE`, `INSUFFICIENT` or `SPARSE`, the launcher remains in a read-only wait
+and polls again; it does not invoke strategy, risk sizing or broker execution.
+PRIMARY and STANDBY may proceed only after local state selection, recovery and
+controller rules are satisfied. A newly acquired fencing epoch is not by itself
+READY: takeover still requires broker/state reconciliation.
+
+### Closed-market and stale-feed wait lane
+
+The runtime treats market closure as an observable operating state rather than
+an instruction to terminate or manufacture trading permission. The same
+initialized MT5 read boundary is reused for bounded re-probes:
+
+```mermaid
+flowchart TB
+    READ["MT5Reader + MarketSnapshotBuilder"] --> QUALITY{"HEALTHY?"}
+    QUALITY -->|"yes"| CONTINUE["READINESS complete or recovery may continue"]
+    QUALITY -->|"STALE / INSUFFICIENT / SPARSE"| WAIT["WAIT — no strategy cycle, no broker write"]
+    WAIT --> LEASE["PRIMARY/STANDBY: renew lease heartbeat"]
+    LEASE --> PROBE["Re-capture normalized facts at wait interval"]
+    PROBE --> READ
+    QUALITY -->|"CORRUPT or other hard fault"| BLOCK["Fail closed / operator review"]
+```
+
+The wait lane is intentionally narrower than a generic retry mechanism. Data
+freshness/warm-up is retryable; corruption, identity mismatch, DEMO failure,
+unknown session/news, persistence integrity and controller faults retain their
+existing fail-closed or terminal behavior. A stale feed is not itself proof of
+a calendar closure, so logs expose the exact `DataQuality`/recovery reason.
 
 ## Runtime cycle topology
 

@@ -24,6 +24,7 @@ _LOG = logging.getLogger("goldswingtraderai.app.loop")
 HEARTBEAT_SECONDS = 10.0
 M5_SECONDS = 5 * 60
 M5_GRACE_SECONDS = 2.0
+MARKET_DATA_WAIT_SECONDS = 30.0
 
 
 class LoopStopReason(StrEnum):
@@ -62,11 +63,14 @@ class PersistentRuntimeLoop:
         dashboard_sink: Callable[[DashboardData], None] | None = None,
         heartbeat_seconds: float = HEARTBEAT_SECONDS,
         m5_grace_seconds: float = M5_GRACE_SECONDS,
+        market_data_wait_seconds: float = MARKET_DATA_WAIT_SECONDS,
     ) -> None:
         if heartbeat_seconds <= 0:
             raise ValueError("heartbeat interval must be positive")
         if m5_grace_seconds < 0:
             raise ValueError("M5 grace interval cannot be negative")
+        if market_data_wait_seconds <= 0:
+            raise ValueError("market-data wait interval must be positive")
         self.runtime = runtime
         self.cycle = cycle or GovernedRuntimeCycle(runtime)
         self.backup_policy = backup_policy or BackupPolicy()
@@ -75,6 +79,7 @@ class PersistentRuntimeLoop:
         self._dashboard_sink = dashboard_sink
         self.heartbeat_seconds = heartbeat_seconds
         self.m5_grace_seconds = m5_grace_seconds
+        self.market_data_wait_seconds = market_data_wait_seconds
         self._stop_requested = False
         self.latest_dashboard: DashboardData | None = None
         self.latest_backup_error: str | None = None
@@ -128,6 +133,58 @@ class PersistentRuntimeLoop:
                 startup_result = startup.recovery
 
             if stop_reason is LoopStopReason.STOP_REQUESTED:
+                pass
+            elif _market_data_wait_required(startup_result):
+                next_probe = now + timedelta(seconds=self.market_data_wait_seconds)
+                next_heartbeat = now
+                while _market_data_wait_required(startup_result):
+                    current = self._utc_now()
+                    _require_utc(current)
+                    if self._stop_requested or (stop_requested and stop_requested()):
+                        stop_reason = LoopStopReason.STOP_REQUESTED
+                        break
+
+                    if current >= next_heartbeat:
+                        status = self.runtime.renew_controller()
+                        if not _controller_healthy(status):
+                            stop_reason = LoopStopReason.CONTROLLER_LOST
+                            error = status.reason
+                            break
+                        next_heartbeat = current + timedelta(seconds=self.heartbeat_seconds)
+
+                    if current >= next_probe:
+                        _LOG.warning(
+                            "persistent runtime waiting for fresh market data; no cycle or broker write",
+                            extra={
+                                "event": "RUNTIME_WAITING_FOR_MARKET_DATA",
+                                "context": {
+                                    "reason": startup_result.reason,
+                                    "poll_seconds": self.market_data_wait_seconds,
+                                },
+                            },
+                        )
+                        facts = self.runtime.capture_cycle(now_utc=current)
+                        startup_result = facts.startup.recovery
+                        now = current
+                        next_probe = current + timedelta(
+                            seconds=self.market_data_wait_seconds
+                        )
+
+                    if not _market_data_wait_required(startup_result):
+                        break
+                    wait_seconds = min(
+                        max(0.0, (next_probe - current).total_seconds()),
+                        max(0.0, (next_heartbeat - current).total_seconds()),
+                        self.heartbeat_seconds,
+                    )
+                    self._sleep(max(0.05, min(wait_seconds, self.heartbeat_seconds)))
+
+            if stop_reason is LoopStopReason.STOP_REQUESTED:
+                pass
+            elif stop_reason in {
+                LoopStopReason.CONTROLLER_LOST,
+                LoopStopReason.CYCLE_FAILED,
+            } and error is not None:
                 pass
             elif startup_result.state is not RecoveryState.READY:
                 stop_reason = LoopStopReason.STARTUP_NOT_READY
@@ -248,6 +305,22 @@ def _standby_wait_required(runtime: LiveStartupRuntime, recovery: StartupRecover
     mode = getattr(getattr(runtime, "settings", None), "runtime_mode", None)
     mode_value = getattr(mode, "value", mode)
     return mode_value == "STANDBY" and recovery.reason == "ANOTHER_ACTIVE_CONTROLLER"
+
+
+def _market_data_wait_required(recovery: StartupRecoveryResult) -> bool:
+    """Allow only freshness/warm-up states to remain alive before READY.
+
+    Corrupt data, missing identity, unknown session/news, persistence faults and
+    controller faults remain terminal or fail-closed. Stale market data is the
+    one expected closed-market condition that can safely be re-probed without
+    running a strategy or execution cycle.
+    """
+
+    return recovery.state is RecoveryState.RECONCILING and recovery.reason in {
+        "MARKET_DATA_STALE",
+        "MARKET_DATA_INSUFFICIENT",
+        "MARKET_DATA_SPARSE",
+    }
 
 
 def _next_m5_boundary(now_utc: datetime, grace_seconds: float) -> datetime:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 import logging
+import time
 
 from goldswingtraderai import __version__
 from goldswingtraderai.app.runtime import LiveStartupRuntime, SessionNewsProvider
@@ -11,8 +13,8 @@ from goldswingtraderai.app.loop import PersistentRuntimeLoop, RuntimeLoopResult
 from goldswingtraderai.app.session_news import FileSessionNewsProvider
 from goldswingtraderai.config import ConfigError, RuntimeMode, Settings
 from goldswingtraderai.diagnostics.logging import configure_logging
-from goldswingtraderai.domain.enums import HardDecision
-from goldswingtraderai.domain.market import AccountFacts
+from goldswingtraderai.domain.enums import DataQuality, HardDecision
+from goldswingtraderai.domain.market import AccountFacts, MarketSnapshot
 from goldswingtraderai.execution import CoordinationError
 from goldswingtraderai.market_data import MT5Reader, MarketDataError, MarketSnapshotBuilder
 from goldswingtraderai.operator import DashboardData, render_dashboard
@@ -32,79 +34,126 @@ def _identity_mismatches(settings: Settings, account: AccountFacts) -> tuple[str
     return tuple(mismatches)
 
 
-def run_readiness(settings: Settings, reader: MT5Reader) -> int:
-    """Read one normalized MT5 snapshot and publish a concise readiness result.
+def run_readiness(
+    settings: Settings,
+    reader: MT5Reader,
+    *,
+    keep_alive: bool = False,
+    sleep: Callable[[float], None] | None = None,
+    utc_now: Callable[[], datetime] | None = None,
+    stop_requested: Callable[[], bool] | None = None,
+) -> int:
+    """Readiness-check MT5 and wait safely while data is not fresh.
 
     This function is intentionally injectable so deterministic CI can exercise the
-    runtime path without requiring a Windows MT5 terminal.
+    runtime path without requiring a Windows MT5 terminal. ``keep_alive`` is
+    enabled by the launcher for the operator-facing default: stale/insufficient/
+    sparse data keeps the read-only process alive until data recovers or the
+    operator stops it. The function never enters strategy or broker-write code.
     """
 
+    sleeper = sleep or time.sleep
+    now_provider = utc_now or (lambda: datetime.now(timezone.utc))
+    waiting_for_fresh_data = False
     try:
         reader.initialize()
-        snapshot = MarketSnapshotBuilder(reader).build(
-            preferred_symbol=settings.preferred_symbol,
-            symbol_aliases=settings.symbol_aliases,
-        )
-        demo_guard = reader.demo_guard(snapshot.account)
-        identity_mismatches = _identity_mismatches(settings, snapshot.account)
-
-        _LOG.info(
-            "MT5 market snapshot ready",
-            extra={
-                "event": "MARKET_SNAPSHOT_READY",
-                "context": {
-                    "version": __version__,
-                    "symbol": snapshot.meta.symbol,
-                    "account_mode": snapshot.account.mode,
-                    "bid": snapshot.quote.bid,
-                    "ask": snapshot.quote.ask,
-                    "spread_price": snapshot.quote.spread_price,
-                    "data_quality": snapshot.quality,
-                    "timeframe_bars": {
-                        item.timeframe.value: len(item.candles) for item in snapshot.series
-                    },
-                    "demo_guard": demo_guard.decision,
-                    "identity_ok": not identity_mismatches,
-                    "broker_write_implemented": False,
-                },
-            },
-        )
-
-        if identity_mismatches:
-            _LOG.error(
-                "configured MT5 account identity does not match connected account",
-                extra={
-                    "event": "ACCOUNT_IDENTITY_MISMATCH",
-                    "context": {"reasons": identity_mismatches},
-                },
+        builder = MarketSnapshotBuilder(reader)
+        while True:
+            snapshot = builder.build(
+                preferred_symbol=settings.preferred_symbol,
+                symbol_aliases=settings.symbol_aliases,
+                now_utc=now_provider(),
             )
-            return 3
+            demo_guard = reader.demo_guard(snapshot.account)
+            identity_mismatches = _identity_mismatches(settings, snapshot.account)
 
-        if demo_guard.decision is not HardDecision.PASS:
-            _LOG.warning(
-                "positive DEMO guard is not verified",
+            _LOG.info(
+                "MT5 market snapshot ready",
                 extra={
-                    "event": "DEMO_GUARD_NOT_VERIFIED",
+                    "event": "MARKET_SNAPSHOT_READY",
                     "context": {
+                        "version": __version__,
+                        "symbol": snapshot.meta.symbol,
                         "account_mode": snapshot.account.mode,
-                        "decision": demo_guard.decision,
+                        "bid": snapshot.quote.bid,
+                        "ask": snapshot.quote.ask,
+                        "spread_price": snapshot.quote.spread_price,
+                        "data_quality": snapshot.quality,
+                        "timeframe_bars": {
+                            item.timeframe.value: len(item.candles) for item in snapshot.series
+                        },
+                        "demo_guard": demo_guard.decision,
+                        "identity_ok": not identity_mismatches,
+                        "broker_write_implemented": False,
                     },
                 },
             )
-            return 4
 
-        if snapshot.issues:
+            if identity_mismatches:
+                _LOG.error(
+                    "configured MT5 account identity does not match connected account",
+                    extra={
+                        "event": "ACCOUNT_IDENTITY_MISMATCH",
+                        "context": {"reasons": identity_mismatches},
+                    },
+                )
+                return 3
+
+            if demo_guard.decision is not HardDecision.PASS:
+                _LOG.warning(
+                    "positive DEMO guard is not verified",
+                    extra={
+                        "event": "DEMO_GUARD_NOT_VERIFIED",
+                        "context": {
+                            "account_mode": snapshot.account.mode,
+                            "decision": demo_guard.decision,
+                        },
+                    },
+                )
+                return 4
+
+            if snapshot.issues:
+                _LOG.warning(
+                    "market snapshot requires data warmup/review",
+                    extra={
+                        "event": "MARKET_DATA_DEGRADED",
+                        "context": {
+                            "quality": snapshot.quality,
+                            "issues": snapshot.issues,
+                        },
+                    },
+                )
+
+            if not keep_alive or not _readiness_wait_required(snapshot):
+                if waiting_for_fresh_data:
+                    _LOG.info(
+                        "readiness data recovered; leaving read-only wait",
+                        extra={
+                            "event": "READINESS_DATA_RECOVERED",
+                            "context": {"quality": snapshot.quality},
+                        },
+                    )
+                return 0
+
+            waiting_for_fresh_data = True
             _LOG.warning(
-                "market snapshot requires data warmup/review",
+                "readiness remains alive while market data is not fresh; broker writes disabled",
                 extra={
-                    "event": "MARKET_DATA_DEGRADED",
+                    "event": "READINESS_WAITING_FOR_FRESH_DATA",
                     "context": {
                         "quality": snapshot.quality,
-                        "issues": snapshot.issues,
+                        "poll_seconds": settings.readiness_poll_seconds,
                     },
                 },
             )
-
+            if stop_requested is not None and stop_requested():
+                return 0
+            sleeper(settings.readiness_poll_seconds)
+    except KeyboardInterrupt:
+        _LOG.info(
+            "readiness monitor stopped by operator",
+            extra={"event": "READINESS_STOP_REQUESTED", "context": {}},
+        )
         return 0
     except MarketDataError as exc:
         _LOG.error(
@@ -117,6 +166,16 @@ def run_readiness(settings: Settings, reader: MT5Reader) -> int:
         return 5
     finally:
         reader.shutdown()
+
+
+def _readiness_wait_required(snapshot: MarketSnapshot) -> bool:
+    """Return whether a read-only readiness monitor may safely keep polling."""
+
+    return snapshot.quality in {
+        DataQuality.STALE,
+        DataQuality.INSUFFICIENT,
+        DataQuality.SPARSE,
+    }
 
 
 def run_startup(
@@ -268,7 +327,11 @@ def main() -> int:
             "CYCLE_FAILED": 8,
             "SHUTDOWN_FAILED": 9,
         }[result.stop_reason.value]
-    return run_readiness(settings, MT5Reader())
+    return run_readiness(
+        settings,
+        MT5Reader(),
+        keep_alive=settings.readiness_keep_alive,
+    )
 
 
 if __name__ == "__main__":

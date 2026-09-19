@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Setup and Run Guide
 
 **Status:** DRAFT — OPERATOR WORKFLOW MANUAL
-**Version:** 0.9-implementation
+**Version:** 0.10-implementation
 **Authority:** Operator workflow for installation, startup, safe shutdown, migration, restore and common blocked-state handling.
 **Depends on:** `50-operator/DASHBOARD_AND_UX.md`, `30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
@@ -15,6 +15,7 @@ through safe shutdown, restore and release proof.
 | Operator concern | Source owner | Proof owner |
 |---|---|---|
 | Settings and launcher mode | `config/settings.py`, `app/main.py` | `tests/test_settings.py`, `tests/test_app_readiness.py` |
+| Readiness stale-data monitor | `config/settings.py`, `app/main.py` | `tests/test_settings.py`, `tests/test_app_readiness.py` |
 | MT5 initialization and broker facts | `market_data/mt5_reader.py`, `app/recovery_mt5.py` | `tests/test_market_data.py`, `tests/test_recovery_mt5.py` |
 | Startup/recovery/controller | `app/runtime.py`, `app/startup.py`, `app/recovery.py`, `execution/controller.py` | `tests/test_live_startup_runtime.py`, `tests/test_startup_recovery.py`, `tests/test_sqlite_coordination.py` |
 | Persistent cycle and shutdown | `app/cycle.py`, `app/loop.py` | `tests/test_runtime_loop.py` |
@@ -46,7 +47,7 @@ fail-closed until recovery is complete.
 
 ```mermaid
 flowchart TB
-    MODE["GSTAI_RUNTIME_MODE"] --> READINESS["READINESS — one read-only snapshot → exit"]
+    MODE["GSTAI_RUNTIME_MODE"] --> READINESS["READINESS — read-only snapshot; wait on stale data"]
     MODE --> PRIMARY["PRIMARY — acquire controller → recover → run"]
     MODE --> STANDBY["STANDBY — observe/attempt takeover → recover → run"]
     PRIMARY --> START["MT5Reader + recovery truth + local state mode"]
@@ -67,6 +68,29 @@ independent requirements:
    produce a governed READY result.
 
 Green unit tests do not replace these environment checks.
+
+### Closed-market / stale-data operating rule
+
+Market closure is not a process-crash condition. The runtime must distinguish
+the operator-visible wait state from a permission to trade:
+
+```mermaid
+flowchart TB
+    SNAPSHOT["Read MT5 snapshot"] --> QUALITY{"Data quality?"}
+    QUALITY -->|"HEALTHY"| READY["Readiness result / governed runtime may continue"]
+    QUALITY -->|"STALE / INSUFFICIENT / SPARSE"| WAIT["WAIT — keep process alive; no strategy or broker write"]
+    WAIT --> HEARTBEAT["Poll fresh data; renew PRIMARY lease when applicable"]
+    HEARTBEAT --> SNAPSHOT
+    QUALITY -->|"CORRUPT / identity / DEMO / persistence fault"| FAIL["Fail closed; operator review required"]
+```
+
+The common weekend/closed-market case normally appears as stale quote or
+completed-candle data because the broker feed is no longer advancing. The code
+does not guess that a stale feed is definitely a scheduled closure; it reports
+the exact data-quality reason and keeps trading disabled. `READINESS` remains a
+read-only monitor. `PRIMARY`/`STANDBY` retain controller heartbeat while they
+wait before `READY`, but they do not run a decision cycle or send an order in
+that state.
 
 ## Prerequisites
 
@@ -114,6 +138,8 @@ GSTAI_MANUAL_RESET_ENABLED=false
 GSTAI_STATE_DIR=.state
 GSTAI_LOG_LEVEL=INFO
 GSTAI_RUNTIME_MODE=READINESS
+GSTAI_READINESS_KEEP_ALIVE=true
+GSTAI_READINESS_POLL_SECONDS=30
 GSTAI_STATE_MODE=EXISTING
 GSTAI_RESTORE_CHECKPOINT=
 GSTAI_ALLOWED_ACCOUNT_LOGIN=
@@ -127,6 +153,12 @@ GSTAI_SESSION_NEWS_TTL_SECONDS=1800
 ```
 
 `GSTAI_ALLOWED_ACCOUNT_LOGIN` and `GSTAI_ALLOWED_SERVER` are optional identity pins.
+
+`GSTAI_READINESS_KEEP_ALIVE=true` makes the default read-only launcher keep
+polling when quality is `STALE`, `INSUFFICIENT` or `SPARSE`; it exits normally
+after data recovers. `GSTAI_READINESS_POLL_SECONDS` controls that bounded poll
+interval. Set the keep-alive flag to `false` only when a one-shot diagnostic is
+specifically required. This setting never grants broker-write authority.
 
 ### DEMO guard is not a config switch
 
@@ -191,9 +223,11 @@ context only; live MT5 positions/orders/deals are still authoritative.
 
 ### Launcher mode behaviour
 
-`READINESS` performs **read-only readiness**. `PRIMARY`/`STANDBY` continue into
-the persistent runtime only after startup recovery is READY. The read-only
-launcher path is:
+`READINESS` performs **read-only readiness**. With the default keep-alive
+setting, it continues observing while required market data is stale or warming
+up; it does not enter the strategy or execution path. `PRIMARY`/`STANDBY`
+continue into the persistent runtime only after startup recovery is READY. The
+read-only launcher path is:
 
 ```text
 load/validate non-secret settings
@@ -207,8 +241,14 @@ load/validate non-secret settings
 → evaluate positive DEMO fact
 → check optional account identity pins
 → log readiness/data quality
-→ shutdown MT5 bridge
+→ if data is retryably stale, wait and poll again; otherwise shutdown MT5 bridge
 ```
+
+During a readiness wait, the same initialized `MT5Reader` is reused, the
+configured symbol/account/DEMO identity is rechecked on every poll and the
+process exits only on fresh/non-retryable result or operator stop. A later
+identity mismatch or loss of positive DEMO verification returns a failure code;
+it is never hidden by the wait loop.
 
 The default readiness mode remains read-only. In `PRIMARY`/`STANDBY`, the
 integrated path performs:
@@ -222,9 +262,16 @@ initialize MT5 through MT5Reader
 → construct RecoveryAuthorities from live account/market/risk/position/environment facts
 → invoke StartupRecoveryCoordinator
 → emit READY / RECONCILING / BLOCKED
+→ if recovery reason is MARKET_DATA_STALE/INSUFFICIENT/SPARSE, keep MT5/controller alive and re-probe
 → if READY, keep controller/MT5 alive for persistent M5 cycles
 → renew controller every 10 seconds, checkpoint backups when due, safe shutdown
 ```
+
+The pre-`READY` market-data wait is deliberately narrow. Corrupt data,
+unknown session/news truth, missing risk state, account identity mismatch,
+persistence failure and controller failure remain blocked/terminal according to
+their existing recovery contracts. Only freshness/warm-up states are retried;
+no safety authority is converted into a permissive default.
 
 The persistent launcher renders one read-only terminal dashboard frame after
 each fresh cycle. It displays the already-produced market/decision/risk/
@@ -421,9 +468,11 @@ Hard permission logic is implemented deterministically; live schedule/provider w
 
 ## Safe shutdown target
 
-READINESS exits after one readiness snapshot. PRIMARY/STANDBY keep the runtime
-alive after a READY startup until stop/interruption/controller loss, then release
-the controller lease and shut down MT5.
+READINESS exits after a healthy/non-retryable readiness result; when market data
+is stale/warming up it stays alive in read-only wait until recovery or Ctrl+C.
+PRIMARY/STANDBY keep the runtime alive during the narrow pre-`READY` market-data
+wait and after a READY startup until stop/interruption/controller loss, then
+release the controller lease and shut down MT5.
 
 The persistent runtime uses:
 

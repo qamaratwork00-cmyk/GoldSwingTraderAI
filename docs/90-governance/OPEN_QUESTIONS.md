@@ -113,11 +113,13 @@ scope, selects `EXISTING`/`INITIALIZE`/`RESTORE` state explicitly, builds live
 repositories/reconciler/controller dependencies and supplies the resulting
 authorities to the coordinator. `app/cycle.py` and `app/loop.py` then share
 fresh fact snapshots across decision/risk/execution/management, renew the lease
-every 10 seconds, create verified local backups and shut down safely. The
-default launcher remains `READINESS`; live `PRIMARY`/`STANDBY` modes stay alive
-only after READY. Session/news input is an injectable authority provider; when
-absent or invalid, the result is `UNKNOWN`, never an invented clear schedule or
-news state.
+every 10 seconds, keep a narrow heartbeat-only wait for retryable stale market
+data before `READY`, create verified local backups and shut down safely. The
+default launcher remains read-only `READINESS`; it also stays alive by default
+while required data is stale/warming up, without entering strategy or execution.
+Live `PRIMARY`/`STANDBY` modes proceed to cycles only after READY. Session/news
+input is an injectable authority provider; when absent or invalid, the result
+is `UNKNOWN`, never an invented clear schedule or news state.
 
 ## Backup / publication contract
 

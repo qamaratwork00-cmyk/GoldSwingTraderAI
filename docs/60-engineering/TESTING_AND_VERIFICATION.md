@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Testing and Verification
 
 **Status:** PROVISIONAL
-**Version:** 2.0-design
+**Version:** 2.1-implementation
 **Authority:** Test taxonomy, executable proof requirements, replay/live parity, recovery/broker-read integrity, controller fencing and release verification.
 **Depends on:** `../90-governance/DOCUMENTATION_STANDARD.md`, `../10-market-intelligence/MARKET_DATA_AND_HISTORY.md`, `../40-research-learning/RESEARCH_AND_VALIDATION.md`, `../30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md`, `../30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md`
 
@@ -99,7 +99,6 @@ Controller tests protect one-winner contention, monotonic epochs, stale-holder d
 
 Public CI can verify the read adapter with fake MT5 modules, but cannot prove the intended Windows terminal/broker actually returns equivalent account/symbol/open-position facts. That evidence remains controlled external work.
 
-
 Windows readiness result: the controlled operator run initialized the MT5
 terminal, resolved XAUUSDm, positively verified DEMO mode and completed a
 read-only snapshot without broker writes. The snapshot was marked STALE because
@@ -132,9 +131,21 @@ belong to the release audit for the audited revision.
 `tests/test_runtime_loop.py` proves bounded persistent lifecycle behaviour,
 heartbeat renewal, controller-loss fail-closed stopping, startup-not-ready
 shutdown, standby retry after explicit active-primary contention and guaranteed
-runtime shutdown. The live cycle/dashboard composition
+runtime shutdown. It also proves that retryable `MARKET_DATA_STALE` startup
+remains alive with heartbeat-only polling, never runs a cycle before fresh
+data, and resumes the governed cycle after recovery. `tests/test_app_readiness.py`
+proves that the default read-only readiness monitor waits for stale data and
+exits after a fresh snapshot without entering runtime execution; settings tests
+cover the explicit keep-alive/poll configuration. The live cycle/dashboard composition
 is exercised against the injected MT5 boundary; this remains software evidence,
 not real broker DEMO evidence.
+
+Current local deterministic checkpoint for the market-closed wait implementation
+(2026-09-19): **279 tests PASS**. This count includes the earlier runtime,
+recovery, persistence and Windows-readiness regression coverage plus the new
+readiness-monitor and pre-`READY` market-data-wait tests. It remains software
+evidence; it does not claim that a real broker is open, closed, connected or
+write-ready.
 
 Live startup tests also cover safe UTC risk-day rollover and preserve the
 fail-closed path for non-clear lifecycle state. Publication/restore CLI tests

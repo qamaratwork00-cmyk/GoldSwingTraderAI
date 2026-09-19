@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Coder Guide
 
 **Status:** PROVISIONAL — AUTHORITATIVE DEVELOPER MANUAL
-**Version:** 4.0-implementation-map
+**Version:** 4.1-implementation-map
 **Authority:** Feature-oriented developer navigation and implementation map. It does not redefine trading behaviour.
 
 ## Purpose
@@ -74,6 +74,7 @@ implementations:
 | Lane | Cadence/trigger | Reads | May write | Must never do |
 |---|---|---|---|---|
 | Startup/recovery | process start, restart, takeover | MT5 truth, durable records, controller state | recovery state, reconciliation records, lease state | create a trade before governed recovery is complete |
+| Readiness monitor | initial read-only launch and stale-data poll | account, symbol, quote, completed candles, DEMO fact | logs/wait state only | enter strategy, create authority, or send a broker write |
 | M5 decision cycle | completed-candle schedule | fresh market facts, session/news facts, durable risk/trade state | decision evidence, intents, managed-trade state through owners | bypass the central gate or reuse stale broker outcome |
 | Controller heartbeat | every 10 seconds while live | coordination store and lease identity | lease renewal/epoch state | renew a lease and assume that recovery is unnecessary |
 | Local backup | configured rolling interval | durable records/events and runtime metadata | verified local backup/catalog | publish credentials or claim external publication succeeded |
@@ -122,6 +123,34 @@ Recovery authorities are built from real owners, not from caller-created test
 traces. They cover account identity, market data quality, session/news truth,
 risk state, position/exposure state and execution environment. Their aggregate
 result determines whether the runtime is READY, still RECONCILING or BLOCKED.
+
+### Market-closed / stale-data wait ownership
+
+`app/main.py::run_readiness()` owns the safe default read-only wait. It reuses
+one initialized `MarketSnapshotBuilder`, rechecks account identity and positive
+DEMO verification on every poll, and waits only for `DataQuality.STALE`,
+`INSUFFICIENT` or `SPARSE`. `GSTAI_READINESS_KEEP_ALIVE` and
+`GSTAI_READINESS_POLL_SECONDS` are validated in `config/settings.py`.
+
+`app/loop.py::PersistentRuntimeLoop` owns the live pre-`READY` wait. When
+`StartupRecoveryResult.reason` is exactly `MARKET_DATA_STALE`,
+`MARKET_DATA_INSUFFICIENT` or `MARKET_DATA_SPARSE`, it renews the controller
+heartbeat and calls `LiveStartupRuntime.capture_cycle()` at the bounded wait
+interval. It does not call `GovernedRuntimeCycle.run()` until recovery becomes
+`READY`. Any other startup blocker follows the original terminal/fail-closed
+contract.
+
+```mermaid
+flowchart TB
+    SNAPSHOT["MarketSnapshot"] --> QUALITY{"Retryable quality?"}
+    QUALITY -->|"no"| AUTH["Existing identity/DEMO/fault result"]
+    QUALITY -->|"yes"| WAIT["Wait + heartbeat; no cycle/write"]
+    WAIT --> PROBE["capture_cycle → fresh StartupRecoveryResult"]
+    PROBE --> QUALITY
+    AUTH --> READY{"READY?"}
+    READY -->|"yes"| CYCLE["GovernedRuntimeCycle"]
+    READY -->|"no"| STOP["Fail closed / operator review"]
+```
 
 ## One completed-candle M5 cycle
 
@@ -210,7 +239,8 @@ are the navigation points.
 | Controller lease/fencing | 30-risk-execution/EXECUTION_AND_BROKER_SAFETY.md | execution/controller.py; execution/sqlite_coordination.py | tests/test_startup_recovery.py, tests/test_live_startup_runtime.py, tests/test_sqlite_coordination.py |
 | Reconciliation and startup recovery | 30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md | app/recovery.py; app/recovery_mt5.py; app/startup.py | tests/test_startup_recovery.py, tests/test_recovery_mt5.py |
 | Trade Manager and exit | 20-trading-decisions/TRADE_MANAGER_AND_EXIT.md | management/manager.py; management/execution.py | tests/test_trade_manager.py, tests/test_management_execution.py |
-| Persistent runtime loop | 00-foundation/ARCHITECTURE.md; 50-operator/SETUP_AND_RUN_GUIDE.md | app/runtime.py; app/cycle.py; app/loop.py | tests/test_live_startup_runtime.py, tests/test_runtime_loop.py |
+| Persistent runtime loop and stale-data wait | 00-foundation/ARCHITECTURE.md; 50-operator/SETUP_AND_RUN_GUIDE.md | app/runtime.py; app/cycle.py; app/loop.py | tests/test_live_startup_runtime.py, tests/test_runtime_loop.py |
+| Readiness keep-alive monitor | 50-operator/SETUP_AND_RUN_GUIDE.md; 00-foundation/ARCHITECTURE.md | config/settings.py; app/main.py | tests/test_settings.py, tests/test_app_readiness.py |
 | Durable state, checkpoint and local backup | 30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md | persistence/store.py; runtime_state.py; checkpoint.py; backup.py | tests/test_persistence_recovery.py, tests/test_runtime_checkpoint.py, tests/test_backup_catalog.py |
 | Intent/ManagedTrade/research restore typing | 30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md | execution/intent_store.py; management/store.py; research/episode_journal.py; research/discovery.py | tests/test_execution_safety.py, tests/test_management_execution.py, tests/test_persistence_recovery.py, tests/test_discovery_journal.py |
 | Public-safe backup staging | 30-risk-execution/PERSISTENCE_RESTART_AND_RECOVERY.md | persistence/publication.py; scripts/stage_public_backup.py | tests/test_operator_scripts.py, tests/test_backup_catalog.py |
@@ -277,9 +307,11 @@ copying the rule into both modules.
 
 The runtime composition is organized through the Phase-10 research boundary
 and the Phase-11/12 recovery and persistent-runtime boundaries. `app/main.py`
-defaults to read-only readiness; explicit `PRIMARY`/`STANDBY` modes assemble
-live dependencies, run governed recovery and keep the lease/MT5 runtime alive
-until a safe stop. Missing or invalid session/news truth remains fail-closed.
+defaults to read-only readiness; its stale-data monitor may keep the process
+alive without creating runtime authority or broker writes. Explicit
+`PRIMARY`/`STANDBY` modes assemble live dependencies, run governed recovery and
+keep the lease/MT5 runtime alive until a safe stop. Missing or invalid
+session/news truth remains fail-closed.
 External provider operation and connected DEMO evidence belong to the release
 proof boundary; they must not be simulated by weakening the software
 authority model.
@@ -395,8 +427,11 @@ loaded MT5 module, acquires the controller and calls the governed recovery
 coordinator. `app/cycle.py` shares one fresh snapshot across intelligence,
 decisions, Trade Plan, risk, gate and Trade Manager. `app/loop.py` renews the
 lease every 10 seconds, retries only the explicit STANDBY
-`ANOTHER_ACTIVE_CONTROLLER` state after releasing local handles, runs M5
-cycles, creates local verified backups and shuts down fail-closed.
+`ANOTHER_ACTIVE_CONTROLLER` state after releasing local handles, waits safely
+for retryable stale/insufficient/sparse market data before `READY`, runs M5
+cycles, creates local verified backups and shuts down fail-closed. The
+pre-`READY` wait never runs strategy or broker execution. `app/main.py` owns
+the separate read-only readiness monitor and its validated poll settings.
 `app/session_news.py` validates the configured provider-neutral snapshot;
 missing or invalid session/news truth remains UNKNOWN.
 
@@ -432,7 +467,7 @@ environment results belong to `60-engineering/FINAL_RELEASE_AUDIT.md`.
 | Live recovery snapshot adapter | Market Data + Recovery docs | `app/recovery_mt5.py` |
 | Live startup composition | Persistence/Execution/Setup docs | `app/runtime.py`, `app/main.py` |
 | Session/news handoff | `30-risk-execution/SESSION_NEWS_PROVIDER_CONTRACT.md` | `app/session_news.py`, `app/main.py` |
-| Persistent M5 cycle | Architecture/Execution/Trade Manager docs | `app/cycle.py`, `app/loop.py` |
+| Persistent M5 cycle and stale-data wait | Architecture/Execution/Trade Manager docs | `app/cycle.py`, `app/loop.py` |
 | Technical/confluence | `10-market-intelligence/*` | `intelligence/`, `strategies/confluence.py` |
 | Strategy/Trade Plan | `20-trading-decisions/*` | `strategies/`, `decisions/` |
 | Risk/session/news | `30-risk-execution/*` | `risk/` |
@@ -473,7 +508,10 @@ Real XAU history, broker-session truth, final holdout evidence and DEMO
 forward evidence are separate proof inputs and must be supplied and reviewed
 before making any market-performance claim.
 
-`app/main.py` remains read-only by default. `PRIMARY`/`STANDBY` enter the
-persistent startup/recovery/cycle launcher only after the documented
-authorities pass; the launcher never treats missing provider input or absent
-broker evidence as DEMO certification.
+`app/main.py` remains read-only by default. Its default readiness monitor may
+stay alive while required market data is stale, but it never creates runtime
+authority or broker writes. `PRIMARY`/`STANDBY` enter the persistent
+startup/recovery/cycle launcher only after the documented authorities pass;
+their pre-`READY` market-data wait is the sole retryable startup wait. The
+launcher never treats missing provider input or absent broker evidence as DEMO
+certification.

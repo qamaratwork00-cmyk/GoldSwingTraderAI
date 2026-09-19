@@ -379,7 +379,7 @@ Restart never means blank financial/order state. Reconcile broker truth before n
 The integrated startup composition now makes state selection explicit:
 
 ```text
-READINESS  → one read-only MT5 snapshot
+READINESS  → read-only MT5 snapshot; wait/poll on stale data without trading
 PRIMARY    → controller-gated persistent startup/recovery/runtime loop
 STANDBY    → governed lease/takeover attempt and recovery
 EXISTING   → use local runtime DB; missing risk state blocks
@@ -388,7 +388,10 @@ RESTORE    → verify checkpoint and restore only to a new runtime DB
 ```
 
 Absent authoritative session/news input remains UNKNOWN. The persistent M5
-runtime loop and provider-neutral snapshot handoff now exist, but the launcher
+runtime loop and provider-neutral snapshot handoff now exist. Retryable stale,
+insufficient or sparse market data keeps the read-only launcher alive and keeps
+PRIMARY/STANDBY in a heartbeat-only pre-READY wait; no strategy cycle or broker
+write is allowed until fresh data and all other authorities pass. The launcher
 cannot be called live-ready until an accepted external producer and real broker
 evidence are supplied.
 

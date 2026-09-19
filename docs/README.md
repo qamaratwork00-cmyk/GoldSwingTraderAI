@@ -50,7 +50,7 @@ research and release references. Compatibility redirects remain pointers only.
 - [`FINAL_BUILD_PROMPT.md`](FINAL_BUILD_PROMPT.md) — whole-project implementation handoff contract.
 - [`CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md`](CHATGPT_PROJECT_BUILD_AND_RECOVERY_GUIDE.md) — large phases, resume/recovery and project-completion guide.
 - [`USER_MANUAL.md`](USER_MANUAL.md) — operator-facing behaviour/manual.
-- [`SETUP_AND_RUN_GUIDE.md`](SETUP_AND_RUN_GUIDE.md) — setup, safe READINESS mode, explicit live startup/recovery modes and future persistent-runtime workflow.
+- [`SETUP_AND_RUN_GUIDE.md`](SETUP_AND_RUN_GUIDE.md) — setup, safe READINESS mode, stale-market wait behavior, explicit live startup/recovery modes and persistent-runtime workflow.
 - [`CODER_GUIDE.md`](CODER_GUIDE.md) — feature-oriented implementation map and source/test ownership.
 - [`60-engineering/CODING_STANDARD.md`](60-engineering/CODING_STANDARD.md) — **FROZEN** project-wide code quality/dependency/complexity/commenting contract.
 

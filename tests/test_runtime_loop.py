@@ -47,6 +47,8 @@ class FakeRuntime:
         *,
         lose_controller_on: int | None = None,
         startup_state: RecoveryState = RecoveryState.READY,
+        startup_reason: str | None = None,
+        market_data_wait_cycles: int = 0,
         shutdown_error: bool = False,
     ) -> None:
         self.settings = SimpleNamespace(
@@ -59,6 +61,8 @@ class FakeRuntime:
         self.shutdown_calls = 0
         self.lose_controller_on = lose_controller_on
         self.startup_state = startup_state
+        self.startup_reason = startup_reason
+        self.market_data_wait_cycles = market_data_wait_cycles
         self.shutdown_error = shutdown_error
         self.store = None
 
@@ -67,9 +71,12 @@ class FakeRuntime:
         recovery = SimpleNamespace(
             state=self.startup_state,
             reason=(
-                "STARTUP_RECOVERY_READY"
-                if self.startup_state is RecoveryState.READY
-                else "SESSION_NEWS_PROVIDER_UNCONFIGURED"
+                self.startup_reason
+                or (
+                    "STARTUP_RECOVERY_READY"
+                    if self.startup_state is RecoveryState.READY
+                    else "SESSION_NEWS_PROVIDER_UNCONFIGURED"
+                )
             ),
         )
         return SimpleNamespace(recovery=recovery)
@@ -90,9 +97,18 @@ class FakeRuntime:
 
     def capture_cycle(self, *, now_utc):
         self.capture_calls += 1
+        if self.market_data_wait_cycles > 0:
+            self.market_data_wait_cycles -= 1
+            state = RecoveryState.RECONCILING
+            reason = "MARKET_DATA_STALE"
+        else:
+            state = RecoveryState.READY
+            reason = "STARTUP_RECOVERY_READY"
         return SimpleNamespace(
             as_of_utc=now_utc,
-            startup=SimpleNamespace(recovery=SimpleNamespace(state=RecoveryState.READY)),
+            startup=SimpleNamespace(
+                recovery=SimpleNamespace(state=state, reason=reason),
+            ),
         )
 
     def shutdown(self):
@@ -141,6 +157,60 @@ def test_controller_loss_stops_persistent_loop_before_next_cycle() -> None:
     assert cycle.calls == 1
     assert runtime.shutdown_calls == 1
     assert clock.sleeps
+
+
+def test_market_data_wait_keeps_runtime_alive_then_resumes_cycles() -> None:
+    runtime = FakeRuntime(
+        startup_state=RecoveryState.RECONCILING,
+        startup_reason="MARKET_DATA_STALE",
+        market_data_wait_cycles=1,
+    )
+    cycle = FakeCycle()
+    clock = FakeClock()
+
+    result = PersistentRuntimeLoop(
+        runtime,
+        cycle=cycle,
+        sleep=clock.sleep,
+        utc_now=clock.now,
+        market_data_wait_seconds=1.0,
+        heartbeat_seconds=10.0,
+    ).run(start_now_utc=NOW, max_cycles=1)
+
+    assert result.stop_reason is LoopStopReason.MAX_CYCLES
+    assert result.cycles_completed == 1
+    assert runtime.capture_calls == 3
+    assert cycle.calls == 1
+    assert clock.sleeps == [1.0, 1.0]
+    assert runtime.shutdown_calls == 1
+
+
+def test_market_data_wait_never_runs_cycle_before_fresh_data() -> None:
+    runtime = FakeRuntime(
+        startup_state=RecoveryState.RECONCILING,
+        startup_reason="MARKET_DATA_STALE",
+        market_data_wait_cycles=10,
+    )
+    cycle = FakeCycle()
+    clock = FakeClock()
+
+    result = PersistentRuntimeLoop(
+        runtime,
+        cycle=cycle,
+        sleep=clock.sleep,
+        utc_now=clock.now,
+        market_data_wait_seconds=1.0,
+        heartbeat_seconds=10.0,
+    ).run(
+        start_now_utc=NOW,
+        stop_requested=lambda: runtime.capture_calls >= 1,
+    )
+
+    assert result.stop_reason is LoopStopReason.STOP_REQUESTED
+    assert result.cycles_completed == 0
+    assert cycle.calls == 0
+    assert runtime.capture_calls == 1
+    assert runtime.shutdown_calls == 1
 
 
 def test_standby_waits_for_active_primary_then_restarts_recovery() -> None:

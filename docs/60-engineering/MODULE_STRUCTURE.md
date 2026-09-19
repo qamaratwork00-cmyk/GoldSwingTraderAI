@@ -1,7 +1,7 @@
 # GoldSwingTraderAI — Module Structure
 
 **Status:** PROVISIONAL — MODULE MAP
-**Version:** 3.2-implementation-map
+**Version:** 3.3-implementation-map
 **Authority:** File/module ownership map and dependency direction. It does **not** redefine trading behaviour.
 **Depends on:** `CODING_STANDARD.md`, `../CODER_GUIDE.md`, `../00-foundation/ARCHITECTURE.md`
 
@@ -153,9 +153,11 @@ prevents a convenience import from becoming a hidden authority path.
 | Runtime moment | First owner | Next owners | Durable/visible result |
 |---|---|---|---|
 | process start | app/main.py | app/runtime.py → app/startup.py | startup result and recovery state |
+| stale readiness data | app/main.py | config/settings.py → MT5Reader/MarketSnapshotBuilder | read-only wait log and next poll |
 | broker truth capture | market_data/mt5_reader.py | app/recovery_mt5.py | MT5RecoveryTruth |
 | authority assembly | app/startup.py | risk/permissions.py, execution/controller.py, app/recovery.py | RecoveryAuthorities aggregate |
 | M5 boundary | app/loop.py | app/runtime.py → app/cycle.py | RuntimeCycleResult |
+| pre-READY market-data wait | app/loop.py | app/runtime.py → controller + capture_cycle | heartbeat and refreshed recovery state; no cycle/write |
 | entry request | app/cycle.py | decisions → risk → execution | ExecutionIntent and verified outcome |
 | open-trade decision | app/cycle.py | management → execution | managed-trade update or close outcome |
 | heartbeat | app/loop.py | app/runtime.py → controller | renewed lease or fail-closed stop |
@@ -236,9 +238,11 @@ broker state, stores credentials or silently converts provider failure to clear.
 
 `app/cycle.py` owns one fresh strategy → timing → Trade Plan → risk → gate →
 Intent/ExecutionService cycle and post-entry Trade Manager cycle. `app/loop.py`
-owns M5 scheduling, 10-second lease renewal, local verified backup cadence,
+owns M5 scheduling, 10-second lease renewal, the narrow pre-READY wait for
+retryable stale/insufficient/sparse market data, local verified backup cadence,
 standby retry after explicit `ANOTHER_ACTIVE_CONTROLLER` contention, dashboard
-refresh and safe shutdown. `app/dashboard.py` only maps authoritative
+refresh and safe shutdown. `app/main.py` owns the separate read-only
+READINESS monitor and its validated poll settings. `app/dashboard.py` only maps authoritative
 DTOs into the read-only `DashboardData` presentation contract.
 The launcher supplies a terminal render sink; it does not give the renderer
 strategy, risk, gate or broker-write authority.

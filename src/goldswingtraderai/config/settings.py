@@ -123,6 +123,8 @@ class Settings:
     healthy_spread_baseline: float | None = None
     session_news_file: Path | None = None
     session_news_ttl_seconds: int = 1800
+    readiness_keep_alive: bool = True
+    readiness_poll_seconds: float = 30.0
 
     @classmethod
     def from_env(cls, env_file: str | Path | None = ".env") -> "Settings":
@@ -193,6 +195,15 @@ class Settings:
                 os.getenv("GSTAI_SESSION_NEWS_TTL_SECONDS", "1800"),
             )
             or 1800,
+            readiness_keep_alive=_parse_bool(
+                "GSTAI_READINESS_KEEP_ALIVE",
+                os.getenv("GSTAI_READINESS_KEEP_ALIVE", "true"),
+            ),
+            readiness_poll_seconds=_parse_optional_positive_float(
+                "GSTAI_READINESS_POLL_SECONDS",
+                os.getenv("GSTAI_READINESS_POLL_SECONDS", "30"),
+            )
+            or 30.0,
         )
         settings.validate()
         return settings
@@ -237,6 +248,8 @@ class Settings:
             raise ConfigError("GSTAI_HEALTHY_SPREAD_BASELINE must be positive when provided")
         if self.session_news_ttl_seconds <= 0:
             raise ConfigError("GSTAI_SESSION_NEWS_TTL_SECONDS must be positive")
+        if self.readiness_poll_seconds <= 0 or not isfinite(self.readiness_poll_seconds):
+            raise ConfigError("GSTAI_READINESS_POLL_SECONDS must be positive")
         if (
             self.runtime_mode is RuntimeMode.READINESS
             and self.state_mode is not RuntimeStateMode.EXISTING
@@ -274,4 +287,6 @@ class Settings:
                 None if self.session_news_file is None else str(self.session_news_file)
             ),
             "session_news_ttl_seconds": self.session_news_ttl_seconds,
+            "readiness_keep_alive": self.readiness_keep_alive,
+            "readiness_poll_seconds": self.readiness_poll_seconds,
         }

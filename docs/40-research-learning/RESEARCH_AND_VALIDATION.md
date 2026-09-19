@@ -283,7 +283,7 @@ Historical-session tests prove:
 - manager-replay integration where a verified T-5 DAILY event exits through production `PRE_CLOSE_FLATTEN`.
 
 Current deterministic CI after integrated runtime, dashboard/research DTO and
-verified-bundle walk-forward CLI composition: **256 tests PASS**, Ruff PASS and
+verified-bundle walk-forward CLI composition: **279 tests PASS**, Ruff PASS and
 financial-secret scan PASS.
 
 Still required for full validation:

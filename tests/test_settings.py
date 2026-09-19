@@ -24,6 +24,8 @@ def _clear(monkeypatch: pytest.MonkeyPatch) -> None:
         "GSTAI_HEALTHY_SPREAD_BASELINE",
         "GSTAI_SESSION_NEWS_FILE",
         "GSTAI_SESSION_NEWS_TTL_SECONDS",
+        "GSTAI_READINESS_KEEP_ALIVE",
+        "GSTAI_READINESS_POLL_SECONDS",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -39,6 +41,21 @@ def test_defaults_are_small_and_safe(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.state_mode.value == "EXISTING"
     assert settings.session_news_file is None
     assert settings.session_news_ttl_seconds == 1800
+    assert settings.readiness_keep_alive is True
+    assert settings.readiness_poll_seconds == 30.0
+
+
+def test_readiness_monitor_settings_are_explicitly_configurable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear(monkeypatch)
+    monkeypatch.setenv("GSTAI_READINESS_KEEP_ALIVE", "false")
+    monkeypatch.setenv("GSTAI_READINESS_POLL_SECONDS", "12.5")
+
+    settings = Settings.from_env(env_file=None)
+
+    assert settings.readiness_keep_alive is False
+    assert settings.readiness_poll_seconds == 12.5
 
 
 def test_demo_guard_is_not_a_runtime_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
